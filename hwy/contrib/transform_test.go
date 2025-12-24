@@ -395,6 +395,84 @@ func TestExpMimicExp32AVX2(t *testing.T) {
 	}
 }
 
+// Step-by-step trace through Exp_AVX2_F32x8 to find where it fails
+func TestExpAVX2StepByStep(t *testing.T) {
+	input := []float32{0, 1, 2, -1, 0.5, -0.5, 0.1, -0.1}
+	x := archsimd.LoadFloat32x8Slice(input)
+
+	output := make([]float32, 8)
+
+	// Step 1: Check input
+	x.StoreSlice(output)
+	t.Logf("Step 1 - Input x: %v", output)
+
+	// Step 2: Compute kFloat = x * invLn2
+	kFloat := x.Mul(exp32_invLn2)
+	kFloat.StoreSlice(output)
+	t.Logf("Step 2 - x * invLn2: %v", output)
+
+	// Step 3: Round to even
+	kFloat = kFloat.RoundToEven()
+	kFloat.StoreSlice(output)
+	t.Logf("Step 3 - RoundToEven: %v", output)
+
+	// Step 4: Compute r = x - k*ln2Hi
+	r := x.Sub(kFloat.Mul(exp32_ln2Hi))
+	r.StoreSlice(output)
+	t.Logf("Step 4 - r = x - k*ln2Hi: %v", output)
+
+	// Step 5: r = r - k*ln2Lo
+	r = r.Sub(kFloat.Mul(exp32_ln2Lo))
+	r.StoreSlice(output)
+	t.Logf("Step 5 - r = r - k*ln2Lo: %v", output)
+
+	// Step 6: Polynomial - start
+	p := exp32_c6.MulAdd(r, exp32_c5)
+	p.StoreSlice(output)
+	t.Logf("Step 6 - c6*r + c5: %v", output)
+
+	// Step 7-11: Continue polynomial
+	p = p.MulAdd(r, exp32_c4)
+	p = p.MulAdd(r, exp32_c3)
+	p = p.MulAdd(r, exp32_c2)
+	p = p.MulAdd(r, exp32_c1)
+	p = p.MulAdd(r, exp32_one)
+	p.StoreSlice(output)
+	t.Logf("Step 7-11 - Final poly p: %v", output)
+
+	// Step 12: Convert k to int
+	kInt := kFloat.ConvertToInt32()
+	intOutput := make([]int32, 8)
+	kInt.StoreSlice(intOutput)
+	t.Logf("Step 12 - kInt: %v", intOutput)
+
+	// Step 13: Add bias
+	kPlusBias := kInt.Add(exp32_bias)
+	kPlusBias.StoreSlice(intOutput)
+	t.Logf("Step 13 - k + bias (127): %v", intOutput)
+
+	// Step 14: Shift left by 23
+	expBits := kPlusBias.ShiftAllLeft(23)
+	expBits.StoreSlice(intOutput)
+	t.Logf("Step 14 - (k+127) << 23: %v (hex)", intOutput)
+
+	// Step 15: Reinterpret as float
+	scale := expBits.AsFloat32x8()
+	scale.StoreSlice(output)
+	t.Logf("Step 15 - scale (2^k): %v", output)
+
+	// Step 16: Final multiply
+	result := p.Mul(scale)
+	result.StoreSlice(output)
+	t.Logf("Step 16 - p * scale: %v", output)
+
+	// Expected values
+	for i := range input {
+		expected := float32(math.Exp(float64(input[i])))
+		t.Logf("Expected[%d]: %v", i, expected)
+	}
+}
+
 func closeEnough32(a, b, tol float32) bool {
 	if math.IsNaN(float64(a)) && math.IsNaN(float64(b)) {
 		return true
