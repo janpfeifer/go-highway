@@ -4,6 +4,7 @@ package contrib
 
 import (
 	"math"
+	"simd/archsimd"
 	"testing"
 
 	"github.com/ajroetker/go-highway/hwy"
@@ -115,6 +116,43 @@ func TestErfTransform(t *testing.T) {
 		expected := float32(math.Erf(float64(input[i])))
 		if !closeEnough32(output[i], expected, 1e-4) {
 			t.Errorf("ErfTransform[%d] input=%v: got %v, want %v", i, input[i], output[i], expected)
+		}
+	}
+}
+
+// Debug test to isolate where the SIMD issue is
+func TestLoadStoreRoundtrip(t *testing.T) {
+	input := []float32{1, 2, 3, 4, 5, 6, 7, 8}
+	output := make([]float32, 8)
+
+	// Test that LoadFloat32x8Slice and StoreSlice work correctly
+	x := archsimd.LoadFloat32x8Slice(input)
+	x.StoreSlice(output)
+
+	for i := range input {
+		if output[i] != input[i] {
+			t.Errorf("LoadStoreRoundtrip[%d]: got %v, want %v", i, output[i], input[i])
+		}
+	}
+}
+
+func TestExpAVX2Direct(t *testing.T) {
+	// Test calling Exp_AVX2_F32x8 directly with known values
+	input := []float32{0, 1, 2, -1, 0.5, -0.5, 0.1, -0.1}
+	output := make([]float32, 8)
+
+	x := archsimd.LoadFloat32x8Slice(input)
+	result := Exp_AVX2_F32x8(x)
+	result.StoreSlice(output)
+
+	t.Logf("Input:  %v", input)
+	t.Logf("Output: %v", output)
+
+	for i := range input {
+		expected := float32(math.Exp(float64(input[i])))
+		t.Logf("[%d] input=%v output=%v expected=%v", i, input[i], output[i], expected)
+		if !closeEnough32(output[i], expected, 1e-4) {
+			t.Errorf("ExpAVX2Direct[%d] input=%v: got %v, want %v", i, input[i], output[i], expected)
 		}
 	}
 }
