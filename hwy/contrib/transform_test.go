@@ -120,6 +120,44 @@ func TestErfTransform(t *testing.T) {
 	}
 }
 
+// Debug test to check if broadcast constants work
+func TestBroadcastConstants(t *testing.T) {
+	// Create a broadcast constant and verify all lanes have the same value
+	bcast := archsimd.BroadcastFloat32x8(3.14159)
+	output := make([]float32, 8)
+	bcast.StoreSlice(output)
+
+	t.Logf("Broadcast 3.14159: %v", output)
+
+	for i, v := range output {
+		if v != 3.14159 {
+			t.Errorf("BroadcastFloat32x8[%d]: got %v, want 3.14159", i, v)
+		}
+	}
+}
+
+// Test basic SIMD arithmetic
+func TestSimdArithmetic(t *testing.T) {
+	input := []float32{1, 2, 3, 4, 5, 6, 7, 8}
+	x := archsimd.LoadFloat32x8Slice(input)
+
+	// Test multiplication by broadcast constant
+	two := archsimd.BroadcastFloat32x8(2.0)
+	result := x.Mul(two)
+
+	output := make([]float32, 8)
+	result.StoreSlice(output)
+
+	t.Logf("Input * 2: %v", output)
+
+	for i, v := range output {
+		expected := input[i] * 2
+		if v != expected {
+			t.Errorf("Mul[%d]: got %v, want %v", i, v, expected)
+		}
+	}
+}
+
 // Debug test to isolate where the SIMD issue is
 func TestLoadStoreRoundtrip(t *testing.T) {
 	input := []float32{1, 2, 3, 4, 5, 6, 7, 8}
