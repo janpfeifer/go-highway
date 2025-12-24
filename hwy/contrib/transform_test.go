@@ -451,12 +451,16 @@ func TestExpMaskBehavior(t *testing.T) {
 	testResult.StoreSlice(resultVal)
 	t.Logf("Before merge: %v", resultVal)
 
-	// Apply underflow merge
-	merged := testResult.Merge(exp32_zero, underflowMask)
+	// Apply underflow merge - using correct semantics
+	// Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE
+	// We want: zero when underflowing (TRUE), testResult when not (FALSE)
+	// So use: exp32_zero.Merge(testResult, underflowMask)
+	merged := exp32_zero.Merge(testResult, underflowMask)
 	merged.StoreSlice(resultVal)
 	t.Logf("After underflow merge: %v", resultVal)
 
-	// All our inputs are > -87.33, so none should trigger underflow
+	// All our inputs are > -87.33, so none should trigger underflow (mask is FALSE)
+	// With correct merge order, we should get testResult (42.0) for all
 	for i := range resultVal {
 		if resultVal[i] != 42.0 {
 			t.Errorf("Underflow mask incorrectly triggered for input %v: got %v, want 42.0", input[i], resultVal[i])
@@ -470,9 +474,14 @@ func TestExpMaskBehavior(t *testing.T) {
 	lessMask := testX.Less(threshold)
 
 	// Apply merge with lessMask
+	// Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE
+	// So orig.Merge(zero, lessMask) returns:
+	//   - orig (100) when lessMask is TRUE (x < -10)
+	//   - zero (0) when lessMask is FALSE (x >= -10)
+	// If we want 0 where x < threshold, we should use: zero.Merge(orig, lessMask)
 	orig := archsimd.BroadcastFloat32x8(100.0)
 	zero := archsimd.BroadcastFloat32x8(0.0)
-	afterMerge := orig.Merge(zero, lessMask)
+	afterMerge := zero.Merge(orig, lessMask) // Fixed: swap arguments for correct semantics
 	afterMerge.StoreSlice(resultVal)
 	t.Logf("Less than -10 test: inputs=%v result=%v", testInputs, resultVal)
 

@@ -134,11 +134,12 @@ func Log_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	// For lanes where m < sqrt(2)/2: m = m*2, exp = exp-1
 	mAdjusted := m.Mul(log32_two)
 	expAdjusted := exp.Sub(log32_intOne)
-	m = m.Merge(mAdjusted, adjustMask)
+	// Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE
+	m = mAdjusted.Merge(m, adjustMask)
 	// Use float conversion to apply mask (exp values are small integers, no precision loss)
 	expFloat := exp.ConvertToFloat32()
 	expAdjustedFloat := expAdjusted.ConvertToFloat32()
-	exp = expFloat.Merge(expAdjustedFloat, adjustMask).ConvertToInt32()
+	exp = expAdjustedFloat.Merge(expFloat, adjustMask).ConvertToInt32()
 
 	// Transform: y = (m-1)/(m+1)
 	// This maps m in [sqrt(2)/2, sqrt(2)] to y in [-0.17, 0.17]
@@ -166,7 +167,7 @@ func Log_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	result = result.Add(expFloat.Mul(log32_ln2Lo))
 	result = result.Add(lnM)
 
-	// Handle special cases
+	// Handle special cases (Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE)
 	// x <= 0: return NaN (log of negative or zero)
 	// x == 0: return -Inf
 	// x == +Inf: return +Inf
@@ -175,9 +176,9 @@ func Log_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	negMask := origX.Less(log32_zero)
 	infMask := origX.Equal(log32_posInf)
 
-	result = result.Merge(log32_negInf, zeroMask)
-	result = result.Merge(log32_nan, negMask)
-	result = result.Merge(log32_posInf, infMask)
+	result = log32_negInf.Merge(result, zeroMask)
+	result = log32_nan.Merge(result, negMask)
+	result = log32_posInf.Merge(result, infMask)
 
 	return result
 }
@@ -234,11 +235,12 @@ func Log_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	adjustMask := m.Less(log64_sqrtHalf)
 	mAdjusted := m.Mul(log64_two)
 	expAdjusted := exp.Sub(log64_intOne)
-	m = m.Merge(mAdjusted, adjustMask)
+	// Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE
+	m = mAdjusted.Merge(m, adjustMask)
 	// Use float conversion to apply mask (exp values are small integers, no precision loss)
 	expFloat := exp.ConvertToFloat64()
 	expAdjustedFloat := expAdjusted.ConvertToFloat64()
-	exp = expFloat.Merge(expAdjustedFloat, adjustMask).ConvertToInt64()
+	exp = expAdjustedFloat.Merge(expFloat, adjustMask).ConvertToInt64()
 
 	// Transform: y = (m-1)/(m+1)
 	mMinus1 := m.Sub(log64_one)
@@ -265,14 +267,14 @@ func Log_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	result = result.Add(expFloat.Mul(log64_ln2Lo))
 	result = result.Add(lnM)
 
-	// Handle special cases
+	// Handle special cases (Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE)
 	zeroMask := origX.Equal(log64_zero)
 	negMask := origX.Less(log64_zero)
 	infMask := origX.Equal(log64_posInf)
 
-	result = result.Merge(log64_negInf, zeroMask)
-	result = result.Merge(log64_nan, negMask)
-	result = result.Merge(log64_posInf, infMask)
+	result = log64_negInf.Merge(result, zeroMask)
+	result = log64_nan.Merge(result, negMask)
+	result = log64_posInf.Merge(result, infMask)
 
 	return result
 }

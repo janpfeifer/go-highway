@@ -87,10 +87,10 @@ func Tanh_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	sigTwoX := Sigmoid_AVX2_F32x8(twoX)
 	result := tanh32_two.Mul(sigTwoX).Sub(sig32_one)
 
-	// Handle saturation for large |x|
+	// Handle saturation for large |x| (Merge: a.Merge(b, mask) returns a when TRUE, b when FALSE)
 	// For x > threshold, tanh ≈ 1; for x < -threshold, tanh ≈ -1
-	result = result.Merge(sig32_one, x.Greater(tanh32_threshold))
-	result = result.Merge(sig32_negOne, x.Less(sig32_zero.Sub(tanh32_threshold)))
+	result = sig32_one.Merge(result, x.Greater(tanh32_threshold))
+	result = sig32_negOne.Merge(result, x.Less(sig32_zero.Sub(tanh32_threshold)))
 
 	return result
 }
@@ -129,10 +129,10 @@ func Tanh_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	sigTwoX := Sigmoid_AVX2_F64x4(twoX)
 	result := tanh64_two.Mul(sigTwoX).Sub(sig64_one)
 
-	// Handle saturation
+	// Handle saturation (Merge: a.Merge(b, mask) returns a when TRUE, b when FALSE)
 	negThreshold := sig64_zero.Sub(tanh64_threshold)
-	result = result.Merge(sig64_one, x.Greater(tanh64_threshold))
-	result = result.Merge(archsimd.BroadcastFloat64x4(-1.0), x.Less(negThreshold))
+	result = sig64_one.Merge(result, x.Greater(tanh64_threshold))
+	result = archsimd.BroadcastFloat64x4(-1.0).Merge(result, x.Less(negThreshold))
 
 	return result
 }
@@ -180,9 +180,9 @@ func Sigmoid_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	// sigmoid(x) = 1 / (1 + exp(-x))
 	result := sig32_one.Div(sig32_one.Add(expNegX))
 
-	// Handle saturation
-	result = result.Merge(sig32_one, x.Greater(sig32_satHi))
-	result = result.Merge(sig32_zero, x.Less(sig32_satLo))
+	// Handle saturation (Merge: a.Merge(b, mask) returns a when TRUE, b when FALSE)
+	result = sig32_one.Merge(result, x.Greater(sig32_satHi))
+	result = sig32_zero.Merge(result, x.Less(sig32_satLo))
 
 	return result
 }
@@ -226,9 +226,9 @@ func Sigmoid_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	// sigmoid(x) = 1 / (1 + exp(-x))
 	result := sig64_one.Div(sig64_one.Add(expNegX))
 
-	// Handle saturation
-	result = result.Merge(sig64_one, x.Greater(sig64_satHi))
-	result = result.Merge(sig64_zero, x.Less(sig64_satLo))
+	// Handle saturation (Merge: a.Merge(b, mask) returns a when TRUE, b when FALSE)
+	result = sig64_one.Merge(result, x.Greater(sig64_satHi))
+	result = sig64_zero.Merge(result, x.Less(sig64_satLo))
 
 	return result
 }
@@ -289,9 +289,9 @@ func Erf_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	// erf(|x|) = 1 - poly * exp(-x²)
 	result := sig32_one.Sub(poly.Mul(expNegX2))
 
-	// Apply sign: erf(-x) = -erf(x)
+	// Apply sign: erf(-x) = -erf(x) (Merge: a.Merge(b, mask) returns a when TRUE, b when FALSE)
 	negResult := sig32_zero.Sub(result)
-	result = result.Merge(negResult, signMask)
+	result = negResult.Merge(result, signMask)
 
 	return result
 }
@@ -346,9 +346,9 @@ func Erf_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	// erf(|x|) = 1 - poly * exp(-x²)
 	result := sig64_one.Sub(poly.Mul(expNegX2))
 
-	// Apply sign
+	// Apply sign (Merge: a.Merge(b, mask) returns a when TRUE, b when FALSE)
 	negResult := sig64_zero.Sub(result)
-	result = result.Merge(negResult, signMask)
+	result = negResult.Merge(result, signMask)
 
 	return result
 }

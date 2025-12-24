@@ -119,11 +119,12 @@ func Exp_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 
 	result := p.Mul(scale)
 
-	// Handle overflow: return +Inf
-	result = result.Merge(exp32_inf, overflowMask)
+	// Handle overflow: return +Inf where x > threshold
+	// Note: Merge semantics are inverted - a.Merge(b, mask) returns a when TRUE, b when FALSE
+	result = exp32_inf.Merge(result, overflowMask)
 
-	// Handle underflow: return 0
-	result = result.Merge(exp32_zero, underflowMask)
+	// Handle underflow: return 0 where x < threshold
+	result = exp32_zero.Merge(result, underflowMask)
 
 	return result
 }
@@ -220,9 +221,9 @@ func Exp_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 
 	result := p.Mul(scale)
 
-	// Handle special cases
-	result = result.Merge(exp64_inf, overflowMask)
-	result = result.Merge(exp64_zero, underflowMask)
+	// Handle special cases (Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE)
+	result = exp64_inf.Merge(result, overflowMask)
+	result = exp64_zero.Merge(result, underflowMask)
 
 	return result
 }
