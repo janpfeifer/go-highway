@@ -222,6 +222,53 @@ func TestConvertToInt32(t *testing.T) {
 	}
 }
 
+// Test that package-level exp32 constants are properly initialized
+func TestExp32Constants(t *testing.T) {
+	// These are the package-level constants from exp_avx2.go
+	// If they're all zeros, the exp computation will fail
+
+	// Read exp32_one constant
+	oneOutput := make([]float32, 8)
+	exp32_one.StoreSlice(oneOutput)
+	t.Logf("exp32_one: %v", oneOutput)
+
+	// Read exp32_half constant
+	halfOutput := make([]float32, 8)
+	exp32_half.StoreSlice(halfOutput)
+	t.Logf("exp32_half: %v", halfOutput)
+
+	// Read exp32_invLn2 constant
+	invLn2Output := make([]float32, 8)
+	exp32_invLn2.StoreSlice(invLn2Output)
+	t.Logf("exp32_invLn2: %v", invLn2Output)
+
+	// Read exp32_ln2Hi constant
+	ln2HiOutput := make([]float32, 8)
+	exp32_ln2Hi.StoreSlice(ln2HiOutput)
+	t.Logf("exp32_ln2Hi: %v", ln2HiOutput)
+
+	// Verify exp32_one is correct (all 1.0)
+	for i, v := range oneOutput {
+		if v != 1.0 {
+			t.Errorf("exp32_one[%d]: got %v, want 1.0", i, v)
+		}
+	}
+
+	// Verify exp32_half is correct (all 0.5)
+	for i, v := range halfOutput {
+		if v != 0.5 {
+			t.Errorf("exp32_half[%d]: got %v, want 0.5", i, v)
+		}
+	}
+
+	// Verify exp32_invLn2 is correct (all 1.44269504...)
+	for i, v := range invLn2Output {
+		if !closeEnough32(v, 1.44269504, 1e-6) {
+			t.Errorf("exp32_invLn2[%d]: got %v, want ~1.44269504", i, v)
+		}
+	}
+}
+
 // Test the 2^k scaling computation which is the heart of exp
 func TestTwoToTheK(t *testing.T) {
 	// For exp(x), we compute 2^k where k = round(x / ln(2))
@@ -304,6 +351,46 @@ func TestExpVec8Elements(t *testing.T) {
 		t.Logf("[%d] input=%v output=%v expected=%v", i, input[i], output[i], expected)
 		if !closeEnough32(output[i], expected, 1e-4) {
 			t.Errorf("ExpVec8Elements[%d] input=%v: got %v, want %v", i, input[i], output[i], expected)
+		}
+	}
+}
+
+// Test that mimics exactly what exp32AVX2 does internally
+func TestExpMimicExp32AVX2(t *testing.T) {
+	input := []float32{0, 1, 2, -1, 0.5, -0.5, 0.1, -0.1}
+
+	// This is exactly what exp32AVX2 does:
+	data := input
+	n := len(input)
+	result := make([]float32, n)
+
+	t.Logf("n=%d", n)
+
+	for i := 0; i+8 <= n; i += 8 {
+		t.Logf("Loop iteration i=%d", i)
+		x := archsimd.LoadFloat32x8Slice(data[i:])
+
+		// Log the loaded values
+		loaded := make([]float32, 8)
+		x.StoreSlice(loaded)
+		t.Logf("Loaded: %v", loaded)
+
+		out := Exp_AVX2_F32x8(x)
+
+		// Log the output values
+		outVals := make([]float32, 8)
+		out.StoreSlice(outVals)
+		t.Logf("Exp output: %v", outVals)
+
+		out.StoreSlice(result[i:])
+	}
+
+	t.Logf("Result: %v", result)
+
+	for i := range input {
+		expected := float32(math.Exp(float64(input[i])))
+		if !closeEnough32(result[i], expected, 1e-4) {
+			t.Errorf("ExpMimicExp32AVX2[%d] input=%v: got %v, want %v", i, input[i], result[i], expected)
 		}
 	}
 }
