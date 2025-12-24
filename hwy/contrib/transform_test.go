@@ -158,6 +158,98 @@ func TestSimdArithmetic(t *testing.T) {
 	}
 }
 
+// Test MulAdd operation which is heavily used in polynomial evaluation
+func TestMulAdd(t *testing.T) {
+	a := []float32{1, 2, 3, 4, 5, 6, 7, 8}
+	b := []float32{2, 2, 2, 2, 2, 2, 2, 2}
+	c := []float32{10, 10, 10, 10, 10, 10, 10, 10}
+
+	aVec := archsimd.LoadFloat32x8Slice(a)
+	bVec := archsimd.LoadFloat32x8Slice(b)
+	cVec := archsimd.LoadFloat32x8Slice(c)
+
+	// MulAdd(a, b, c) = a*b + c
+	result := aVec.MulAdd(bVec, cVec)
+	output := make([]float32, 8)
+	result.StoreSlice(output)
+
+	t.Logf("a*b + c: %v", output)
+
+	for i := range a {
+		expected := a[i]*b[i] + c[i]
+		if output[i] != expected {
+			t.Errorf("MulAdd[%d]: got %v, want %v", i, output[i], expected)
+		}
+	}
+}
+
+// Test RoundToEven which is used in range reduction
+func TestRoundToEven(t *testing.T) {
+	input := []float32{0.4, 0.5, 0.6, 1.4, 1.5, 2.5, -0.5, -1.5}
+	x := archsimd.LoadFloat32x8Slice(input)
+
+	result := x.RoundToEven()
+	output := make([]float32, 8)
+	result.StoreSlice(output)
+
+	t.Logf("RoundToEven: input=%v output=%v", input, output)
+
+	// RoundToEven rounds to nearest even: 0.5->0, 1.5->2, 2.5->2
+	expected := []float32{0, 0, 1, 1, 2, 2, 0, -2}
+	for i := range expected {
+		if output[i] != expected[i] {
+			t.Errorf("RoundToEven[%d]: got %v, want %v", i, output[i], expected[i])
+		}
+	}
+}
+
+// Test ConvertToInt32 and back
+func TestConvertToInt32(t *testing.T) {
+	input := []float32{0, 1, 2, 3, -1, -2, 100, -100}
+	x := archsimd.LoadFloat32x8Slice(input)
+
+	intVec := x.ConvertToInt32()
+
+	intOutput := make([]int32, 8)
+	intVec.StoreSlice(intOutput)
+	t.Logf("ConvertToInt32: input=%v output=%v", input, intOutput)
+
+	for i := range input {
+		expected := int32(input[i])
+		if intOutput[i] != expected {
+			t.Errorf("ConvertToInt32[%d]: got %v, want %v", i, intOutput[i], expected)
+		}
+	}
+}
+
+// Test the 2^k scaling computation which is the heart of exp
+func TestTwoToTheK(t *testing.T) {
+	// For exp(x), we compute 2^k where k = round(x / ln(2))
+	// For x=0: k=0, 2^0=1
+	// For x=1: k=round(1/0.693)=round(1.44)=1, 2^1=2
+	kValues := []int32{0, 1, 2, -1, -2, 3, 4, 5}
+
+	kVec := archsimd.LoadInt32x8Slice(kValues)
+	bias := archsimd.BroadcastInt32x8(127)
+
+	// 2^k = ((k + 127) << 23) reinterpreted as float
+	expBits := kVec.Add(bias).ShiftAllLeft(23)
+	scale := expBits.AsFloat32x8()
+
+	output := make([]float32, 8)
+	scale.StoreSlice(output)
+
+	t.Logf("2^k: k=%v scale=%v", kValues, output)
+
+	// Expected: 2^0=1, 2^1=2, 2^2=4, 2^-1=0.5, 2^-2=0.25, etc
+	for i := range kValues {
+		expected := float32(math.Pow(2, float64(kValues[i])))
+		if !closeEnough32(output[i], expected, 1e-6) {
+			t.Errorf("TwoToTheK[%d]: k=%d got %v, want %v", i, kValues[i], output[i], expected)
+		}
+	}
+}
+
 // Debug test to isolate where the SIMD issue is
 func TestLoadStoreRoundtrip(t *testing.T) {
 	input := []float32{1, 2, 3, 4, 5, 6, 7, 8}
