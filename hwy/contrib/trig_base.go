@@ -71,12 +71,26 @@ var cosCoeffs64 = []float64{
 }
 
 func init() {
-	Sin32 = sin32Base
-	Sin64 = sin64Base
-	Cos32 = cos32Base
-	Cos64 = cos64Base
-	SinCos32 = sinCos32Base
-	SinCos64 = sinCos64Base
+	// Register base implementations as defaults only if not already set
+	// This allows optimized implementations (AVX2, etc.) to take precedence
+	if Sin32 == nil {
+		Sin32 = sin32Base
+	}
+	if Sin64 == nil {
+		Sin64 = sin64Base
+	}
+	if Cos32 == nil {
+		Cos32 = cos32Base
+	}
+	if Cos64 == nil {
+		Cos64 = cos64Base
+	}
+	if SinCos32 == nil {
+		SinCos32 = sinCos32Base
+	}
+	if SinCos64 == nil {
+		SinCos64 = sinCos64Base
+	}
 }
 
 // rangeReduceSin32 reduces x to the range [-π/4, π/4] and returns the reduced value

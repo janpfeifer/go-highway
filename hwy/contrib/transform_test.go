@@ -395,6 +395,37 @@ func TestExpMimicExp32AVX2(t *testing.T) {
 	}
 }
 
+// Test to verify which implementation is being used for Exp32
+func TestWhichExpImplementation(t *testing.T) {
+	// Check if Exp32 is the AVX2 version by comparing function pointers
+	// We can't directly compare function pointers, but we can check behavior
+
+	// The AVX2 version should process 8 elements at a time correctly
+	// The base version should also work but uses scalar math.Exp
+
+	t.Logf("hwy.CurrentLevel() = %v", hwy.CurrentLevel())
+	t.Logf("hwy.DispatchAVX2 = %v", hwy.DispatchAVX2)
+	t.Logf("AVX2 detected = %v", hwy.CurrentLevel() >= hwy.DispatchAVX2)
+
+	// Test with 8 elements to see if SIMD path is used
+	input := []float32{0, 1, 2, 3, 4, 5, 6, 7}
+	v := hwy.Load(input)
+
+	// Call Exp which uses Exp32
+	result := Exp(v)
+	output := result.Data()
+
+	t.Logf("Exp result: %v", output)
+
+	// Verify correctness
+	for i := range input {
+		expected := float32(math.Exp(float64(input[i])))
+		if !closeEnough32(output[i], expected, 1e-4) {
+			t.Errorf("Exp[%d]: got %v, want %v", i, output[i], expected)
+		}
+	}
+}
+
 // Step-by-step trace through Exp_AVX2_F32x8 to find where it fails
 func TestExpAVX2StepByStep(t *testing.T) {
 	input := []float32{0, 1, 2, -1, 0.5, -0.5, 0.1, -0.1}

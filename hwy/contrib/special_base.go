@@ -7,12 +7,26 @@ import (
 )
 
 func init() {
-	Tanh32 = tanh32Base
-	Tanh64 = tanh64Base
-	Sigmoid32 = sigmoid32Base
-	Sigmoid64 = sigmoid64Base
-	Erf32 = erf32Base
-	Erf64 = erf64Base
+	// Register base implementations as defaults only if not already set
+	// This allows optimized implementations (AVX2, etc.) to take precedence
+	if Tanh32 == nil {
+		Tanh32 = tanh32Base
+	}
+	if Tanh64 == nil {
+		Tanh64 = tanh64Base
+	}
+	if Sigmoid32 == nil {
+		Sigmoid32 = sigmoid32Base
+	}
+	if Sigmoid64 == nil {
+		Sigmoid64 = sigmoid64Base
+	}
+	if Erf32 == nil {
+		Erf32 = erf32Base
+	}
+	if Erf64 == nil {
+		Erf64 = erf64Base
+	}
 }
 
 // tanh32Base computes tanh(x) for float32.

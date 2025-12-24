@@ -47,8 +47,14 @@ var logCoeffs64 = []float64{
 }
 
 func init() {
-	Log32 = log32Base
-	Log64 = log64Base
+	// Register base implementations as defaults only if not already set
+	// This allows optimized implementations (AVX2, etc.) to take precedence
+	if Log32 == nil {
+		Log32 = log32Base
+	}
+	if Log64 == nil {
+		Log64 = log64Base
+	}
 }
 
 // log32Base computes ln(x) for float32 using range reduction and polynomial approximation.

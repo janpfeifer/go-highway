@@ -60,9 +60,14 @@ var expCoeffs64 = []float64{
 }
 
 func init() {
-	// Register base implementations as defaults
-	Exp32 = exp32Base
-	Exp64 = exp64Base
+	// Register base implementations as defaults only if not already set
+	// This allows optimized implementations (AVX2, etc.) to take precedence
+	if Exp32 == nil {
+		Exp32 = exp32Base
+	}
+	if Exp64 == nil {
+		Exp64 = exp64Base
+	}
 }
 
 // exp32Base computes e^x for float32 using range reduction and polynomial approximation.
