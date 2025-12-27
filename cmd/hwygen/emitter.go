@@ -204,11 +204,20 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/algo"`)
 		}
 	} else {
-		// Fallback uses the hwy package directly
+		// Fallback uses the hwy package directly for core ops
 		imports = append(imports, `"github.com/ajroetker/go-highway/hwy"`)
-		// For fallback, we might still need contrib for scalar implementations
-		if contribPkgs.Math || contribPkgs.Dot || contribPkgs.MatVec || contribPkgs.Algo {
-			imports = append(imports, `stdmath "math"`) // Use standard math for fallback
+		// Fallback also uses contrib subpackages for their portable generic implementations
+		if contribPkgs.Math {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/math"`)
+		}
+		if contribPkgs.Dot {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/dot"`)
+		}
+		if contribPkgs.MatVec {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/matvec"`)
+		}
+		if contribPkgs.Algo {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/algo"`)
 		}
 	}
 

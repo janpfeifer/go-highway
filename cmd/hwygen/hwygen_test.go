@@ -368,14 +368,14 @@ func BaseSigmoid[T hwy.Floats](input, output []T) {
 
 	fallbackStr := string(fallbackContent)
 
-	// Fallback should use hwy package
+	// Fallback should use hwy package for core ops
 	if !strings.Contains(fallbackStr, `"github.com/ajroetker/go-highway/hwy"`) {
 		t.Error("Fallback output missing hwy import")
 	}
 
-	// Fallback should use hwy.Sigmoid style function calls
-	if !strings.Contains(fallbackStr, "hwy.Sigmoid") {
-		t.Error("Fallback output missing hwy.Sigmoid function call")
+	// Fallback should use math.Sigmoid for contrib functions (not hwy.Sigmoid)
+	if !strings.Contains(fallbackStr, "math.Sigmoid") {
+		t.Error("Fallback output missing math.Sigmoid function call")
 	}
 }
 

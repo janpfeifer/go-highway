@@ -259,9 +259,14 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 	selExpr := call.Fun.(*ast.SelectorExpr)
 
 	if ctx.target.Name == "Fallback" {
-		// For fallback, keep using hwy.* for everything
-		// The portable hwy API handles all operations including contrib math
-		selExpr.X = ast.NewIdent("hwy")
+		// For fallback, use the appropriate package
+		if opInfo.SubPackage != "" {
+			// Contrib functions stay in their subpackage (e.g., math.Exp stays math.Exp)
+			selExpr.X = ast.NewIdent(opInfo.SubPackage)
+		} else {
+			// Core ops use hwy package
+			selExpr.X = ast.NewIdent("hwy")
+		}
 		selExpr.Sel.Name = funcName
 		return
 	}
