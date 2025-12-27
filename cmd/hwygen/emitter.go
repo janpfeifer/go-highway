@@ -219,6 +219,8 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 		if contribPkgs.Algo {
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/algo"`)
 		}
+		// Also add stdmath for scalar tail code that may use math functions
+		imports = append(imports, `stdmath "math"`)
 	}
 
 	// Sort imports for consistency

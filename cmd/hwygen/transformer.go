@@ -669,8 +669,49 @@ func cloneDecl(decl ast.Decl) ast.Decl {
 	if decl == nil {
 		return nil
 	}
-	// Simplified - production would need full implementation
-	return decl
+
+	switch d := decl.(type) {
+	case *ast.GenDecl:
+		newSpecs := make([]ast.Spec, len(d.Specs))
+		for i, spec := range d.Specs {
+			newSpecs[i] = cloneSpec(spec)
+		}
+		return &ast.GenDecl{
+			Tok:   d.Tok,
+			Specs: newSpecs,
+		}
+	default:
+		return decl
+	}
+}
+
+// cloneSpec clones a declaration spec (e.g., variable declaration).
+func cloneSpec(spec ast.Spec) ast.Spec {
+	if spec == nil {
+		return nil
+	}
+
+	switch s := spec.(type) {
+	case *ast.ValueSpec:
+		var newValues []ast.Expr
+		if len(s.Values) > 0 {
+			newValues = make([]ast.Expr, len(s.Values))
+			for i, v := range s.Values {
+				newValues[i] = cloneExpr(v)
+			}
+		}
+		newNames := make([]*ast.Ident, len(s.Names))
+		for i, n := range s.Names {
+			newNames[i] = &ast.Ident{Name: n.Name}
+		}
+		return &ast.ValueSpec{
+			Names:  newNames,
+			Type:   cloneExpr(s.Type),
+			Values: newValues,
+		}
+	default:
+		return spec
+	}
 }
 
 // cloneReturnStmt clones a return statement.

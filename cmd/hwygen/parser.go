@@ -153,7 +153,9 @@ func findHwyCalls(node ast.Node) []HwyCall {
 			return true
 		}
 
-		if ident.Name == "hwy" || ident.Name == "contrib" {
+		// Recognize hwy package and contrib subpackages (math, dot, matvec, algo)
+		switch ident.Name {
+		case "hwy", "contrib", "math", "dot", "matvec", "algo":
 			calls = append(calls, HwyCall{
 				Package:  ident.Name,
 				FuncName: selExpr.Sel.Name,
