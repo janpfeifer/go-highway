@@ -150,66 +150,14 @@ func Log_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 
 // Log_AVX2_F64x4 computes ln(x) for a single Float64x4 vector.
 //
-// Algorithm: Same as F32x8 but with higher-degree polynomial for float64 precision.
+// Note: Uses scalar fallback because AVX2 lacks proper 64-bit integer shift
+// support. The Go compiler generates AVX-512 EVEX instructions for Int64x4
+// shifts, which fail on AVX2-only hardware.
 func Log_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
-	// Save input for special case handling
-	origX := x
-
-	// Extract exponent and mantissa using IEEE 754 bit manipulation
-	// float64: sign(1) | exponent(11) | mantissa(52)
-	xBits := x.AsInt64x4()
-
-	// Extract exponent: shift right by 52, subtract bias (1023)
-	exp := xBits.ShiftAllRight(52).And(archsimd.BroadcastInt64x4(0x7FF)).Sub(log64_expBias)
-
-	// Extract mantissa and normalize to [1, 2)
-	mantBits := xBits.And(log64_mantMask).Or(log64_normBits)
-	m := mantBits.AsFloat64x4()
-
-	// If m < sqrt(2)/2 (~0.707), use m*2 and e-1 for better accuracy
-	adjustMask := m.Less(log64_sqrtHalf)
-	mAdjusted := m.Mul(log64_two)
-	expAdjusted := exp.Sub(log64_intOne)
-	// Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE
-	m = mAdjusted.Merge(m, adjustMask)
-	// Use float conversion to apply mask (exp values are small integers, no precision loss)
-	// Note: We keep expFloat as Float64x4 since AVX2 lacks vcvttpd2qq (float64→int64).
-	expFloat := exp.ConvertToFloat64()
-	expAdjustedFloat := expAdjusted.ConvertToFloat64()
-	expFloat = expAdjustedFloat.Merge(expFloat, adjustMask)
-
-	// Transform: y = (m-1)/(m+1)
-	mMinus1 := m.Sub(log64_one)
-	mPlus1 := m.Add(log64_one)
-	y := mMinus1.Div(mPlus1)
-	y2 := y.Mul(y)
-
-	// Polynomial approximation (higher degree for float64)
-	// ln(m) = 2*y*(1 + c1*y^2 + c2*y^4 + c3*y^6 + c4*y^8 + c5*y^10 + c6*y^12 + c7*y^14)
-	p := log64_c7.MulAdd(y2, log64_c6)
-	p = p.MulAdd(y2, log64_c5)
-	p = p.MulAdd(y2, log64_c4)
-	p = p.MulAdd(y2, log64_c3)
-	p = p.MulAdd(y2, log64_c2)
-	p = p.MulAdd(y2, log64_c1)
-	p = p.MulAdd(y2, log64_one)
-
-	// ln(m) = 2*y*p
-	lnM := log64_two.Mul(y).Mul(p)
-
-	// Reconstruct: ln(x) = e*ln(2) + ln(m)
-	result := expFloat.Mul(log64_ln2Hi)
-	result = result.Add(expFloat.Mul(log64_ln2Lo))
-	result = result.Add(lnM)
-
-	// Handle special cases (Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE)
-	zeroMask := origX.Equal(log64_zero)
-	negMask := origX.Less(log64_zero)
-	infMask := origX.Equal(log64_posInf)
-
-	result = log64_negInf.Merge(result, zeroMask)
-	result = log64_nan.Merge(result, negMask)
-	result = log64_posInf.Merge(result, infMask)
-
-	return result
+	var in, out [4]float64
+	x.StoreSlice(in[:])
+	for i := range in {
+		out[i] = stdmath.Log(in[i])
+	}
+	return archsimd.LoadFloat64x4Slice(out[:])
 }

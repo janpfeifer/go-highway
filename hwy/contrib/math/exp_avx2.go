@@ -121,41 +121,15 @@ var (
 )
 
 // Exp_AVX2_F64x4 computes e^x for a single Float64x4 vector.
+//
+// Note: Uses scalar fallback because AVX2 lacks proper 64-bit integer shift
+// support. The Go compiler generates AVX-512 EVEX instructions for Int64x4
+// shifts, which fail on AVX2-only hardware.
 func Exp_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
-	overflowMask := x.Greater(exp64_overflow)
-	underflowMask := x.Less(exp64_underflow)
-
-	// Range reduction
-	kFloat := x.Mul(exp64_invLn2).RoundToEven()
-	r := x.Sub(kFloat.Mul(exp64_ln2Hi))
-	r = r.Sub(kFloat.Mul(exp64_ln2Lo))
-
-	// Polynomial approximation (degree 10 for float64)
-	p := exp64_c10.MulAdd(r, exp64_c9)
-	p = p.MulAdd(r, exp64_c8)
-	p = p.MulAdd(r, exp64_c7)
-	p = p.MulAdd(r, exp64_c6)
-	p = p.MulAdd(r, exp64_c5)
-	p = p.MulAdd(r, exp64_c4)
-	p = p.MulAdd(r, exp64_c3)
-	p = p.MulAdd(r, exp64_c2)
-	p = p.MulAdd(r, exp64_c1)
-	p = p.MulAdd(r, exp64_one)
-
-	// Scale by 2^k using magic number trick (pure SIMD, no scalar conversion).
-	// Add offset to ensure k is positive, embed in mantissa via 2^52 addition,
-	// then extract and construct the float64 bit pattern.
-	kPositive := kFloat.Add(exp64_magicOffset)           // k + 1024, always positive
-	kPlusMagic := kPositive.Add(exp64_magic)             // Embed in mantissa
-	kInt := kPlusMagic.AsInt64x4().Sub(exp64_magicAdjust) // Extract k + 1024
-	expBits := kInt.Sub(exp64_magicOne).ShiftAllLeft(52) // (k + 1023) << 52
-	scale := expBits.AsFloat64x4()
-
-	result := p.Mul(scale)
-
-	// Handle special cases (Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE)
-	result = exp64_inf.Merge(result, overflowMask)
-	result = exp64_zero.Merge(result, underflowMask)
-
-	return result
+	var in, out [4]float64
+	x.StoreSlice(in[:])
+	for i := range in {
+		out[i] = stdmath.Exp(in[i])
+	}
+	return archsimd.LoadFloat64x4Slice(out[:])
 }
