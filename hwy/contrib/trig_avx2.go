@@ -74,6 +74,13 @@ var (
 	trig64_intOne   = archsimd.BroadcastInt64x4(1)
 	trig64_intTwo   = archsimd.BroadcastInt64x4(2)
 	trig64_intThree = archsimd.BroadcastInt64x4(3)
+
+	// Magic number constants for float64→int64 conversion (avoids scalar conversion)
+	// AVX2 lacks VCVTTPD2QQ, so we use the magic number trick:
+	// Adding 2^52 to a small integer embeds it in the mantissa bits
+	trig64_magic       = archsimd.BroadcastFloat64x4(0x1.0p52)         // 2^52
+	trig64_magicOffset = archsimd.BroadcastFloat64x4(1024.0)           // Offset to make k positive
+	trig64_magicAdjust = archsimd.BroadcastInt64x4(0x4330000000000000) // Bits of 2^52
 )
 
 // Sin_AVX2_F32x8 computes sin(x) for a single Float32x8 vector.
@@ -181,11 +188,13 @@ func sinCos64Core(x archsimd.Float64x4) (sin, cos archsimd.Float64x4) {
 	// Range reduction: k = round(x * 2/π)
 	k := x.Mul(trig64_2overPi).RoundToEven()
 
-	// Note: AVX2 lacks vcvttpd2qq (float64→int64), so we use scalar conversion.
-	var kBuf [4]float64
-	k.StoreSlice(kBuf[:])
-	kIntBuf := [4]int64{int64(kBuf[0]), int64(kBuf[1]), int64(kBuf[2]), int64(kBuf[3])}
-	kInt := archsimd.LoadInt64x4Slice(kIntBuf[:])
+	// Convert k to int64 using magic number trick (pure SIMD, avoids scalar conversion).
+	// AVX2 lacks vcvttpd2qq (float64→int64), so we use the trick:
+	// Add offset 1024 (ensures positive), add 2^52 (embeds in mantissa), reinterpret.
+	// Note: We get k+1024, but since 1024 % 4 == 0, octant selection (k & 3) is unaffected.
+	kPositive := k.Add(trig64_magicOffset)
+	kPlusMagic := kPositive.Add(trig64_magic)
+	kInt := kPlusMagic.AsInt64x4().Sub(trig64_magicAdjust) // = k + 1024, but k&3 == (k+1024)&3
 
 	// r = x - k * (π/2) using Cody-Waite high/low for precision
 	r := x.Sub(k.Mul(trig64_piOver2Hi))

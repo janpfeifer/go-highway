@@ -112,6 +112,12 @@ var (
 	exp64_c8  = archsimd.BroadcastFloat64x4(2.48015873015873e-05)
 	exp64_c9  = archsimd.BroadcastFloat64x4(2.7557319223985893e-06)
 	exp64_c10 = archsimd.BroadcastFloat64x4(2.755731922398589e-07)
+
+	// Magic number constants for 2^k computation (avoids scalar int64 conversion)
+	exp64_magic       = archsimd.BroadcastFloat64x4(0x1.0p52)          // 2^52
+	exp64_magicOffset = archsimd.BroadcastFloat64x4(1024.0)            // Offset to make k positive
+	exp64_magicAdjust = archsimd.BroadcastInt64x4(0x4330000000000000)  // Bits of 2^52
+	exp64_magicOne    = archsimd.BroadcastInt64x4(1)                   // For adjustment
 )
 
 // Exp_AVX2_F64x4 computes e^x for a single Float64x4 vector.
@@ -136,18 +142,14 @@ func Exp_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	p = p.MulAdd(r, exp64_c1)
 	p = p.MulAdd(r, exp64_one)
 
-	// Scale by 2^k
-	// Note: AVX2 lacks vcvttpd2qq (float64→int64), so we use scalar conversion.
-	// Store kFloat to memory, compute scale factors, load back.
-	var kBuf [4]float64
-	kFloat.StoreSlice(kBuf[:])
-
-	var scaleBuf [4]float64
-	for i := 0; i < 4; i++ {
-		k := int64(kBuf[i])
-		scaleBuf[i] = math.Float64frombits(uint64(k+1023) << 52)
-	}
-	scale := archsimd.LoadFloat64x4Slice(scaleBuf[:])
+	// Scale by 2^k using magic number trick (pure SIMD, no scalar conversion).
+	// Add offset to ensure k is positive, embed in mantissa via 2^52 addition,
+	// then extract and construct the float64 bit pattern.
+	kPositive := kFloat.Add(exp64_magicOffset)           // k + 1024, always positive
+	kPlusMagic := kPositive.Add(exp64_magic)             // Embed in mantissa
+	kInt := kPlusMagic.AsInt64x4().Sub(exp64_magicAdjust) // Extract k + 1024
+	expBits := kInt.Sub(exp64_magicOne).ShiftAllLeft(52) // (k + 1023) << 52
+	scale := expBits.AsFloat64x4()
 
 	result := p.Mul(scale)
 
