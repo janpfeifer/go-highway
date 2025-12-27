@@ -449,7 +449,7 @@ func TestAnd(t *testing.T) {
 	b := Load([]uint32{0x00FF00FF, 0x55555555, 0x87654321, 0x0F0F0F0F})
 	result := And(a, b)
 
-	expected := []uint32{0x00000000, 0x00000000, 0x02044200, 0x0F0F0F0F}
+	expected := []uint32{0x00000000, 0x00000000, 0x02244220, 0x0F0F0F0F}
 	for i := 0; i < len(expected) && i < result.NumLanes(); i++ {
 		if result.data[i] != expected[i] {
 			t.Errorf("And: lane %d: got 0x%08X, want 0x%08X", i, result.data[i], expected[i])
@@ -467,7 +467,7 @@ func TestOr(t *testing.T) {
 	b := Load([]uint32{0x00FF00FF, 0x55555555, 0x87654321, 0x0F0F0F0F})
 	result := Or(a, b)
 
-	expected := []uint32{0xFFFFFFFF, 0xFFFFFFFF, 0x97757779, 0x0F0F0F0F}
+	expected := []uint32{0xFFFFFFFF, 0xFFFFFFFF, 0x97755779, 0x0F0F0F0F}
 	for i := 0; i < len(expected) && i < result.NumLanes(); i++ {
 		if result.data[i] != expected[i] {
 			t.Errorf("Or: lane %d: got 0x%08X, want 0x%08X", i, result.data[i], expected[i])
