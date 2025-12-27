@@ -42,35 +42,28 @@ func scale2kScalarUnrolled(kFloat archsimd.Float64x4) archsimd.Float64x4 {
 // Uses the fact that adding 2^52 to a small integer k gives a float64
 // where the mantissa bits contain k.
 var (
-	magic64       = archsimd.BroadcastFloat64x4(0x1.0p52)                       // 2^52
-	magicBias64   = archsimd.BroadcastInt64x4(0x4330000000000000 + (1023 << 52)) // Adjustment for exponent
-	magicAdjust64 = archsimd.BroadcastInt64x4(0x4330000000000000)               // To subtract the magic
+	magic64       = archsimd.BroadcastFloat64x4(0x1.0p52)          // 2^52
+	magicAdjust64 = archsimd.BroadcastInt64x4(0x4330000000000000)  // Bits of 2^52
+	exp64Bias1023 = archsimd.BroadcastInt64x4(1023)                // Exponent bias
 )
 
 func scale2kMagic(kFloat archsimd.Float64x4) archsimd.Float64x4 {
-	// Add magic to embed k in mantissa bits
+	// Add magic (2^52) to embed k in mantissa bits.
+	// For k in valid range, kFloat + 2^52 is exactly representable,
+	// and the low 52 bits of the int64 representation contain k (unsigned).
 	kPlusMagic := kFloat.Add(magic64)
 
-	// Reinterpret as int64 - the low 52 bits now contain k (for k >= 0)
-	// For negative k, we get 2^52 + k which is positive
+	// Reinterpret as int64.
+	// bits = 0x433XXXXXXXXXXXXX where X encodes (2^52 + k) in mantissa
 	bits := kPlusMagic.AsInt64x4()
 
-	// We have: bits = 0x433 | (2^52 + k) in mantissa
-	// We want: result = (k + 1023) << 52
-	// Subtract the magic bias to adjust
-	// Actually: bits - 0x4330000000000000 gives us k in the low 52 bits
-	// Then add 1023<<52 and mask/shift appropriately
+	// Subtract the magic constant to extract k.
+	// For k >= 0: bits - 0x4330000000000000 = k
+	// For k < 0: bits - 0x4330000000000000 = k (two's complement works out)
+	kInt := bits.Sub(magicAdjust64)
 
-	// Simpler: manipulate the exponent field directly
-	// The exponent of (k + 2^52) is 1075 = 1023 + 52
-	// We want exponent = k + 1023
-
-	// This is tricky... let's try a different manipulation
-	// bits = 0x433XXXXXXXXXXXXX where X = k (for small positive k)
-
-	// Alternative: extract k, add bias, construct new float
-	kInt := bits.Sub(magicAdjust64) // Now low 52 bits = k (signed)
-	expBits := kInt.Add(archsimd.BroadcastInt64x4(1023)).ShiftAllLeft(52)
+	// Now construct 2^k: bit pattern is (k + 1023) << 52
+	expBits := kInt.Add(exp64Bias1023).ShiftAllLeft(52)
 	return expBits.AsFloat64x4()
 }
 
