@@ -5,6 +5,7 @@ package softmax
 
 import (
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
+	stdmath "math"
 	"simd/archsimd"
 )
 
@@ -27,12 +28,16 @@ func BaseSoftmax_avx2(input []float32, output []float32) {
 	var expSum float32
 	for ii := 0; ii+8 <= size; ii += 8 {
 		remaining := size - ii
-		if remaining >= vMax.NumLanes() {
+		if remaining >= 8 {
 			x := archsimd.LoadFloat32x8Slice(input[ii:])
 			xShifted := x.Sub(vMax)
-			expX := math.Exp(xShifted)
+			expX := math.Exp_AVX2_F32x8(xShifted)
 			expX.StoreSlice(output[ii:])
-			expSum += expX.ReduceSum()
+			expSum += func() float32 {
+				var _simd_temp [8]float32
+				expX.StoreSlice(_simd_temp[:])
+				return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
+			}()
 		} else {
 			for i := ii; i+8 <= size; i++ {
 				exp := float32(stdmath.Exp(float64(input[i] - maxVal)))
@@ -44,7 +49,7 @@ func BaseSoftmax_avx2(input []float32, output []float32) {
 	vSum := archsimd.BroadcastFloat32x8(expSum)
 	for ii := 0; ii+8 <= size; ii += 8 {
 		remaining := size - ii
-		if remaining >= vSum.NumLanes() {
+		if remaining >= 8 {
 			expX := archsimd.LoadFloat32x8Slice(output[ii:])
 			normalized := expX.Div(vSum)
 			normalized.StoreSlice(output[ii:])
@@ -75,12 +80,16 @@ func BaseSoftmax_avx2_Float64(input []float64, output []float64) {
 	var expSum float64
 	for ii := 0; ii+4 <= size; ii += 4 {
 		remaining := size - ii
-		if remaining >= vMax.NumLanes() {
+		if remaining >= 4 {
 			x := archsimd.LoadFloat64x4Slice(input[ii:])
 			xShifted := x.Sub(vMax)
-			expX := math.Exp(xShifted)
+			expX := math.Exp_AVX2_F64x4(xShifted)
 			expX.StoreSlice(output[ii:])
-			expSum += expX.ReduceSum()
+			expSum += func() float64 {
+				var _simd_temp [4]float64
+				expX.StoreSlice(_simd_temp[:])
+				return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
+			}()
 		} else {
 			for i := ii; i+4 <= size; i++ {
 				exp := float64(stdmath.Exp(float64(input[i] - maxVal)))
@@ -92,7 +101,7 @@ func BaseSoftmax_avx2_Float64(input []float64, output []float64) {
 	vSum := archsimd.BroadcastFloat64x4(expSum)
 	for ii := 0; ii+4 <= size; ii += 4 {
 		remaining := size - ii
-		if remaining >= vSum.NumLanes() {
+		if remaining >= 4 {
 			expX := archsimd.LoadFloat64x4Slice(output[ii:])
 			normalized := expX.Div(vSum)
 			normalized.StoreSlice(output[ii:])

@@ -1,13 +1,27 @@
 //go:build amd64 && goexperiment.simd
 
-package math
+package math_test
 
 import (
 	stdmath "math"
 	"testing"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/algo"
+	hwymath "github.com/ajroetker/go-highway/hwy/contrib/math"
 )
+
+// Scalar helper functions for tail elements (local copies since algo's are unexported)
+func exp32Scalar(x float32) float32       { return float32(stdmath.Exp(float64(x))) }
+func exp64Scalar(x float64) float64       { return stdmath.Exp(x) }
+func log32Scalar(x float32) float32       { return float32(stdmath.Log(float64(x))) }
+func log64Scalar(x float64) float64       { return stdmath.Log(x) }
+func sin32Scalar(x float32) float32       { return float32(stdmath.Sin(float64(x))) }
+func sin64Scalar(x float64) float64       { return stdmath.Sin(x) }
+func cos32Scalar(x float32) float32       { return float32(stdmath.Cos(float64(x))) }
+func tanh32Scalar(x float32) float32      { return float32(stdmath.Tanh(float64(x))) }
+func sigmoid32Scalar(x float32) float32   { return float32(1.0 / (1.0 + stdmath.Exp(-float64(x)))) }
+func erf32Scalar(x float32) float32       { return float32(stdmath.Erf(float64(x))) }
 
 // ============================================================================
 // AVX2 vs AVX512 Direct Comparison Benchmarks
@@ -28,7 +42,7 @@ func BenchmarkExp_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Exp_AVX2_F32x8, exp32Scalar)
+			algo.Transform32(input, output, hwymath.Exp_AVX2_F32x8, exp32Scalar)
 		}
 	})
 
@@ -36,7 +50,7 @@ func BenchmarkExp_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Exp_AVX512_F32x16, exp32Scalar)
+				algo.Transform32x16(input, output, hwymath.Exp_AVX512_F32x16, exp32Scalar)
 			}
 		})
 	}
@@ -57,7 +71,7 @@ func BenchmarkLog_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Log_AVX2_F32x8, log32Scalar)
+			algo.Transform32(input, output, hwymath.Log_AVX2_F32x8, log32Scalar)
 		}
 	})
 
@@ -65,7 +79,7 @@ func BenchmarkLog_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Log_AVX512_F32x16, log32Scalar)
+				algo.Transform32x16(input, output, hwymath.Log_AVX512_F32x16, log32Scalar)
 			}
 		})
 	}
@@ -86,7 +100,7 @@ func BenchmarkSin_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Sin_AVX2_F32x8, sin32Scalar)
+			algo.Transform32(input, output, hwymath.Sin_AVX2_F32x8, sin32Scalar)
 		}
 	})
 
@@ -94,7 +108,7 @@ func BenchmarkSin_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Sin_AVX512_F32x16, sin32Scalar)
+				algo.Transform32x16(input, output, hwymath.Sin_AVX512_F32x16, sin32Scalar)
 			}
 		})
 	}
@@ -115,7 +129,7 @@ func BenchmarkCos_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Cos_AVX2_F32x8, cos32Scalar)
+			algo.Transform32(input, output, hwymath.Cos_AVX2_F32x8, cos32Scalar)
 		}
 	})
 
@@ -123,7 +137,7 @@ func BenchmarkCos_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Cos_AVX512_F32x16, cos32Scalar)
+				algo.Transform32x16(input, output, hwymath.Cos_AVX512_F32x16, cos32Scalar)
 			}
 		})
 	}
@@ -144,7 +158,7 @@ func BenchmarkTanh_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Tanh_AVX2_F32x8, tanh32Scalar)
+			algo.Transform32(input, output, hwymath.Tanh_AVX2_F32x8, tanh32Scalar)
 		}
 	})
 
@@ -152,7 +166,7 @@ func BenchmarkTanh_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Tanh_AVX512_F32x16, tanh32Scalar)
+				algo.Transform32x16(input, output, hwymath.Tanh_AVX512_F32x16, tanh32Scalar)
 			}
 		})
 	}
@@ -173,7 +187,7 @@ func BenchmarkSigmoid_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Sigmoid_AVX2_F32x8, sigmoid32Scalar)
+			algo.Transform32(input, output, hwymath.Sigmoid_AVX2_F32x8, sigmoid32Scalar)
 		}
 	})
 
@@ -181,7 +195,7 @@ func BenchmarkSigmoid_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Sigmoid_AVX512_F32x16, sigmoid32Scalar)
+				algo.Transform32x16(input, output, hwymath.Sigmoid_AVX512_F32x16, sigmoid32Scalar)
 			}
 		})
 	}
@@ -202,7 +216,7 @@ func BenchmarkErf_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform32(input, output, Erf_AVX2_F32x8, erf32Scalar)
+			algo.Transform32(input, output, hwymath.Erf_AVX2_F32x8, erf32Scalar)
 		}
 	})
 
@@ -210,7 +224,7 @@ func BenchmarkErf_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform32x16(input, output, Erf_AVX512_F32x16, erf32Scalar)
+				algo.Transform32x16(input, output, hwymath.Erf_AVX512_F32x16, erf32Scalar)
 			}
 		})
 	}
@@ -235,7 +249,7 @@ func BenchmarkExp64_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform64(input, output, Exp_AVX2_F64x4, exp64Scalar)
+			algo.Transform64(input, output, hwymath.Exp_AVX2_F64x4, exp64Scalar)
 		}
 	})
 
@@ -243,7 +257,7 @@ func BenchmarkExp64_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform64x8(input, output, Exp_AVX512_F64x8, exp64Scalar)
+				algo.Transform64x8(input, output, hwymath.Exp_AVX512_F64x8, exp64Scalar)
 			}
 		})
 	}
@@ -264,7 +278,7 @@ func BenchmarkSin64_AVX2_vs_AVX512(b *testing.B) {
 	b.Run("AVX2", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Transform64(input, output, Sin_AVX2_F64x4, sin64Scalar)
+			algo.Transform64(input, output, hwymath.Sin_AVX2_F64x4, sin64Scalar)
 		}
 	})
 
@@ -272,7 +286,7 @@ func BenchmarkSin64_AVX2_vs_AVX512(b *testing.B) {
 		b.Run("AVX512", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Transform64x8(input, output, Sin_AVX512_F64x8, sin64Scalar)
+				algo.Transform64x8(input, output, hwymath.Sin_AVX512_F64x8, sin64Scalar)
 			}
 		})
 	}
@@ -296,7 +310,7 @@ func BenchmarkExpTransform_Scaling(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				ExpTransform(input, output)
+				algo.ExpTransform(input, output)
 			}
 		})
 	}
@@ -316,7 +330,7 @@ func BenchmarkSigmoidTransform_Scaling(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				SigmoidTransform(input, output)
+				algo.SigmoidTransform(input, output)
 			}
 		})
 	}
@@ -337,7 +351,7 @@ func BenchmarkThroughput_Exp(b *testing.B) {
 	b.Run("SIMD", func(b *testing.B) {
 		b.SetBytes(int64(size * 4)) // 4 bytes per float32
 		for i := 0; i < b.N; i++ {
-			ExpTransform(input, output)
+			algo.ExpTransform(input, output)
 		}
 	})
 
@@ -345,7 +359,7 @@ func BenchmarkThroughput_Exp(b *testing.B) {
 		b.SetBytes(int64(size * 4))
 		for i := 0; i < b.N; i++ {
 			for j := range input {
-				output[j] = float32(math.Exp(float64(input[j])))
+				output[j] = float32(stdmath.Exp(float64(input[j])))
 			}
 		}
 	})
@@ -362,7 +376,7 @@ func BenchmarkThroughput_Sigmoid(b *testing.B) {
 	b.Run("SIMD", func(b *testing.B) {
 		b.SetBytes(int64(size * 4))
 		for i := 0; i < b.N; i++ {
-			SigmoidTransform(input, output)
+			algo.SigmoidTransform(input, output)
 		}
 	})
 
@@ -370,7 +384,7 @@ func BenchmarkThroughput_Sigmoid(b *testing.B) {
 		b.SetBytes(int64(size * 4))
 		for i := 0; i < b.N; i++ {
 			for j := range input {
-				output[j] = float32(1.0 / (1.0 + math.Exp(-float64(input[j]))))
+				output[j] = float32(1.0 / (1.0 + stdmath.Exp(-float64(input[j]))))
 			}
 		}
 	})

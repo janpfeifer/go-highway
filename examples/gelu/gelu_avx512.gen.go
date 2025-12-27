@@ -5,6 +5,7 @@ package gelu
 
 import (
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
+	stdmath "math"
 	"simd/archsimd"
 )
 
@@ -19,10 +20,10 @@ func BaseGELU_avx512(input []float32, output []float32) {
 	ii := 0
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
-		if remaining >= vOne.NumLanes() {
+		if remaining >= 16 {
 			x := archsimd.LoadFloat32x16Slice(input[ii:])
 			xScaled := x.Mul(vInvSqrt2)
-			erfX := math.Erf(xScaled)
+			erfX := math.Erf_AVX512_F32x16(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
@@ -50,10 +51,10 @@ func BaseGELU_avx512_Float64(input []float64, output []float64) {
 	ii := 0
 	for ; ii+8 <= size; ii += 8 {
 		remaining := size - ii
-		if remaining >= vOne.NumLanes() {
+		if remaining >= 8 {
 			x := archsimd.LoadFloat64x8Slice(input[ii:])
 			xScaled := x.Mul(vInvSqrt2)
-			erfX := math.Erf(xScaled)
+			erfX := math.Erf_AVX512_F64x8(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
@@ -79,10 +80,10 @@ func BaseGELUApprox_avx512(input []float32, output []float32) {
 	ii := 0
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
-		if remaining >= vCoeff.NumLanes() {
+		if remaining >= 16 {
 			x := archsimd.LoadFloat32x16Slice(input[ii:])
 			xScaled := x.Mul(vCoeff)
-			sigmoidX := math.Sigmoid(xScaled)
+			sigmoidX := math.Sigmoid_AVX512_F32x16(xScaled)
 			result := x.Mul(sigmoidX)
 			result.StoreSlice(output[ii:])
 		} else {
@@ -107,10 +108,10 @@ func BaseGELUApprox_avx512_Float64(input []float64, output []float64) {
 	ii := 0
 	for ; ii+8 <= size; ii += 8 {
 		remaining := size - ii
-		if remaining >= vCoeff.NumLanes() {
+		if remaining >= 8 {
 			x := archsimd.LoadFloat64x8Slice(input[ii:])
 			xScaled := x.Mul(vCoeff)
-			sigmoidX := math.Sigmoid(xScaled)
+			sigmoidX := math.Sigmoid_AVX512_F64x8(xScaled)
 			result := x.Mul(sigmoidX)
 			result.StoreSlice(output[ii:])
 		} else {

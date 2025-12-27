@@ -36,7 +36,7 @@ var (
 
 func float32PositiveInf() float32 {
 	bits := uint32(0x7F800000)
-	return math.Float32frombits(bits)
+	return stdmath.Float32frombits(bits)
 }
 
 // Exp_AVX2_F32x8 computes e^x for a single Float32x8 vector.

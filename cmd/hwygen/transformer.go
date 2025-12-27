@@ -40,6 +40,11 @@ func Transform(pf *ParsedFunc, target Target, elemType string) *ast.FuncDecl {
 	}
 	transformNode(funcDecl.Body, ctx)
 
+	// Post-process to replace NumLanes() calls and ReduceSum() calls
+	if target.Name != "Fallback" {
+		postProcessSIMD(funcDecl.Body, ctx)
+	}
+
 	// Insert tail handling if there's a loop
 	if pf.LoopInfo != nil {
 		insertTailHandling(funcDecl.Body, pf.LoopInfo, elemType, target, pf.Name, pf.Params)
@@ -156,8 +161,11 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 		return
 	}
 
-	// Handle both hwy.* and contrib.* calls
-	if ident.Name != "hwy" && ident.Name != "contrib" {
+	// Handle hwy.* and contrib subpackage calls (math.*, dot.*, matvec.*, algo.*)
+	switch ident.Name {
+	case "hwy", "contrib", "math", "dot", "matvec", "algo":
+		// Continue processing
+	default:
 		return
 	}
 
@@ -767,4 +775,191 @@ func (pf *ParsedFunc) buildResults(elemType string) *ast.FieldList {
 	}
 
 	return fieldList
+}
+
+// postProcessSIMD walks the AST and replaces NumLanes() calls with constants
+// and transforms ReduceSum() calls to store+sum patterns.
+func postProcessSIMD(node ast.Node, ctx *transformContext) {
+	if node == nil {
+		return
+	}
+
+	lanes := ctx.target.LanesFor(ctx.elemType)
+	vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+
+	// Walk all statements and expressions, replacing as needed
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch stmt := n.(type) {
+		case *ast.IfStmt:
+			// Replace comparisons like: remaining >= v.NumLanes()
+			if binExpr, ok := stmt.Cond.(*ast.BinaryExpr); ok {
+				replaceNumLanesInExpr(binExpr, lanes)
+			}
+		case *ast.AssignStmt:
+			// Replace: sum += v.ReduceSum() or sum += hwy.ReduceSum(v)
+			for i, rhs := range stmt.Rhs {
+				if call, ok := rhs.(*ast.CallExpr); ok {
+					if isReduceSumCall(call) {
+						// Transform to store + sum pattern
+						stmt.Rhs[i] = createReduceSumExpr(call, lanes, vecTypeName, ctx.elemType)
+					}
+				}
+			}
+		case *ast.ExprStmt:
+			// Handle standalone expressions if needed
+		}
+		return true
+	})
+}
+
+// replaceNumLanesInExpr replaces v.NumLanes() with a constant in a binary expression.
+func replaceNumLanesInExpr(binExpr *ast.BinaryExpr, lanes int) {
+	// Check RHS
+	if call, ok := binExpr.Y.(*ast.CallExpr); ok {
+		if isNumLanesCall(call) {
+			binExpr.Y = &ast.BasicLit{
+				Kind:  token.INT,
+				Value: strconv.Itoa(lanes),
+			}
+		}
+	}
+	// Check LHS (less common but possible)
+	if call, ok := binExpr.X.(*ast.CallExpr); ok {
+		if isNumLanesCall(call) {
+			binExpr.X = &ast.BasicLit{
+				Kind:  token.INT,
+				Value: strconv.Itoa(lanes),
+			}
+		}
+	}
+}
+
+// isNumLanesCall checks if a call expression is v.NumLanes() or v.NumElements().
+func isNumLanesCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	return sel.Sel.Name == "NumLanes" || sel.Sel.Name == "NumElements"
+}
+
+// isReduceSumCall checks if a call expression is v.ReduceSum() or hwy.ReduceSum(v).
+func isReduceSumCall(call *ast.CallExpr) bool {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	if sel.Sel.Name == "ReduceSum" {
+		return true
+	}
+	return false
+}
+
+// createReduceSumExpr creates an expression that stores the vector and sums elements.
+// For now, we generate a function call that we'll define in a helper.
+// Actually, archsimd vectors don't have a built-in ReduceSum, so we need to
+// generate inline code that stores to temp and sums.
+// Since we can't inject statements here, we'll generate a compound expression.
+func createReduceSumExpr(call *ast.CallExpr, lanes int, vecTypeName, elemType string) ast.Expr {
+	// Get the vector argument
+	var vecExpr ast.Expr
+	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+		if _, ok := sel.X.(*ast.Ident); ok {
+			// It's v.ReduceSum() - the receiver is the vector
+			vecExpr = sel.X
+		}
+	}
+	if vecExpr == nil && len(call.Args) > 0 {
+		// It's hwy.ReduceSum(v) - first arg is the vector
+		vecExpr = call.Args[0]
+	}
+	if vecExpr == nil {
+		return call // Can't transform, leave as-is
+	}
+
+	// Generate a function call to a helper we'll need to add
+	// For now, generate inline reduction: func() T { var t [N]T; v.StoreSlice(t[:]); return t[0]+t[1]+... }()
+	// This is verbose but works without injecting statements
+
+	// Build: t[0] + t[1] + ... + t[lanes-1]
+	var sumExpr ast.Expr
+	for i := 0; i < lanes; i++ {
+		indexExpr := &ast.IndexExpr{
+			X: ast.NewIdent("_simd_temp"),
+			Index: &ast.BasicLit{
+				Kind:  token.INT,
+				Value: strconv.Itoa(i),
+			},
+		}
+		if sumExpr == nil {
+			sumExpr = indexExpr
+		} else {
+			sumExpr = &ast.BinaryExpr{
+				X:  sumExpr,
+				Op: token.ADD,
+				Y:  indexExpr,
+			}
+		}
+	}
+
+	// Build the function literal:
+	// func() elemType {
+	//     var _simd_temp [lanes]elemType
+	//     vec.StoreSlice(_simd_temp[:])
+	//     return t[0] + t[1] + ...
+	// }()
+	funcLit := &ast.FuncLit{
+		Type: &ast.FuncType{
+			Results: &ast.FieldList{
+				List: []*ast.Field{
+					{Type: ast.NewIdent(elemType)},
+				},
+			},
+		},
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				// var _simd_temp [lanes]elemType
+				&ast.DeclStmt{
+					Decl: &ast.GenDecl{
+						Tok: token.VAR,
+						Specs: []ast.Spec{
+							&ast.ValueSpec{
+								Names: []*ast.Ident{ast.NewIdent("_simd_temp")},
+								Type: &ast.ArrayType{
+									Len: &ast.BasicLit{
+										Kind:  token.INT,
+										Value: strconv.Itoa(lanes),
+									},
+									Elt: ast.NewIdent(elemType),
+								},
+							},
+						},
+					},
+				},
+				// vec.StoreSlice(_simd_temp[:])
+				&ast.ExprStmt{
+					X: &ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   vecExpr,
+							Sel: ast.NewIdent("StoreSlice"),
+						},
+						Args: []ast.Expr{
+							&ast.SliceExpr{
+								X: ast.NewIdent("_simd_temp"),
+							},
+						},
+					},
+				},
+				// return sum expression
+				&ast.ReturnStmt{
+					Results: []ast.Expr{sumExpr},
+				},
+			},
+		},
+	}
+
+	// Call the function literal immediately
+	return &ast.CallExpr{
+		Fun: funcLit,
+	}
 }

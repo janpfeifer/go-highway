@@ -1,5 +1,3 @@
-//go:build !amd64 || !goexperiment.simd
-
 package math
 
 import (

@@ -33,9 +33,9 @@ var (
 	trig32_zero   = archsimd.BroadcastFloat32x8(0.0)
 	trig32_one    = archsimd.BroadcastFloat32x8(1.0)
 	trig32_negOne = archsimd.BroadcastFloat32x8(-1.0)
-	trig32_nan    = archsimd.BroadcastFloat32x8(float32(stdstdmath.NaN()))
-	trig32_inf    = archsimd.BroadcastFloat32x8(float32(stdstdmath.Inf(1)))
-	trig32_negInf = archsimd.BroadcastFloat32x8(float32(stdstdmath.Inf(-1)))
+	trig32_nan    = archsimd.BroadcastFloat32x8(float32(stdmath.NaN()))
+	trig32_inf    = archsimd.BroadcastFloat32x8(float32(stdmath.Inf(1)))
+	trig32_negInf = archsimd.BroadcastFloat32x8(float32(stdmath.Inf(-1)))
 
 	// Integer constants for octant selection
 	trig32_intOne   = archsimd.BroadcastInt32x8(1)

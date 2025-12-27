@@ -8,6 +8,20 @@ import (
 	"testing"
 )
 
+// extractLane32 gets lane 0 from a Float32x8
+func extractLane32(v archsimd.Float32x8) float32 {
+	var buf [8]float32
+	v.StoreSlice(buf[:])
+	return buf[0]
+}
+
+// extractLane64 gets lane 0 from a Float64x4
+func extractLane64(v archsimd.Float64x4) float64 {
+	var buf [4]float64
+	v.StoreSlice(buf[:])
+	return buf[0]
+}
+
 func TestLog2_AVX2_F32x8(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -25,7 +39,7 @@ func TestLog2_AVX2_F32x8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat32x8(tt.input)
 			result := Log2_AVX2_F32x8(x)
-			got := result.ExtractLane(0)
+			got := extractLane32(result)
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-5 {
 				t.Errorf("Log2(%v) = %v, want %v", tt.input, got, tt.want)
@@ -50,7 +64,7 @@ func TestLog10_AVX2_F32x8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat32x8(tt.input)
 			result := Log10_AVX2_F32x8(x)
-			got := result.ExtractLane(0)
+			got := extractLane32(result)
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-5 {
 				t.Errorf("Log10(%v) = %v, want %v", tt.input, got, tt.want)
@@ -76,7 +90,7 @@ func TestExp2_AVX2_F32x8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat32x8(tt.input)
 			result := Exp2_AVX2_F32x8(x)
-			got := result.ExtractLane(0)
+			got := extractLane32(result)
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-5 {
 				t.Errorf("Exp2(%v) = %v, want %v", tt.input, got, tt.want)
@@ -100,7 +114,7 @@ func TestSinh_AVX2_F32x8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat32x8(tt.input)
 			result := Sinh_AVX2_F32x8(x)
-			got := result.ExtractLane(0)
+			got := extractLane32(result)
 			want := float32(stdmath.Sinh(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -125,7 +139,7 @@ func TestCosh_AVX2_F32x8(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat32x8(tt.input)
 			result := Cosh_AVX2_F32x8(x)
-			got := result.ExtractLane(0)
+			got := extractLane32(result)
 			want := float32(stdmath.Cosh(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -153,7 +167,7 @@ func TestLog2_AVX2_F64x4(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat64x4(tt.input)
 			result := Log2_AVX2_F64x4(x)
-			got := result.ExtractLane(0)
+			got := extractLane64(result)
 
 			if stdmath.Abs(got-tt.want) > 1e-10 {
 				t.Errorf("Log2(%v) = %v, want %v", tt.input, got, tt.want)
@@ -176,7 +190,7 @@ func TestSinh_AVX2_F64x4(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			x := archsimd.BroadcastFloat64x4(tt.input)
 			result := Sinh_AVX2_F64x4(x)
-			got := result.ExtractLane(0)
+			got := extractLane64(result)
 			want := stdmath.Sinh(tt.input)
 
 			if stdmath.Abs(got-want) > 1e-10 {

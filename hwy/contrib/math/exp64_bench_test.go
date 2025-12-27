@@ -18,7 +18,7 @@ func scale2kScalar(kFloat archsimd.Float64x4) archsimd.Float64x4 {
 	var scaleBuf [4]float64
 	for i := 0; i < 4; i++ {
 		k := int64(kBuf[i])
-		scaleBuf[i] = math.Float64frombits(uint64(k+1023) << 52)
+		scaleBuf[i] = stdmath.Float64frombits(uint64(k+1023) << 52)
 	}
 	return archsimd.LoadFloat64x4Slice(scaleBuf[:])
 }
@@ -30,10 +30,10 @@ func scale2kScalarUnrolled(kFloat archsimd.Float64x4) archsimd.Float64x4 {
 
 	k0, k1, k2, k3 := int64(kBuf[0]), int64(kBuf[1]), int64(kBuf[2]), int64(kBuf[3])
 	scaleBuf := [4]float64{
-		math.Float64frombits(uint64(k0+1023) << 52),
-		math.Float64frombits(uint64(k1+1023) << 52),
-		math.Float64frombits(uint64(k2+1023) << 52),
-		math.Float64frombits(uint64(k3+1023) << 52),
+		stdmath.Float64frombits(uint64(k0+1023) << 52),
+		stdmath.Float64frombits(uint64(k1+1023) << 52),
+		stdmath.Float64frombits(uint64(k2+1023) << 52),
+		stdmath.Float64frombits(uint64(k3+1023) << 52),
 	}
 	return archsimd.LoadFloat64x4Slice(scaleBuf[:])
 }
@@ -155,15 +155,15 @@ func TestScale2kApproaches(t *testing.T) {
 		resultMagic.StoreSlice(magicBuf[:])
 
 		for i, kVal := range tc {
-			expected := math.Pow(2, kVal)
+			expected := stdmath.Pow(2, kVal)
 
-			if math.Abs(scalarBuf[i]-expected) > 1e-10 {
+			if stdmath.Abs(scalarBuf[i]-expected) > 1e-10 {
 				t.Errorf("Scalar: k=%v, got %v, want %v", kVal, scalarBuf[i], expected)
 			}
-			if math.Abs(unrolledBuf[i]-expected) > 1e-10 {
+			if stdmath.Abs(unrolledBuf[i]-expected) > 1e-10 {
 				t.Errorf("Unrolled: k=%v, got %v, want %v", kVal, unrolledBuf[i], expected)
 			}
-			if math.Abs(magicBuf[i]-expected) > 1e-10 {
+			if stdmath.Abs(magicBuf[i]-expected) > 1e-10 {
 				t.Errorf("Magic: k=%v, got %v, want %v", kVal, magicBuf[i], expected)
 			}
 		}

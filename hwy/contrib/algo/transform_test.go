@@ -6,6 +6,8 @@ import (
 	"math"
 	"simd/archsimd"
 	"testing"
+
+	hwymath "github.com/ajroetker/go-highway/hwy/contrib/math"
 )
 
 const benchSize = 1024
@@ -220,40 +222,6 @@ func TestConvertToInt32(t *testing.T) {
 	}
 }
 
-// Test that package-level exp32 constants are properly initialized
-func TestExp32Constants(t *testing.T) {
-	// These are the package-level constants from exp_avx2.go
-	// If they're all zeros, the exp computation will fail
-
-	// Read exp32_one constant
-	oneOutput := make([]float32, 8)
-	exp32_one.StoreSlice(oneOutput)
-	t.Logf("exp32_one: %v", oneOutput)
-
-	// Read exp32_invLn2 constant
-	invLn2Output := make([]float32, 8)
-	exp32_invLn2.StoreSlice(invLn2Output)
-	t.Logf("exp32_invLn2: %v", invLn2Output)
-
-	// Read exp32_ln2Hi constant
-	ln2HiOutput := make([]float32, 8)
-	exp32_ln2Hi.StoreSlice(ln2HiOutput)
-	t.Logf("exp32_ln2Hi: %v", ln2HiOutput)
-
-	// Verify exp32_one is correct (all 1.0)
-	for i, v := range oneOutput {
-		if v != 1.0 {
-			t.Errorf("exp32_one[%d]: got %v, want 1.0", i, v)
-		}
-	}
-
-	// Verify exp32_invLn2 is correct (all 1.44269504...)
-	for i, v := range invLn2Output {
-		if !closeEnough32(v, 1.44269504, 1e-6) {
-			t.Errorf("exp32_invLn2[%d]: got %v, want ~1.44269504", i, v)
-		}
-	}
-}
 
 // Test the 2^k scaling computation which is the heart of exp
 func TestTwoToTheK(t *testing.T) {
@@ -305,7 +273,7 @@ func TestExpAVX2Direct(t *testing.T) {
 	output := make([]float32, 8)
 
 	x := archsimd.LoadFloat32x8Slice(input)
-	result := Exp_AVX2_F32x8(x)
+	result := hwymath.Exp_AVX2_F32x8(x)
 	result.StoreSlice(output)
 
 	t.Logf("Input:  %v", input)
@@ -339,7 +307,7 @@ func TestExpMimicLoop(t *testing.T) {
 		x.StoreSlice(loaded)
 		t.Logf("Loaded: %v", loaded)
 
-		out := Exp_AVX2_F32x8(x)
+		out := hwymath.Exp_AVX2_F32x8(x)
 
 		// Log the output values
 		outVals := make([]float32, 8)
@@ -359,146 +327,7 @@ func TestExpMimicLoop(t *testing.T) {
 	}
 }
 
-// Test the overflow/underflow mask behavior
-func TestExpMaskBehavior(t *testing.T) {
-	input := []float32{0, 1, 2, -1, 0.5, -0.5, 0.1, -0.1}
-	x := archsimd.LoadFloat32x8Slice(input)
 
-	// Check what exp32_underflow contains
-	underflowVal := make([]float32, 8)
-	exp32_underflow.StoreSlice(underflowVal)
-	t.Logf("exp32_underflow: %v", underflowVal)
-
-	// Check what exp32_overflow contains
-	overflowVal := make([]float32, 8)
-	exp32_overflow.StoreSlice(overflowVal)
-	t.Logf("exp32_overflow: %v", overflowVal)
-
-	// Check the masks
-	underflowMask := x.Less(exp32_underflow)
-	_ = x.Greater(exp32_overflow) // Just checking it doesn't panic
-
-	// Create test result
-	testResult := archsimd.BroadcastFloat32x8(42.0)
-	resultVal := make([]float32, 8)
-	testResult.StoreSlice(resultVal)
-	t.Logf("Before merge: %v", resultVal)
-
-	// Apply underflow merge - using correct semantics
-	// Merge semantics: a.Merge(b, mask) returns a when TRUE, b when FALSE
-	// We want: zero when underflowing (TRUE), testResult when not (FALSE)
-	// So use: exp32_zero.Merge(testResult, underflowMask)
-	merged := exp32_zero.Merge(testResult, underflowMask)
-	merged.StoreSlice(resultVal)
-	t.Logf("After underflow merge: %v", resultVal)
-
-	// All our inputs are > -87.33, so none should trigger underflow (mask is FALSE)
-	// With correct merge order, we should get testResult (42.0) for all
-	for i := range resultVal {
-		if resultVal[i] != 42.0 {
-			t.Errorf("Underflow mask incorrectly triggered for input %v: got %v, want 42.0", input[i], resultVal[i])
-		}
-	}
-
-	// Test the Less operation directly
-	threshold := archsimd.BroadcastFloat32x8(-10.0)
-	testInputs := []float32{-20, -10, -5, 0, 5, 10, 20, -15}
-	testX := archsimd.LoadFloat32x8Slice(testInputs)
-	lessMask := testX.Less(threshold)
-
-	// Apply merge with lessMask
-	orig := archsimd.BroadcastFloat32x8(100.0)
-	zero := archsimd.BroadcastFloat32x8(0.0)
-	afterMerge := zero.Merge(orig, lessMask)
-	afterMerge.StoreSlice(resultVal)
-	t.Logf("Less than -10 test: inputs=%v result=%v", testInputs, resultVal)
-
-	// Expected: -20, -15 are < -10, so those should be 0, others should be 100
-	expected := []float32{0, 100, 100, 100, 100, 100, 100, 0}
-	for i := range expected {
-		if resultVal[i] != expected[i] {
-			t.Errorf("Less/Merge[%d]: input=%v got %v, want %v", i, testInputs[i], resultVal[i], expected[i])
-		}
-	}
-}
-
-// Step-by-step trace through Exp_AVX2_F32x8 to find where it fails
-func TestExpAVX2StepByStep(t *testing.T) {
-	input := []float32{0, 1, 2, -1, 0.5, -0.5, 0.1, -0.1}
-	x := archsimd.LoadFloat32x8Slice(input)
-
-	output := make([]float32, 8)
-
-	// Step 1: Check input
-	x.StoreSlice(output)
-	t.Logf("Step 1 - Input x: %v", output)
-
-	// Step 2: Compute kFloat = x * invLn2
-	kFloat := x.Mul(exp32_invLn2)
-	kFloat.StoreSlice(output)
-	t.Logf("Step 2 - x * invLn2: %v", output)
-
-	// Step 3: Round to even
-	kFloat = kFloat.RoundToEven()
-	kFloat.StoreSlice(output)
-	t.Logf("Step 3 - RoundToEven: %v", output)
-
-	// Step 4: Compute r = x - k*ln2Hi
-	r := x.Sub(kFloat.Mul(exp32_ln2Hi))
-	r.StoreSlice(output)
-	t.Logf("Step 4 - r = x - k*ln2Hi: %v", output)
-
-	// Step 5: r = r - k*ln2Lo
-	r = r.Sub(kFloat.Mul(exp32_ln2Lo))
-	r.StoreSlice(output)
-	t.Logf("Step 5 - r = r - k*ln2Lo: %v", output)
-
-	// Step 6: Polynomial - start
-	p := exp32_c6.MulAdd(r, exp32_c5)
-	p.StoreSlice(output)
-	t.Logf("Step 6 - c6*r + c5: %v", output)
-
-	// Step 7-11: Continue polynomial
-	p = p.MulAdd(r, exp32_c4)
-	p = p.MulAdd(r, exp32_c3)
-	p = p.MulAdd(r, exp32_c2)
-	p = p.MulAdd(r, exp32_c1)
-	p = p.MulAdd(r, exp32_one)
-	p.StoreSlice(output)
-	t.Logf("Step 7-11 - Final poly p: %v", output)
-
-	// Step 12: Convert k to int
-	kInt := kFloat.ConvertToInt32()
-	intOutput := make([]int32, 8)
-	kInt.StoreSlice(intOutput)
-	t.Logf("Step 12 - kInt: %v", intOutput)
-
-	// Step 13: Add bias
-	kPlusBias := kInt.Add(exp32_bias)
-	kPlusBias.StoreSlice(intOutput)
-	t.Logf("Step 13 - k + bias (127): %v", intOutput)
-
-	// Step 14: Shift left by 23
-	expBits := kPlusBias.ShiftAllLeft(23)
-	expBits.StoreSlice(intOutput)
-	t.Logf("Step 14 - (k+127) << 23: %v (hex)", intOutput)
-
-	// Step 15: Reinterpret as float
-	scale := expBits.AsFloat32x8()
-	scale.StoreSlice(output)
-	t.Logf("Step 15 - scale (2^k): %v", output)
-
-	// Step 16: Final multiply
-	result := p.Mul(scale)
-	result.StoreSlice(output)
-	t.Logf("Step 16 - p * scale: %v", output)
-
-	// Expected values
-	for i := range input {
-		expected := float32(math.Exp(float64(input[i])))
-		t.Logf("Expected[%d]: %v", i, expected)
-	}
-}
 
 func closeEnough32(a, b, tol float32) bool {
 	if math.IsNaN(float64(a)) && math.IsNaN(float64(b)) {
