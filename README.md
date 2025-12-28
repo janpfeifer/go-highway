@@ -1,5 +1,7 @@
 # go-highway
 
+[![Go](https://github.com/ajroetker/go-highway/actions/workflows/go.yml/badge.svg)](https://github.com/ajroetker/go-highway/actions/workflows/go.yml)
+
 A portable SIMD abstraction library for Go, inspired by Google's [Highway](https://github.com/google/highway) C++ library.
 
 Write SIMD code once, run it on AVX2, AVX-512, or pure Go fallback.
