@@ -59,11 +59,12 @@ var (
 // - For |x| > threshold: compute exp(x) - 1 directly using Exp_AVX2_F32x8
 // - For |x| <= threshold: use Taylor series x + x^2/2! + x^3/3! + ...
 func Expm1_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
-	// Compute absolute value for threshold comparison
-	absX := x.Abs()
+	// Compute absolute value for threshold comparison: max(x, -x)
+	absX := x.Max(expm1_32_zero.Sub(x))
 
 	// Mask for small values where Taylor series should be used
-	smallMask := absX.LessOrEqual(expm1_32_threshold)
+	// LessOrEqual = Less OR Equal
+	smallMask := absX.Less(expm1_32_threshold).Or(absX.Equal(expm1_32_threshold))
 
 	// Compute Taylor series for small values: x + x^2/2! + x^3/3! + ...
 	// Using Horner's method: x * (1 + x * (1/2! + x * (1/3! + x * (1/4! + ...))))
@@ -112,11 +113,12 @@ func Log1p_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	// Save original for special case detection
 	origX := x
 
-	// Compute absolute value for threshold comparison
-	absX := x.Abs()
+	// Compute absolute value for threshold comparison: max(x, -x)
+	absX := x.Max(log1p_32_zero.Sub(x))
 
 	// Mask for small values where Taylor series should be used
-	smallMask := absX.LessOrEqual(log1p_32_threshold)
+	// LessOrEqual = Less OR Equal
+	smallMask := absX.Less(log1p_32_threshold).Or(absX.Equal(log1p_32_threshold))
 
 	// Compute Taylor series for small values: x - x^2/2 + x^3/3 - x^4/4 + ...
 	// Using Horner's method: x * (1 + x * (-1/2 + x * (1/3 + x * (-1/4 + ...))))

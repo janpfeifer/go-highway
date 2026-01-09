@@ -10,14 +10,22 @@ import (
 // These work directly with archsimd vector types.
 // Operations without direct archsimd support use store/scalar/load pattern.
 
-// Reverse_AVX2_F32x8 reverses all lanes using archsimd Reverse.
+// Reverse_AVX2_F32x8 reverses all lanes.
+// [0,1,2,3,4,5,6,7] -> [7,6,5,4,3,2,1,0]
 func Reverse_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
-	return v.Reverse()
+	var data [8]float32
+	v.StoreSlice(data[:])
+	result := [8]float32{data[7], data[6], data[5], data[4], data[3], data[2], data[1], data[0]}
+	return archsimd.LoadFloat32x8Slice(result[:])
 }
 
-// Reverse_AVX2_F64x4 reverses all lanes using archsimd Reverse.
+// Reverse_AVX2_F64x4 reverses all lanes.
+// [0,1,2,3] -> [3,2,1,0]
 func Reverse_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
-	return v.Reverse()
+	var data [4]float64
+	v.StoreSlice(data[:])
+	result := [4]float64{data[3], data[2], data[1], data[0]}
+	return archsimd.LoadFloat64x4Slice(result[:])
 }
 
 // Reverse2_AVX2_F32x8 reverses pairs of lanes.
@@ -56,7 +64,7 @@ func Reverse4_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 
 // Reverse4_AVX2_F64x4 reverses all 4 lanes (same as Reverse for F64x4).
 func Reverse4_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
-	return v.Reverse()
+	return Reverse_AVX2_F64x4(v)
 }
 
 // GetLane_AVX2_F32x8 extracts a single lane value.

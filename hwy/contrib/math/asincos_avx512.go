@@ -113,7 +113,7 @@ func Asin_AVX512_F32x16(x archsimd.Float32x16) archsimd.Float32x16 {
 	outOfRangeMask := absX.Greater(asin512_32_one)
 
 	// Check if we need the large argument formula: |x| >= 0.5
-	largeMask := absX.GreaterOrEqual(asin512_32_half)
+	largeMask := absX.Greater(asin512_32_half).Or(absX.Equal(asin512_32_half))
 
 	// ===== Small argument path: |x| < 0.5 =====
 	x2Small := x.Mul(x)
@@ -180,7 +180,7 @@ func Asin_AVX512_F64x8(x archsimd.Float64x8) archsimd.Float64x8 {
 	outOfRangeMask := absX.Greater(asin512_64_one)
 
 	// Check if we need the large argument formula: |x| >= 0.5
-	largeMask := absX.GreaterOrEqual(asin512_64_half)
+	largeMask := absX.Greater(asin512_64_half).Or(absX.Equal(asin512_64_half))
 
 	// ===== Small argument path: |x| < 0.5 =====
 	x2Small := x.Mul(x)

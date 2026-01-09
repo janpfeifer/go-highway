@@ -63,7 +63,8 @@ func Asin_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	outOfRangeMask := absX.Greater(asin32_one)
 
 	// Check if we need the large argument formula: |x| >= 0.5
-	largeMask := absX.GreaterOrEqual(asin32_half)
+	// Use Greater OR Equal since GreaterOrEqual doesn't exist
+	largeMask := absX.Greater(asin32_half).Or(absX.Equal(asin32_half))
 
 	// ===== Small argument path: |x| < 0.5 =====
 	// asin(x) ≈ x + x³*(1/6 + x²*(3/40 + x²*(15/336 + x²*35/1152)))

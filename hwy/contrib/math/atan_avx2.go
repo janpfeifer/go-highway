@@ -30,9 +30,9 @@ var (
 	atan32_inf      = archsimd.BroadcastFloat32x8(float32(stdmath.Inf(1)))
 	atan32_negInf   = archsimd.BroadcastFloat32x8(float32(stdmath.Inf(-1)))
 
-	// Sign mask for float32
-	atan32_signMask = archsimd.BroadcastInt32x8(int32(0x80000000))
-	atan32_absMask  = archsimd.BroadcastInt32x8(int32(0x7FFFFFFF))
+	// Sign mask for float32 (0x80000000 as negative value to avoid overflow)
+	atan32_signMask = archsimd.BroadcastInt32x8(-2147483648)
+	atan32_absMask  = archsimd.BroadcastInt32x8(0x7FFFFFFF)
 )
 
 // AVX2 vectorized constants for atan64
@@ -175,7 +175,10 @@ func Atan2_AVX2_F32x8(y, x archsimd.Float32x8) archsimd.Float32x8 {
 	piWithYSign := atan32_pi.AsInt32x8().Or(ySign).AsFloat32x8()
 	zeroWithYSign := atan32_zero.AsInt32x8().Or(ySign).AsFloat32x8()
 	result = piWithYSign.Merge(result, xZeroYZeroXNegMask)
-	xZeroYZeroXPosMask := xZeroYZeroMask.And(xNegZero.Not())
+	// For positive zero, xSign is 0, so compare against all-zeros
+	zeroInt := archsimd.BroadcastInt32x8(0)
+	xPosZero := xSign.Equal(zeroInt)
+	xZeroYZeroXPosMask := xZeroYZeroMask.And(xPosZero)
 	result = zeroWithYSign.Merge(result, xZeroYZeroXPosMask)
 
 	return result

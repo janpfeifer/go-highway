@@ -84,7 +84,9 @@ func Pow_AVX2_F32x8(x, y archsimd.Float32x8) archsimd.Float32x8 {
 	// to ensure correct behavior when y = 0 (already handled above with priority)
 	xIsNeg := origX.Less(pow32_zero)
 	// Don't apply NaN if y = 0 (already handled) - y = 0 case has higher priority
-	xNegYNotZero := xIsNeg.AndNot(yIsZero)
+	// yIsNotZero = y > 0 OR y < 0 (since we don't have Not)
+	yIsNotZero := y.Greater(pow32_zero).Or(y.Less(pow32_zero))
+	xNegYNotZero := xIsNeg.And(yIsNotZero)
 	result = pow32_nan.Merge(result, xNegYNotZero)
 
 	return result

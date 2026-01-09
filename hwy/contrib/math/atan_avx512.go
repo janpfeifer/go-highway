@@ -87,8 +87,8 @@ func initAtan512Constants() {
 	atan512_32_negPi = archsimd.BroadcastFloat32x16(-3.141592653589793)
 	atan512_32_inf = archsimd.BroadcastFloat32x16(float32(stdmath.Inf(1)))
 	atan512_32_negInf = archsimd.BroadcastFloat32x16(float32(stdmath.Inf(-1)))
-	atan512_32_signMask = archsimd.BroadcastInt32x16(int32(0x80000000))
-	atan512_32_absMask = archsimd.BroadcastInt32x16(int32(0x7FFFFFFF))
+	atan512_32_signMask = archsimd.BroadcastInt32x16(-2147483648)
+	atan512_32_absMask = archsimd.BroadcastInt32x16(0x7FFFFFFF)
 
 	// Float64 polynomial coefficients (higher precision)
 	atan512_64_c1 = archsimd.BroadcastFloat64x8(-0.3333333333333333)  // -1/3
@@ -109,8 +109,8 @@ func initAtan512Constants() {
 	atan512_64_negPi = archsimd.BroadcastFloat64x8(-3.141592653589793)
 	atan512_64_inf = archsimd.BroadcastFloat64x8(stdmath.Inf(1))
 	atan512_64_negInf = archsimd.BroadcastFloat64x8(stdmath.Inf(-1))
-	atan512_64_signMask = archsimd.BroadcastInt64x8(int64(0x8000000000000000))
-	atan512_64_absMask = archsimd.BroadcastInt64x8(int64(0x7FFFFFFFFFFFFFFF))
+	atan512_64_signMask = archsimd.BroadcastInt64x8(-9223372036854775808)
+	atan512_64_absMask = archsimd.BroadcastInt64x8(0x7FFFFFFFFFFFFFFF)
 }
 
 // Atan_AVX512_F32x16 computes atan(x) for a single Float32x16 vector.
@@ -287,7 +287,10 @@ func Atan2_AVX512_F32x16(y, x archsimd.Float32x16) archsimd.Float32x16 {
 	piWithYSign := atan512_32_pi.AsInt32x16().Or(ySign).AsFloat32x16()
 	zeroWithYSign := atan512_32_zero.AsInt32x16().Or(ySign).AsFloat32x16()
 	result = piWithYSign.Merge(result, xZeroYZeroXNegMask)
-	xZeroYZeroXPosMask := xZeroYZeroMask.And(xNegZero.Not())
+	// For positive zero, xSign is 0, so compare against all-zeros
+	zeroInt32 := archsimd.BroadcastInt32x16(0)
+	xPosZero := xSign.Equal(zeroInt32)
+	xZeroYZeroXPosMask := xZeroYZeroMask.And(xPosZero)
 	result = zeroWithYSign.Merge(result, xZeroYZeroXPosMask)
 
 	return result
@@ -362,7 +365,10 @@ func Atan2_AVX512_F64x8(y, x archsimd.Float64x8) archsimd.Float64x8 {
 	piWithYSign := atan512_64_pi.AsInt64x8().Or(ySign).AsFloat64x8()
 	zeroWithYSign := atan512_64_zero.AsInt64x8().Or(ySign).AsFloat64x8()
 	result = piWithYSign.Merge(result, xZeroYZeroXNegMask)
-	xZeroYZeroXPosMask := xZeroYZeroMask.And(xNegZero.Not())
+	// For positive zero, xSign is 0, so compare against all-zeros
+	zeroInt64 := archsimd.BroadcastInt64x8(0)
+	xPosZero := xSign.Equal(zeroInt64)
+	xZeroYZeroXPosMask := xZeroYZeroMask.And(xPosZero)
 	result = zeroWithYSign.Merge(result, xZeroYZeroXPosMask)
 
 	return result

@@ -112,7 +112,9 @@ func Pow_AVX512_F32x16(x, y archsimd.Float32x16) archsimd.Float32x16 {
 	// to ensure correct behavior when y = 0 (already handled above with priority)
 	xIsNeg := origX.Less(pow512_32_zero)
 	// Don't apply NaN if y = 0 (already handled) - y = 0 case has higher priority
-	xNegYNotZero := xIsNeg.AndNot(yIsZero)
+	// yIsNotZero = y > 0 OR y < 0 (since we don't have Not)
+	yIsNotZero := y.Greater(pow512_32_zero).Or(y.Less(pow512_32_zero))
+	xNegYNotZero := xIsNeg.And(yIsNotZero)
 	result = pow512_32_nan.Merge(result, xNegYNotZero)
 
 	return result
@@ -187,7 +189,9 @@ func Pow_AVX512_F64x8(x, y archsimd.Float64x8) archsimd.Float64x8 {
 	// to ensure correct behavior when y = 0 (already handled above with priority)
 	xIsNeg := origX.Less(pow512_64_zero)
 	// Don't apply NaN if y = 0 (already handled) - y = 0 case has higher priority
-	xNegYNotZero := xIsNeg.AndNot(yIsZero)
+	// yIsNotZero = y > 0 OR y < 0 (since we don't have Not)
+	yIsNotZero64 := y.Greater(pow512_64_zero).Or(y.Less(pow512_64_zero))
+	xNegYNotZero := xIsNeg.And(yIsNotZero64)
 	result = pow512_64_nan.Merge(result, xNegYNotZero)
 
 	return result

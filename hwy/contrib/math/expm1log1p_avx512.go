@@ -26,6 +26,7 @@ var (
 	expm1_512_32_c8        archsimd.Float32x16
 	expm1_512_32_one       archsimd.Float32x16
 	expm1_512_32_negOne    archsimd.Float32x16
+	expm1_512_32_zero      archsimd.Float32x16
 	expm1_512_32_posInf    archsimd.Float32x16
 	expm1_512_32_negInf    archsimd.Float32x16
 )
@@ -45,6 +46,7 @@ var (
 	expm1_512_64_c10       archsimd.Float64x8
 	expm1_512_64_one       archsimd.Float64x8
 	expm1_512_64_negOne    archsimd.Float64x8
+	expm1_512_64_zero      archsimd.Float64x8
 	expm1_512_64_posInf    archsimd.Float64x8
 	expm1_512_64_negInf    archsimd.Float64x8
 )
@@ -62,6 +64,7 @@ var (
 	log1p_512_32_c8        archsimd.Float32x16
 	log1p_512_32_one       archsimd.Float32x16
 	log1p_512_32_negOne    archsimd.Float32x16
+	log1p_512_32_zero      archsimd.Float32x16
 	log1p_512_32_posInf    archsimd.Float32x16
 	log1p_512_32_negInf    archsimd.Float32x16
 	log1p_512_32_nan       archsimd.Float32x16
@@ -82,6 +85,7 @@ var (
 	log1p_512_64_c10       archsimd.Float64x8
 	log1p_512_64_one       archsimd.Float64x8
 	log1p_512_64_negOne    archsimd.Float64x8
+	log1p_512_64_zero      archsimd.Float64x8
 	log1p_512_64_posInf    archsimd.Float64x8
 	log1p_512_64_negInf    archsimd.Float64x8
 	log1p_512_64_nan       archsimd.Float64x8
@@ -100,6 +104,7 @@ func initExpm1Log1p512Constants() {
 	expm1_512_32_c8 = archsimd.BroadcastFloat32x16(0.0000248015873015873)
 	expm1_512_32_one = archsimd.BroadcastFloat32x16(1.0)
 	expm1_512_32_negOne = archsimd.BroadcastFloat32x16(-1.0)
+	expm1_512_32_zero = archsimd.BroadcastFloat32x16(0.0)
 	expm1_512_32_posInf = archsimd.BroadcastFloat32x16(float32(stdmath.Inf(1)))
 	expm1_512_32_negInf = archsimd.BroadcastFloat32x16(float32(stdmath.Inf(-1)))
 
@@ -117,6 +122,7 @@ func initExpm1Log1p512Constants() {
 	expm1_512_64_c10 = archsimd.BroadcastFloat64x8(2.755731922398589e-07)
 	expm1_512_64_one = archsimd.BroadcastFloat64x8(1.0)
 	expm1_512_64_negOne = archsimd.BroadcastFloat64x8(-1.0)
+	expm1_512_64_zero = archsimd.BroadcastFloat64x8(0.0)
 	expm1_512_64_posInf = archsimd.BroadcastFloat64x8(stdmath.Inf(1))
 	expm1_512_64_negInf = archsimd.BroadcastFloat64x8(stdmath.Inf(-1))
 
@@ -132,6 +138,7 @@ func initExpm1Log1p512Constants() {
 	log1p_512_32_c8 = archsimd.BroadcastFloat32x16(-0.125)
 	log1p_512_32_one = archsimd.BroadcastFloat32x16(1.0)
 	log1p_512_32_negOne = archsimd.BroadcastFloat32x16(-1.0)
+	log1p_512_32_zero = archsimd.BroadcastFloat32x16(0.0)
 	log1p_512_32_posInf = archsimd.BroadcastFloat32x16(float32(stdmath.Inf(1)))
 	log1p_512_32_negInf = archsimd.BroadcastFloat32x16(float32(stdmath.Inf(-1)))
 	log1p_512_32_nan = archsimd.BroadcastFloat32x16(float32(stdmath.NaN()))
@@ -150,6 +157,7 @@ func initExpm1Log1p512Constants() {
 	log1p_512_64_c10 = archsimd.BroadcastFloat64x8(-0.1)
 	log1p_512_64_one = archsimd.BroadcastFloat64x8(1.0)
 	log1p_512_64_negOne = archsimd.BroadcastFloat64x8(-1.0)
+	log1p_512_64_zero = archsimd.BroadcastFloat64x8(0.0)
 	log1p_512_64_posInf = archsimd.BroadcastFloat64x8(stdmath.Inf(1))
 	log1p_512_64_negInf = archsimd.BroadcastFloat64x8(stdmath.Inf(-1))
 	log1p_512_64_nan = archsimd.BroadcastFloat64x8(stdmath.NaN())
@@ -166,11 +174,12 @@ func initExpm1Log1p512Constants() {
 func Expm1_AVX512_F32x16(x archsimd.Float32x16) archsimd.Float32x16 {
 	expm1log1p512Init.Do(initExpm1Log1p512Constants)
 
-	// Compute absolute value for threshold comparison
-	absX := x.Abs()
+	// Compute absolute value for threshold comparison: max(x, -x)
+	absX := x.Max(expm1_512_32_zero.Sub(x))
 
 	// Mask for small values where Taylor series should be used
-	smallMask := absX.LessOrEqual(expm1_512_32_threshold)
+	// LessOrEqual = Less OR Equal
+	smallMask := absX.Less(expm1_512_32_threshold).Or(absX.Equal(expm1_512_32_threshold))
 
 	// Compute Taylor series for small values: x + x^2/2! + x^3/3! + ...
 	// Using Horner's method: x * (1 + x * (1/2! + x * (1/3! + x * (1/4! + ...))))
@@ -217,11 +226,12 @@ func Expm1_AVX512_F32x16(x archsimd.Float32x16) archsimd.Float32x16 {
 func Expm1_AVX512_F64x8(x archsimd.Float64x8) archsimd.Float64x8 {
 	expm1log1p512Init.Do(initExpm1Log1p512Constants)
 
-	// Compute absolute value for threshold comparison
-	absX := x.Abs()
+	// Compute absolute value for threshold comparison: max(x, -x)
+	absX := x.Max(expm1_512_64_zero.Sub(x))
 
 	// Mask for small values where Taylor series should be used
-	smallMask := absX.LessOrEqual(expm1_512_64_threshold)
+	// LessOrEqual = Less OR Equal
+	smallMask := absX.Less(expm1_512_64_threshold).Or(absX.Equal(expm1_512_64_threshold))
 
 	// Compute Taylor series for small values (higher degree for float64)
 	// Using Horner's method
@@ -268,11 +278,12 @@ func Log1p_AVX512_F32x16(x archsimd.Float32x16) archsimd.Float32x16 {
 	// Save original for special case detection
 	origX := x
 
-	// Compute absolute value for threshold comparison
-	absX := x.Abs()
+	// Compute absolute value for threshold comparison: max(x, -x)
+	absX := x.Max(log1p_512_32_zero.Sub(x))
 
 	// Mask for small values where Taylor series should be used
-	smallMask := absX.LessOrEqual(log1p_512_32_threshold)
+	// LessOrEqual = Less OR Equal
+	smallMask := absX.Less(log1p_512_32_threshold).Or(absX.Equal(log1p_512_32_threshold))
 
 	// Compute Taylor series for small values: x - x^2/2 + x^3/3 - x^4/4 + ...
 	// Using Horner's method
@@ -323,11 +334,12 @@ func Log1p_AVX512_F64x8(x archsimd.Float64x8) archsimd.Float64x8 {
 	// Save original for special case detection
 	origX := x
 
-	// Compute absolute value for threshold comparison
-	absX := x.Abs()
+	// Compute absolute value for threshold comparison: max(x, -x)
+	absX := x.Max(log1p_512_64_zero.Sub(x))
 
 	// Mask for small values where Taylor series should be used
-	smallMask := absX.LessOrEqual(log1p_512_64_threshold)
+	// LessOrEqual = Less OR Equal
+	smallMask := absX.Less(log1p_512_64_threshold).Or(absX.Equal(log1p_512_64_threshold))
 
 	// Compute Taylor series for small values (higher degree for float64)
 	// Using Horner's method
