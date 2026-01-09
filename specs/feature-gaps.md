@@ -212,21 +212,21 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | Exp | ✅ | ✅ | |
 | Exp2 | ✅ | ✅ | |
 | Exp10 | ✅ | ✅ | |
-| Expm1 | ✅ | ❌ | exp(x) - 1 |
+| Expm1 | ✅ | ✅ | exp(x) - 1 |
 | Log | ✅ | ✅ | |
 | Log2 | ✅ | ✅ | |
 | Log10 | ✅ | ✅ | |
-| Log1p | ✅ | ❌ | log(1 + x) |
-| Pow | ✅ | ❌ | x^y |
+| Log1p | ✅ | ✅ | log(1 + x) |
+| Pow | ✅ | ✅ | x^y |
 | Cbrt | ✅ | ❌ | Cube root |
 | Sin | ✅ | ✅ | |
 | Cos | ✅ | ✅ | |
 | SinCos | ✅ | ✅ | |
-| Tan | ✅ | ❌ | |
-| Asin | ✅ | ❌ | |
-| Acos | ✅ | ❌ | |
-| Atan | ✅ | ❌ | |
-| Atan2 | ✅ | ❌ | |
+| Tan | ✅ | ✅ | |
+| Asin | ✅ | ✅ | |
+| Acos | ✅ | ✅ | |
+| Atan | ✅ | ✅ | |
+| Atan2 | ✅ | ✅ | |
 | Sinh | ✅ | ✅ | |
 | Cosh | ✅ | ✅ | |
 | Tanh | ✅ | ✅ | |
