@@ -1,0 +1,297 @@
+package hwy
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestReverse2_F32(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []float32
+		expect []float32
+	}{
+		{
+			name:   "8 lanes",
+			input:  []float32{0, 1, 2, 3, 4, 5, 6, 7},
+			expect: []float32{1, 0, 3, 2, 5, 4, 7, 6},
+		},
+		{
+			name:   "4 lanes",
+			input:  []float32{0, 1, 2, 3},
+			expect: []float32{1, 0, 3, 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := Vec[float32]{data: tt.input}
+			result := Reverse2(v)
+			if !reflect.DeepEqual(result.data, tt.expect) {
+				t.Errorf("Reverse2() = %v, want %v", result.data, tt.expect)
+			}
+		})
+	}
+}
+
+func TestReverse4_F32(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []float32
+		expect []float32
+	}{
+		{
+			name:   "8 lanes",
+			input:  []float32{0, 1, 2, 3, 4, 5, 6, 7},
+			expect: []float32{3, 2, 1, 0, 7, 6, 5, 4},
+		},
+		{
+			name:   "4 lanes",
+			input:  []float32{0, 1, 2, 3},
+			expect: []float32{3, 2, 1, 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := Vec[float32]{data: tt.input}
+			result := Reverse4(v)
+			if !reflect.DeepEqual(result.data, tt.expect) {
+				t.Errorf("Reverse4() = %v, want %v", result.data, tt.expect)
+			}
+		})
+	}
+}
+
+func TestReverse8_F32(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  []float32
+		expect []float32
+	}{
+		{
+			name:   "8 lanes",
+			input:  []float32{0, 1, 2, 3, 4, 5, 6, 7},
+			expect: []float32{7, 6, 5, 4, 3, 2, 1, 0},
+		},
+		{
+			name:   "16 lanes",
+			input:  []float32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+			expect: []float32{7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := Vec[float32]{data: tt.input}
+			result := Reverse8(v)
+			if !reflect.DeepEqual(result.data, tt.expect) {
+				t.Errorf("Reverse8() = %v, want %v", result.data, tt.expect)
+			}
+		})
+	}
+}
+
+func TestGetLane(t *testing.T) {
+	v := Vec[float32]{data: []float32{1, 2, 3, 4, 5, 6, 7, 8}}
+
+	tests := []struct {
+		idx    int
+		expect float32
+	}{
+		{0, 1},
+		{3, 4},
+		{7, 8},
+		{-1, 0}, // out of bounds
+		{8, 0},  // out of bounds
+	}
+
+	for _, tt := range tests {
+		result := GetLane(v, tt.idx)
+		if result != tt.expect {
+			t.Errorf("GetLane(%d) = %v, want %v", tt.idx, result, tt.expect)
+		}
+	}
+}
+
+func TestInsertLane(t *testing.T) {
+	v := Vec[float32]{data: []float32{1, 2, 3, 4, 5, 6, 7, 8}}
+
+	result := InsertLane(v, 3, 100)
+	expect := []float32{1, 2, 3, 100, 5, 6, 7, 8}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("InsertLane() = %v, want %v", result.data, expect)
+	}
+
+	// Out of bounds should return original
+	result2 := InsertLane(v, 10, 100)
+	if !reflect.DeepEqual(result2.data, v.data) {
+		t.Errorf("InsertLane out of bounds should return original")
+	}
+}
+
+func TestInterleaveLower(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := InterleaveLower(a, b)
+	expect := []float32{0, 10, 1, 11, 2, 12, 3, 13}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("InterleaveLower() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestInterleaveUpper(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := InterleaveUpper(a, b)
+	expect := []float32{4, 14, 5, 15, 6, 16, 7, 17}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("InterleaveUpper() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestConcatLowerLower(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := ConcatLowerLower(a, b)
+	expect := []float32{0, 1, 2, 3, 10, 11, 12, 13}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("ConcatLowerLower() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestConcatUpperUpper(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := ConcatUpperUpper(a, b)
+	expect := []float32{4, 5, 6, 7, 14, 15, 16, 17}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("ConcatUpperUpper() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestConcatLowerUpper(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := ConcatLowerUpper(a, b)
+	expect := []float32{0, 1, 2, 3, 14, 15, 16, 17}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("ConcatLowerUpper() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestConcatUpperLower(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := ConcatUpperLower(a, b)
+	expect := []float32{4, 5, 6, 7, 10, 11, 12, 13}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("ConcatUpperLower() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestOddEven(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := OddEven(a, b)
+	// even indices from b, odd indices from a
+	expect := []float32{10, 1, 12, 3, 14, 5, 16, 7}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("OddEven() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestDupEven(t *testing.T) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+
+	result := DupEven(v)
+	expect := []float32{0, 0, 2, 2, 4, 4, 6, 6}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("DupEven() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestDupOdd(t *testing.T) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+
+	result := DupOdd(v)
+	expect := []float32{1, 1, 3, 3, 5, 5, 7, 7}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("DupOdd() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestSwapAdjacentBlocks_F32(t *testing.T) {
+	// For float32, 128-bit block = 4 lanes
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+
+	result := SwapAdjacentBlocks(v)
+	expect := []float32{4, 5, 6, 7, 0, 1, 2, 3}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("SwapAdjacentBlocks() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestSwapAdjacentBlocks_F64(t *testing.T) {
+	// For float64, 128-bit block = 2 lanes
+	v := Vec[float64]{data: []float64{0, 1, 2, 3}}
+
+	result := SwapAdjacentBlocks(v)
+	expect := []float64{2, 3, 0, 1}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("SwapAdjacentBlocks() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestTableLookupBytes(t *testing.T) {
+	tbl := Vec[int32]{data: []int32{10, 20, 30, 40, 50, 60, 70, 80}}
+	idx := Vec[int32]{data: []int32{0, 2, 4, 6, 1, 3, 5, 7}}
+
+	result := TableLookupBytes(tbl, idx)
+	expect := []int32{10, 30, 50, 70, 20, 40, 60, 80}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("TableLookupBytes() = %v, want %v", result.data, expect)
+	}
+}
+
+// Benchmark tests
+func BenchmarkReverse2_F32(b *testing.B) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Reverse2(v)
+	}
+}
+
+func BenchmarkReverse4_F32(b *testing.B) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Reverse4(v)
+	}
+}
+
+func BenchmarkInterleaveLower_F32(b *testing.B) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	bVec := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = InterleaveLower(a, bVec)
+	}
+}
+
+func BenchmarkOddEven_F32(b *testing.B) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	bVec := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = OddEven(a, bVec)
+	}
+}

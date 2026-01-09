@@ -452,31 +452,6 @@ func SignBit[T Lanes]() Vec[T] {
 	return Vec[T]{data: data}
 }
 
-// Reverse reverses the order of lanes in the vector.
-func Reverse[T Lanes](v Vec[T]) Vec[T] {
-	n := len(v.data)
-	result := make([]T, n)
-	for i := 0; i < n; i++ {
-		result[i] = v.data[n-1-i]
-	}
-	return Vec[T]{data: result}
-}
-
-// Broadcast broadcasts a single lane to all lanes in the vector.
-func Broadcast[T Lanes](v Vec[T], lane int) Vec[T] {
-	n := len(v.data)
-	if lane < 0 || lane >= n {
-		// Return zero vector if lane is out of bounds
-		return Zero[T]()
-	}
-	result := make([]T, n)
-	value := v.data[lane]
-	for i := range result {
-		result[i] = value
-	}
-	return Vec[T]{data: result}
-}
-
 // Helper functions for bitwise operations that work with any numeric type
 
 func bitwiseAnd[T Lanes](a, b T) T {
