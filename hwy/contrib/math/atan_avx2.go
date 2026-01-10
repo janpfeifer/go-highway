@@ -169,8 +169,8 @@ func Atan2_AVX2_F32x8(y, x archsimd.Float32x8) archsimd.Float32x8 {
 	// Quadrant adjustment based on sign of x
 	// x < 0, y >= 0: add π
 	// x < 0, y < 0: subtract π
-	notYNegMask := yNegMask.Not()
-	needAddPiMask := xNegMask.And(notYNegMask)
+	yNonNegMask := y.GreaterEqual(atan32_zero)
+	needAddPiMask := xNegMask.And(yNonNegMask)
 	needSubPiMask := xNegMask.And(yNegMask)
 
 	atanPlusPi := atanVal.Add(atan32_pi)

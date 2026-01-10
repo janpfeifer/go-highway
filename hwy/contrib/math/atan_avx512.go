@@ -256,8 +256,8 @@ func Atan2_AVX512_F32x16(y, x archsimd.Float32x16) archsimd.Float32x16 {
 	atanVal := atanAbs.AsInt32x16().Or(ratioSign).AsFloat32x16()
 
 	// Quadrant adjustment
-	notYNegMask := yNegMask.Not()
-	needAddPiMask := xNegMask.And(notYNegMask)
+	yNonNegMask := y.GreaterEqual(atan512_32_zero)
+	needAddPiMask := xNegMask.And(yNonNegMask)
 	needSubPiMask := xNegMask.And(yNegMask)
 
 	atanPlusPi := atanVal.Add(atan512_32_pi)
