@@ -223,15 +223,16 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		}
 
 	case "Neg":
-		// hwy.Neg(x) -> archsimd.BroadcastFloat32x8(0).Sub(x) for SIMD
-		// (archsimd types don't have a Neg method, so we use 0 - x)
+		// hwy.Neg(x) -> pkg.BroadcastFloat32x8(0).Sub(x) for SIMD
+		// (archsimd/asm types don't have a Neg method, so we use 0 - x)
 		if len(call.Args) >= 1 {
 			vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
-			// Create archsimd.BroadcastFloat32x8(0)
+			pkgName := getVecPackageName(ctx.target)
+			// Create pkg.BroadcastFloat32x8(0)
 			zeroLit := &ast.BasicLit{Kind: token.INT, Value: "0"}
 			zeroCall := &ast.CallExpr{
 				Fun: &ast.SelectorExpr{
-					X:   ast.NewIdent("archsimd"),
+					X:   ast.NewIdent(pkgName),
 					Sel: ast.NewIdent("Broadcast" + vecTypeName),
 				},
 				Args: []ast.Expr{zeroLit},
@@ -279,23 +280,24 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		return
 	}
 
-	// For SIMD targets, transform to archsimd calls
+	// For SIMD targets, transform to package calls (archsimd for AVX, asm for NEON)
 	var fullName string
 	vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+	pkgName := getVecPackageName(ctx.target)
 
 	switch funcName {
 	case "Load":
 		fullName = fmt.Sprintf("Load%sSlice", vecTypeName)
-		selExpr.X = ast.NewIdent("archsimd")
+		selExpr.X = ast.NewIdent(pkgName)
 	case "Set":
 		fullName = fmt.Sprintf("Broadcast%s", vecTypeName)
-		selExpr.X = ast.NewIdent("archsimd")
+		selExpr.X = ast.NewIdent(pkgName)
 	case "Zero":
 		fullName = fmt.Sprintf("Zero%s", vecTypeName)
-		selExpr.X = ast.NewIdent("archsimd")
+		selExpr.X = ast.NewIdent(pkgName)
 	case "MaskLoad":
 		fullName = fmt.Sprintf("MaskLoad%sSlice", vecTypeName)
-		selExpr.X = ast.NewIdent("archsimd")
+		selExpr.X = ast.NewIdent(pkgName)
 	default:
 		// For contrib functions, add target and type suffix (e.g., math.Exp_AVX2_F32x8)
 		if opInfo.SubPackage != "" {
@@ -307,11 +309,24 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.X = ast.NewIdent("hwy")
 		} else {
 			fullName = opInfo.Name
-			selExpr.X = ast.NewIdent("archsimd")
+			selExpr.X = ast.NewIdent(pkgName)
 		}
 	}
 
 	selExpr.Sel.Name = fullName
+}
+
+// getVecPackageName returns the package name for vector types based on target.
+// Returns "archsimd" for AVX targets, "asm" for NEON.
+func getVecPackageName(target Target) string {
+	switch target.VecPackage {
+	case "archsimd":
+		return "archsimd"
+	case "asm":
+		return "asm"
+	default:
+		return "archsimd" // default for compatibility
+	}
 }
 
 // getShortTypeName returns the short type name like F32x8 for contrib functions.

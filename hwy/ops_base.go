@@ -294,6 +294,83 @@ func GreaterEqual[T Lanes](a, b Vec[T]) Mask[T] {
 	return Mask[T]{bits: bits}
 }
 
+// NotEqual performs element-wise not-equal comparison.
+func NotEqual[T Lanes](a, b Vec[T]) Mask[T] {
+	n := len(a.data)
+	if len(b.data) < n {
+		n = len(b.data)
+	}
+	bits := make([]bool, n)
+	for i := 0; i < n; i++ {
+		bits[i] = a.data[i] != b.data[i]
+	}
+	return Mask[T]{bits: bits}
+}
+
+// IsNaN returns a mask indicating which lanes contain NaN values.
+// For integer types, this always returns all false.
+func IsNaN[T Floats](v Vec[T]) Mask[T] {
+	bits := make([]bool, len(v.data))
+	for i, val := range v.data {
+		bits[i] = math.IsNaN(float64(val))
+	}
+	return Mask[T]{bits: bits}
+}
+
+// IsInf returns a mask indicating which lanes contain infinity.
+// The sign parameter: 0 = either, > 0 = +Inf only, < 0 = -Inf only.
+func IsInf[T Floats](v Vec[T], sign int) Mask[T] {
+	bits := make([]bool, len(v.data))
+	for i, val := range v.data {
+		bits[i] = math.IsInf(float64(val), sign)
+	}
+	return Mask[T]{bits: bits}
+}
+
+// IsFinite returns a mask indicating which lanes contain finite values.
+// A value is finite if it is neither NaN nor infinity.
+func IsFinite[T Floats](v Vec[T]) Mask[T] {
+	bits := make([]bool, len(v.data))
+	for i, val := range v.data {
+		f := float64(val)
+		bits[i] = !math.IsNaN(f) && !math.IsInf(f, 0)
+	}
+	return Mask[T]{bits: bits}
+}
+
+// TestBit returns a mask indicating which lanes have the specified bit set.
+// Bit 0 is the least significant bit.
+func TestBit[T Integers](v Vec[T], bit int) Mask[T] {
+	bits := make([]bool, len(v.data))
+	for i, val := range v.data {
+		bits[i] = testBitHelper(val, bit)
+	}
+	return Mask[T]{bits: bits}
+}
+
+func testBitHelper[T Integers](val T, bit int) bool {
+	switch any(val).(type) {
+	case int8:
+		return (any(val).(int8) & (1 << bit)) != 0
+	case int16:
+		return (any(val).(int16) & (1 << bit)) != 0
+	case int32:
+		return (any(val).(int32) & (1 << bit)) != 0
+	case int64:
+		return (any(val).(int64) & (1 << bit)) != 0
+	case uint8:
+		return (any(val).(uint8) & (1 << bit)) != 0
+	case uint16:
+		return (any(val).(uint16) & (1 << bit)) != 0
+	case uint32:
+		return (any(val).(uint32) & (1 << bit)) != 0
+	case uint64:
+		return (any(val).(uint64) & (1 << bit)) != 0
+	default:
+		return false
+	}
+}
+
 // IfThenElse performs conditional selection.
 func IfThenElse[T Lanes](mask Mask[T], a, b Vec[T]) Vec[T] {
 	n := len(mask.bits)
@@ -310,6 +387,53 @@ func IfThenElse[T Lanes](mask Mask[T], a, b Vec[T]) Vec[T] {
 		} else {
 			result[i] = b.data[i]
 		}
+	}
+	return Vec[T]{data: result}
+}
+
+// IfThenElseZero returns a where mask is true, zero otherwise.
+// Equivalent to IfThenElse(mask, a, Zero()) but more efficient.
+func IfThenElseZero[T Lanes](mask Mask[T], a Vec[T]) Vec[T] {
+	n := len(mask.bits)
+	if len(a.data) < n {
+		n = len(a.data)
+	}
+	result := make([]T, n)
+	for i := 0; i < n; i++ {
+		if mask.bits[i] {
+			result[i] = a.data[i]
+		}
+		// else: leave as zero value
+	}
+	return Vec[T]{data: result}
+}
+
+// IfThenZeroElse returns zero where mask is true, b otherwise.
+// Equivalent to IfThenElse(mask, Zero(), b) but more efficient.
+func IfThenZeroElse[T Lanes](mask Mask[T], b Vec[T]) Vec[T] {
+	n := len(mask.bits)
+	if len(b.data) < n {
+		n = len(b.data)
+	}
+	result := make([]T, n)
+	for i := 0; i < n; i++ {
+		if !mask.bits[i] {
+			result[i] = b.data[i]
+		}
+		// else: leave as zero value
+	}
+	return Vec[T]{data: result}
+}
+
+// ZeroIfNegative returns zero for negative lanes, original value otherwise.
+// Useful for clamping negative values to zero.
+func ZeroIfNegative[T Lanes](v Vec[T]) Vec[T] {
+	result := make([]T, len(v.data))
+	for i, val := range v.data {
+		if val >= 0 {
+			result[i] = val
+		}
+		// else: leave as zero value
 	}
 	return Vec[T]{data: result}
 }
@@ -450,31 +574,6 @@ func SignBit[T Lanes]() Vec[T] {
 		data[i] = signBit
 	}
 	return Vec[T]{data: data}
-}
-
-// Reverse reverses the order of lanes in the vector.
-func Reverse[T Lanes](v Vec[T]) Vec[T] {
-	n := len(v.data)
-	result := make([]T, n)
-	for i := 0; i < n; i++ {
-		result[i] = v.data[n-1-i]
-	}
-	return Vec[T]{data: result}
-}
-
-// Broadcast broadcasts a single lane to all lanes in the vector.
-func Broadcast[T Lanes](v Vec[T], lane int) Vec[T] {
-	n := len(v.data)
-	if lane < 0 || lane >= n {
-		// Return zero vector if lane is out of bounds
-		return Zero[T]()
-	}
-	result := make([]T, n)
-	value := v.data[lane]
-	for i := range result {
-		result[i] = value
-	}
-	return Vec[T]{data: result}
 }
 
 // Helper functions for bitwise operations that work with any numeric type

@@ -8,8 +8,11 @@ on:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -36,37 +39,104 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-1.26rc1-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.os }}-go-1.26rc1-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-1.26rc1-
+            ${{ matrix.os }}-go-1.26rc1-
 
-      - name: Run go vet
+      # amd64: needs GOEXPERIMENT=simd for archsimd
+      - name: Run go vet (amd64)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
+        run: go vet ./...
+
+      # arm64: no GOEXPERIMENT needed for asm package
+      - name: Run go vet (arm64)
+        if: runner.arch == 'ARM64'
         run: go vet ./...
 
       - name: Run tests (fallback path)
         run: go test -v -race ./...
 
-      - name: Run tests (SIMD enabled)
+      - name: Run tests (amd64 SIMD enabled)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
         run: go test -v -race ./...
 
-      - name: Run benchmarks (SIMD enabled)
+      - name: Run benchmarks (amd64)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
         run: go test -bench=. -benchmem -run=^$ ./hwy/contrib/...
 
-      - name: Build examples
+      - name: Run benchmarks (arm64)
+        if: runner.arch == 'ARM64'
+        run: go test -bench=. -benchmem -run=^$ ./hwy/contrib/...
+
+      - name: Build hwygen
+        run: go build -o bin/hwygen ./cmd/hwygen
+
+      - name: Generate examples
+        run: |
+          export PATH=$PWD/bin:$PATH
+          cd examples/softmax && go generate ./...
+          cd ../gelu && go generate ./...
+
+      - name: Build examples (amd64)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
         run: |
-          go build -o bin/hwygen ./cmd/hwygen
           go build -o examples/basic/basic ./examples/basic
           go build -o examples/contrib_test/contrib_test ./examples/contrib_test
+          go build -o examples/softmax/softmax_test ./examples/softmax
+          go build -o examples/gelu/gelu_test ./examples/gelu
 
-      - name: Run basic example
+      - name: Build examples (arm64)
+        if: runner.arch == 'ARM64'
+        run: |
+          go build -o examples/basic/basic ./examples/basic
+          go build -o examples/contrib_test/contrib_test ./examples/contrib_test
+          go build -o examples/softmax/softmax_test ./examples/softmax
+          go build -o examples/gelu/gelu_test ./examples/gelu
+
+      - name: Run basic example (amd64)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
         run: ./examples/basic/basic
+
+      - name: Run basic example (arm64)
+        if: runner.arch == 'ARM64'
+        run: ./examples/basic/basic
+
+      - name: Run contrib_test example (amd64)
+        if: runner.arch == 'X64'
+        env:
+          GOEXPERIMENT: simd
+        run: ./examples/contrib_test/contrib_test
+
+      - name: Run contrib_test example (arm64)
+        if: runner.arch == 'ARM64'
+        run: ./examples/contrib_test/contrib_test
+
+      - name: Test softmax example (amd64)
+        if: runner.arch == 'X64'
+        env:
+          GOEXPERIMENT: simd
+        run: go test -v ./examples/softmax/...
+
+      - name: Test softmax example (arm64)
+        if: runner.arch == 'ARM64'
+        run: go test -v ./examples/softmax/...
+
+      - name: Test gelu example (amd64)
+        if: runner.arch == 'X64'
+        env:
+          GOEXPERIMENT: simd
+        run: go test -v ./examples/gelu/...
+
+      - name: Test gelu example (arm64)
+        if: runner.arch == 'ARM64'
+        run: go test -v ./examples/gelu/...
