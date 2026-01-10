@@ -65,7 +65,8 @@ func Atan_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	useReciprocalMask := absX.Greater(atan32_one)
 	recipAbsX := atan32_one.Div(absX)
 	// Select: if useReciprocal then recipAbsX else absX
-	reduced := absX.AsInt32x8().Merge(recipAbsX.AsInt32x8(), useReciprocalMask).AsFloat32x8()
+	// Merge semantics: a.Merge(b, mask) = a where mask TRUE, b where mask FALSE
+	reduced := recipAbsX.AsInt32x8().Merge(absX.AsInt32x8(), useReciprocalMask).AsFloat32x8()
 
 	// Range reduction level 2: if reduced > tan(π/8), use atan(x) = π/4 + atan((x-1)/(x+1))
 	useIdentityMask := reduced.Greater(atan32_tanPiOver8)
@@ -73,7 +74,7 @@ func Atan_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 	xPlus1 := reduced.Add(atan32_one)
 	transformed := xMinus1.Div(xPlus1)
 	// Select: if useIdentity then transformed else reduced
-	reduced = reduced.AsInt32x8().Merge(transformed.AsInt32x8(), useIdentityMask).AsFloat32x8()
+	reduced = transformed.AsInt32x8().Merge(reduced.AsInt32x8(), useIdentityMask).AsFloat32x8()
 
 	// Compute polynomial: atan(z) ≈ z * (1 + z² * (c1 + z² * (c2 + ...)))
 	// Now z is in [0, tan(π/8)] where the polynomial converges quickly
@@ -89,11 +90,11 @@ func Atan_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 
 	// Adjust for identity transform: add π/4 if we used (x-1)/(x+1)
 	atanWithIdentity := atan32_piOver4.Add(atanCore)
-	atanReduced := atanCore.AsInt32x8().Merge(atanWithIdentity.AsInt32x8(), useIdentityMask).AsFloat32x8()
+	atanReduced := atanWithIdentity.AsInt32x8().Merge(atanCore.AsInt32x8(), useIdentityMask).AsFloat32x8()
 
 	// Adjust for reciprocal: if |x| > 1, result = π/2 - atan(1/|x|)
 	atanWithReciprocal := atan32_piOver2.Sub(atanReduced)
-	resultAbs := atanReduced.AsInt32x8().Merge(atanWithReciprocal.AsInt32x8(), useReciprocalMask).AsFloat32x8()
+	resultAbs := atanWithReciprocal.AsInt32x8().Merge(atanReduced.AsInt32x8(), useReciprocalMask).AsFloat32x8()
 
 	// Restore sign
 	resultBits := resultAbs.AsInt32x8().Or(signBits)
@@ -137,14 +138,14 @@ func Atan2_AVX2_F32x8(y, x archsimd.Float32x8) archsimd.Float32x8 {
 	// Range reduction level 1: if |ratio| > 1, use atan(r) = π/2 - atan(1/r)
 	useReciprocalMask := absRatio.Greater(atan32_one)
 	recipRatio := atan32_one.Div(absRatio)
-	reduced := absRatio.AsInt32x8().Merge(recipRatio.AsInt32x8(), useReciprocalMask).AsFloat32x8()
+	reduced := recipRatio.AsInt32x8().Merge(absRatio.AsInt32x8(), useReciprocalMask).AsFloat32x8()
 
 	// Range reduction level 2: if reduced > tan(π/8), use identity
 	useIdentityMask := reduced.Greater(atan32_tanPiOver8)
 	rMinus1 := reduced.Sub(atan32_one)
 	rPlus1 := reduced.Add(atan32_one)
 	transformed := rMinus1.Div(rPlus1)
-	reduced = reduced.AsInt32x8().Merge(transformed.AsInt32x8(), useIdentityMask).AsFloat32x8()
+	reduced = transformed.AsInt32x8().Merge(reduced.AsInt32x8(), useIdentityMask).AsFloat32x8()
 
 	// Compute polynomial
 	r2 := reduced.Mul(reduced)
@@ -157,11 +158,11 @@ func Atan2_AVX2_F32x8(y, x archsimd.Float32x8) archsimd.Float32x8 {
 
 	// Adjust for identity transform
 	atanWithIdentity := atan32_piOver4.Add(atanCore)
-	atanReduced := atanCore.AsInt32x8().Merge(atanWithIdentity.AsInt32x8(), useIdentityMask).AsFloat32x8()
+	atanReduced := atanWithIdentity.AsInt32x8().Merge(atanCore.AsInt32x8(), useIdentityMask).AsFloat32x8()
 
 	// Adjust for reciprocal
 	atanWithReciprocal := atan32_piOver2.Sub(atanReduced)
-	atanAbs := atanReduced.AsInt32x8().Merge(atanWithReciprocal.AsInt32x8(), useReciprocalMask).AsFloat32x8()
+	atanAbs := atanWithReciprocal.AsInt32x8().Merge(atanReduced.AsInt32x8(), useReciprocalMask).AsFloat32x8()
 
 	// Apply ratio sign
 	atanVal := atanAbs.AsInt32x8().Or(ratioSign).AsFloat32x8()
@@ -176,8 +177,8 @@ func Atan2_AVX2_F32x8(y, x archsimd.Float32x8) archsimd.Float32x8 {
 	atanPlusPi := atanVal.Add(atan32_pi)
 	atanMinusPi := atanVal.Add(atan32_negPi)
 
-	atanVal = atanVal.AsInt32x8().Merge(atanPlusPi.AsInt32x8(), needAddPiMask).AsFloat32x8()
-	atanVal = atanVal.AsInt32x8().Merge(atanMinusPi.AsInt32x8(), needSubPiMask).AsFloat32x8()
+	atanVal = atanPlusPi.AsInt32x8().Merge(atanVal.AsInt32x8(), needAddPiMask).AsFloat32x8()
+	atanVal = atanMinusPi.AsInt32x8().Merge(atanVal.AsInt32x8(), needSubPiMask).AsFloat32x8()
 
 	// Handle x = 0 cases
 	negPiOver2 := atan32_zero.Sub(atan32_piOver2)
