@@ -299,6 +299,116 @@ func TableLookupBytes[T Lanes](tbl, idx Vec[T]) Vec[T] {
 	return Vec[T]{data: result}
 }
 
+// TableLookupLanes performs a lane-level table lookup.
+// Each lane in idx specifies which lane from tbl to select.
+// Unlike TableLookupBytes which works at byte granularity,
+// this operates on full lanes (elements).
+func TableLookupLanes[T Lanes](tbl Vec[T], idx Vec[int32]) Vec[T] {
+	n := len(tbl.data)
+	if len(idx.data) < n {
+		n = len(idx.data)
+	}
+	result := make([]T, n)
+
+	for i := 0; i < n; i++ {
+		idxVal := int(idx.data[i])
+		if idxVal >= 0 && idxVal < len(tbl.data) {
+			result[i] = tbl.data[idxVal]
+		}
+		// else: leave as zero
+	}
+	return Vec[T]{data: result}
+}
+
+// TableLookupLanesOr returns fallback[i] when idx[i] is out of bounds.
+func TableLookupLanesOr[T Lanes](tbl Vec[T], idx Vec[int32], fallback Vec[T]) Vec[T] {
+	n := len(tbl.data)
+	if len(idx.data) < n {
+		n = len(idx.data)
+	}
+	if len(fallback.data) < n {
+		n = len(fallback.data)
+	}
+	result := make([]T, n)
+
+	for i := 0; i < n; i++ {
+		idxVal := int(idx.data[i])
+		if idxVal >= 0 && idxVal < len(tbl.data) {
+			result[i] = tbl.data[idxVal]
+		} else {
+			result[i] = fallback.data[i]
+		}
+	}
+	return Vec[T]{data: result}
+}
+
+// ZipLower interleaves the lower halves of two vectors into one.
+// [a0,a1,a2,a3], [b0,b1,b2,b3] -> [a0,b0,a1,b1]
+// This is the same as InterleaveLower but named for consistency with C++ Highway.
+func ZipLower[T Lanes](a, b Vec[T]) Vec[T] {
+	return InterleaveLower(a, b)
+}
+
+// ZipUpper interleaves the upper halves of two vectors into one.
+// [a0,a1,a2,a3], [b0,b1,b2,b3] -> [a2,b2,a3,b3]
+// This is the same as InterleaveUpper but named for consistency with C++ Highway.
+func ZipUpper[T Lanes](a, b Vec[T]) Vec[T] {
+	return InterleaveUpper(a, b)
+}
+
+// Shuffle0123 shuffles 4 lanes according to the given indices.
+// Each index specifies which lane from the source to place in that position.
+// For example: Shuffle0123(v, 3, 2, 1, 0) reverses a 4-lane vector.
+func Shuffle0123[T Lanes](v Vec[T], i0, i1, i2, i3 int) Vec[T] {
+	n := len(v.data)
+	if n < 4 {
+		return v
+	}
+	result := make([]T, n)
+
+	// Process in groups of 4
+	for base := 0; base < n; base += 4 {
+		if base+4 <= n {
+			result[base+0] = v.data[base+i0]
+			result[base+1] = v.data[base+i1]
+			result[base+2] = v.data[base+i2]
+			result[base+3] = v.data[base+i3]
+		} else {
+			// Copy remaining
+			copy(result[base:], v.data[base:])
+		}
+	}
+	return Vec[T]{data: result}
+}
+
+// Per4LaneBlockShuffle performs a complex shuffle within each 4-lane block.
+// pattern bits encode the shuffle: each 2-bit field selects a lane (0-3).
+// Bits [1:0] select for lane 0, bits [3:2] for lane 1, etc.
+func Per4LaneBlockShuffle[T Lanes](v Vec[T], pattern uint8) Vec[T] {
+	n := len(v.data)
+	result := make([]T, n)
+
+	// Decode pattern: 2 bits per lane
+	idx0 := int(pattern & 0x03)
+	idx1 := int((pattern >> 2) & 0x03)
+	idx2 := int((pattern >> 4) & 0x03)
+	idx3 := int((pattern >> 6) & 0x03)
+
+	// Process in groups of 4
+	for base := 0; base < n; base += 4 {
+		if base+4 <= n {
+			result[base+0] = v.data[base+idx0]
+			result[base+1] = v.data[base+idx1]
+			result[base+2] = v.data[base+idx2]
+			result[base+3] = v.data[base+idx3]
+		} else {
+			// Copy remaining
+			copy(result[base:], v.data[base:])
+		}
+	}
+	return Vec[T]{data: result}
+}
+
 // sizeOf returns the size in bytes of a type.
 func sizeOf[T Lanes](v T) int {
 	switch any(v).(type) {

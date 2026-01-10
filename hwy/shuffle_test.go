@@ -565,3 +565,130 @@ func BenchmarkSlide1Down_F32(b *testing.B) {
 		_ = Slide1Down(v)
 	}
 }
+
+// New shuffle operation tests
+
+func TestTableLookupLanes(t *testing.T) {
+	tbl := Vec[float32]{data: []float32{10, 20, 30, 40, 50, 60, 70, 80}}
+	idx := Vec[int32]{data: []int32{7, 5, 3, 1, 6, 4, 2, 0}}
+
+	result := TableLookupLanes(tbl, idx)
+	expect := []float32{80, 60, 40, 20, 70, 50, 30, 10}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("TableLookupLanes() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestTableLookupLanesOutOfBounds(t *testing.T) {
+	tbl := Vec[float32]{data: []float32{10, 20, 30, 40}}
+	idx := Vec[int32]{data: []int32{0, 10, 2, -1}} // 10 and -1 are out of bounds
+
+	result := TableLookupLanes(tbl, idx)
+	expect := []float32{10, 0, 30, 0} // out of bounds get zero
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("TableLookupLanes() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestTableLookupLanesOr(t *testing.T) {
+	tbl := Vec[float32]{data: []float32{10, 20, 30, 40}}
+	idx := Vec[int32]{data: []int32{0, 10, 2, -1}} // 10 and -1 are out of bounds
+	fallback := Vec[float32]{data: []float32{100, 200, 300, 400}}
+
+	result := TableLookupLanesOr(tbl, idx, fallback)
+	expect := []float32{10, 200, 30, 400} // out of bounds get fallback
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("TableLookupLanesOr() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestZipLower(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := ZipLower(a, b)
+	// Same as InterleaveLower
+	expect := []float32{0, 10, 1, 11, 2, 12, 3, 13}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("ZipLower() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestZipUpper(t *testing.T) {
+	a := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b := Vec[float32]{data: []float32{10, 11, 12, 13, 14, 15, 16, 17}}
+
+	result := ZipUpper(a, b)
+	// Same as InterleaveUpper
+	expect := []float32{4, 14, 5, 15, 6, 16, 7, 17}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("ZipUpper() = %v, want %v", result.data, expect)
+	}
+}
+
+func TestShuffle0123(t *testing.T) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+
+	// Reverse each 4-lane group
+	result := Shuffle0123(v, 3, 2, 1, 0)
+	expect := []float32{3, 2, 1, 0, 7, 6, 5, 4}
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("Shuffle0123() = %v, want %v", result.data, expect)
+	}
+
+	// Broadcast lane 0 to all lanes in each group
+	result2 := Shuffle0123(v, 0, 0, 0, 0)
+	expect2 := []float32{0, 0, 0, 0, 4, 4, 4, 4}
+	if !reflect.DeepEqual(result2.data, expect2) {
+		t.Errorf("Shuffle0123(broadcast) = %v, want %v", result2.data, expect2)
+	}
+
+	// Interleave pattern
+	result3 := Shuffle0123(v, 0, 2, 1, 3)
+	expect3 := []float32{0, 2, 1, 3, 4, 6, 5, 7}
+	if !reflect.DeepEqual(result3.data, expect3) {
+		t.Errorf("Shuffle0123(interleave) = %v, want %v", result3.data, expect3)
+	}
+}
+
+func TestPer4LaneBlockShuffle(t *testing.T) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+
+	// Pattern: 0b11_10_01_00 = reverse order (3,2,1,0 -> 0,1,2,3 positions)
+	result := Per4LaneBlockShuffle(v, 0b11_10_01_00)
+	expect := []float32{0, 1, 2, 3, 4, 5, 6, 7} // Identity pattern
+	if !reflect.DeepEqual(result.data, expect) {
+		t.Errorf("Per4LaneBlockShuffle(identity) = %v, want %v", result.data, expect)
+	}
+
+	// Pattern: 0b00_01_10_11 = reverse (0,1,2,3 -> 3,2,1,0)
+	result2 := Per4LaneBlockShuffle(v, 0b00_01_10_11)
+	expect2 := []float32{3, 2, 1, 0, 7, 6, 5, 4}
+	if !reflect.DeepEqual(result2.data, expect2) {
+		t.Errorf("Per4LaneBlockShuffle(reverse) = %v, want %v", result2.data, expect2)
+	}
+
+	// Pattern: 0b00_00_00_00 = broadcast lane 0
+	result3 := Per4LaneBlockShuffle(v, 0b00_00_00_00)
+	expect3 := []float32{0, 0, 0, 0, 4, 4, 4, 4}
+	if !reflect.DeepEqual(result3.data, expect3) {
+		t.Errorf("Per4LaneBlockShuffle(broadcast) = %v, want %v", result3.data, expect3)
+	}
+}
+
+func BenchmarkTableLookupLanes_F32(b *testing.B) {
+	tbl := Vec[float32]{data: []float32{10, 20, 30, 40, 50, 60, 70, 80}}
+	idx := Vec[int32]{data: []int32{7, 5, 3, 1, 6, 4, 2, 0}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = TableLookupLanes(tbl, idx)
+	}
+}
+
+func BenchmarkShuffle0123_F32(b *testing.B) {
+	v := Vec[float32]{data: []float32{0, 1, 2, 3, 4, 5, 6, 7}}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Shuffle0123(v, 3, 2, 1, 0)
+	}
+}

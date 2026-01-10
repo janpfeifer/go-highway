@@ -49,27 +49,27 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | Max | ✅ | ✅ | |
 | FMA | ✅ | ✅ | |
 | Sqrt | ✅ | ✅ | |
-| MulHigh | ✅ | ❌ | High bits of widening multiply |
-| SaturatedAdd | ✅ | ❌ | Clamp to type range |
-| SaturatedSub | ✅ | ❌ | Clamp to type range |
-| Avg | ✅ | ❌ | Rounded average |
-| AbsDiff | ✅ | ❌ | Absolute difference |
-| Clamp | ✅ | ❌ | Clamp to range |
+| MulHigh | ✅ | ✅ | High bits of widening multiply |
+| SaturatedAdd | ✅ | ✅ | Clamp to type range |
+| SaturatedSub | ✅ | ✅ | Clamp to type range |
+| Avg | ✅ | ✅ | Rounded average |
+| AbsDiff | ✅ | ✅ | Absolute difference |
+| Clamp | ✅ | ✅ | Clamp to range |
 
-### Comparison Operations
+### Comparison Operations ✅ **Complete**
 
 | Operation | C++ Highway | go-highway | Notes |
 |-----------|-------------|------------|-------|
 | Equal | ✅ | ✅ | |
-| NotEqual | ✅ | ❌ | |
+| NotEqual | ✅ | ✅ | |
 | LessThan | ✅ | ✅ | |
 | LessEqual | ✅ | ✅ | |
 | GreaterThan | ✅ | ✅ | |
 | GreaterEqual | ✅ | ✅ | |
-| TestBit | ✅ | ❌ | Test if bit is set |
-| IsNaN | ✅ | ❌ | Float NaN check |
-| IsInf | ✅ | ❌ | Float infinity check |
-| IsFinite | ✅ | ❌ | Float finite check |
+| TestBit | ✅ | ✅ | Test if bit is set |
+| IsNaN | ✅ | ✅ | Float NaN check |
+| IsInf | ✅ | ✅ | Float infinity check |
+| IsFinite | ✅ | ✅ | Float finite check |
 
 ### Memory Operations ✅ **Gather/Scatter Implemented**
 
@@ -93,19 +93,19 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | LoadInterleaved | ✅ | ❌ | AoS to SoA |
 | StoreInterleaved | ✅ | ❌ | SoA to AoS |
 
-### Shuffle/Permutation Operations ✅ **Implemented**
+### Shuffle/Permutation Operations ✅ **Complete**
 
 | Operation | C++ Highway | go-highway | Notes |
 |-----------|-------------|------------|-------|
 | Reverse | ✅ | ✅ | Reverse lane order |
 | Reverse2/4/8 | ✅ | ✅ | Reverse in groups |
-| Shuffle0123 | ✅ | ❌ | 4-element shuffle |
+| Shuffle0123 | ✅ | ✅ | 4-element shuffle |
 | TableLookupBytes | ✅ | ✅ | Byte-level shuffle |
-| TableLookupLanes | ✅ | ❌ | Lane-level shuffle |
+| TableLookupLanes | ✅ | ✅ | Lane-level shuffle |
 | InterleaveLower | ✅ | ✅ | Interleave lower halves |
 | InterleaveUpper | ✅ | ✅ | Interleave upper halves |
-| ZipLower | ✅ | ❌ | Zip lower halves |
-| ZipUpper | ✅ | ❌ | Zip upper halves |
+| ZipLower | ✅ | ✅ | Zip lower halves |
+| ZipUpper | ✅ | ✅ | Zip upper halves |
 | OddEven | ✅ | ✅ | Combine odd/even lanes |
 | ConcatLowerLower | ✅ | ✅ | Concatenate halves |
 | ConcatUpperUpper | ✅ | ✅ | Concatenate halves |
@@ -115,7 +115,7 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | DupEven | ✅ | ✅ | Duplicate even lanes |
 | DupOdd | ✅ | ✅ | Duplicate odd lanes |
 | SwapAdjacentBlocks | ✅ | ✅ | Swap 128-bit blocks |
-| Per4LaneBlockShuffle | ✅ | ❌ | Complex shuffle |
+| Per4LaneBlockShuffle | ✅ | ✅ | Complex shuffle |
 | SlideUpLanes | ✅ | ✅ | Shift lanes up |
 | SlideDownLanes | ✅ | ✅ | Shift lanes down |
 | Slide1Up | ✅ | ✅ | Shift by 1 lane |
@@ -173,16 +173,16 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | Floor | ✅ | ✅ | Round down |
 | NearestInt | ✅ | ✅ | Nearest integer (banker's rounding) |
 
-### Mask Operations ✅ **Implemented**
+### Mask Operations ✅ **Complete**
 
 | Operation | C++ Highway | go-highway | Notes |
 |-----------|-------------|------------|-------|
 | FirstN | ✅ | ✅ | Mask for first N lanes |
 | LastN | ✅ | ✅ | Mask for last N lanes |
 | IfThenElse | ✅ | ✅ | |
-| IfThenElseZero | ✅ | ❌ | If-then-else with zero |
-| IfThenZeroElse | ✅ | ❌ | If-then-zero-else |
-| ZeroIfNegative | ✅ | ❌ | |
+| IfThenElseZero | ✅ | ✅ | If-then-else with zero |
+| IfThenZeroElse | ✅ | ✅ | If-then-zero-else |
+| ZeroIfNegative | ✅ | ✅ | |
 | CountTrue | ✅ | ✅ | Count true lanes |
 | AllTrue | ✅ | ✅ | All lanes true? |
 | AllFalse | ✅ | ✅ | All lanes false? |
@@ -207,7 +207,7 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 
 ---
 
-## Math Functions (contrib/math)
+## Math Functions (contrib/math) ✅ **Complete**
 
 | Function | C++ Highway | go-highway | Notes |
 |----------|-------------|------------|-------|
@@ -220,7 +220,7 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | Log10 | ✅ | ✅ | |
 | Log1p | ✅ | ✅ | log(1 + x) |
 | Pow | ✅ | ✅ | x^y |
-| Cbrt | ✅ | ❌ | Cube root |
+| Cbrt | ✅ | ✅ | Cube root |
 | Sin | ✅ | ✅ | |
 | Cos | ✅ | ✅ | |
 | SinCos | ✅ | ✅ | |
@@ -237,7 +237,7 @@ This document tracks feature parity between go-highway and Google's C++ Highway 
 | Atanh | ✅ | ✅ | |
 | Erf | ✅ | ✅ | |
 | Sigmoid | ✅ | ✅ | |
-| Hypot | ✅ | ❌ | sqrt(x^2 + y^2) |
+| Hypot | ✅ | ✅ | sqrt(x^2 + y^2) |
 
 ---
 
@@ -323,6 +323,38 @@ The following features were added to close major gaps:
 - `Slide1Up` - Shift lanes up by 1
 - `Slide1Down` - Shift lanes down by 1
 
+### Saturated Arithmetic Operations (January 2026)
+- `SaturatedAdd` - Addition with saturation (clamp to type range)
+- `SaturatedSub` - Subtraction with saturation
+- `Clamp` - Clamp each element to [lo, hi] range
+- `AbsDiff` - Absolute difference |a - b|
+- `Avg` - Rounded average (a + b + 1) / 2
+- `MulHigh` - High bits of widening multiplication
+
+### Comparison Operations (January 2026)
+- `NotEqual` - Element-wise not-equal comparison
+- `IsNaN` - Check for NaN values (float)
+- `IsInf` - Check for infinity values (float)
+- `IsFinite` - Check for finite values (float)
+- `TestBit` - Test if specific bit is set (integer)
+
+### Additional Mask Operations (January 2026)
+- `IfThenElseZero` - Returns a where mask is true, zero otherwise
+- `IfThenZeroElse` - Returns zero where mask is true, b otherwise
+- `ZeroIfNegative` - Zero for negative lanes, original value otherwise
+
+### Additional Shuffle Operations (January 2026)
+- `Shuffle0123` - 4-element shuffle with explicit indices
+- `TableLookupLanes` - Lane-level table lookup
+- `TableLookupLanesOr` - Lane-level table lookup with fallback for out-of-bounds
+- `ZipLower` - Interleave lower halves (alias for InterleaveLower)
+- `ZipUpper` - Interleave upper halves (alias for InterleaveUpper)
+- `Per4LaneBlockShuffle` - Complex shuffle within 4-lane blocks
+
+### Math Functions (January 2026)
+- `Cbrt` - Cube root
+- `Hypot` - sqrt(x² + y²) with numerical stability
+
 ---
 
 ## Priority Implementation Recommendations
@@ -364,16 +396,18 @@ The following features were added to close major gaps:
 ## What go-highway Does Well
 
 - Core arithmetic operations (Add, Sub, Mul, Div, FMA, Sqrt)
-- Transcendental math (Exp, Log, Sin, Cos, Tan, Tanh, Sigmoid, Erf, Atan, Atan2, Pow)
+- **Saturated arithmetic** (SaturatedAdd, SaturatedSub, Clamp, AbsDiff, Avg, MulHigh)
+- Transcendental math (Exp, Log, Sin, Cos, Tan, Tanh, Sigmoid, Erf, Atan, Atan2, Pow, Cbrt, Hypot)
 - Basic reductions (Sum, Min, Max)
 - Dot product and matrix-vector operations
-- **Shuffle/Permutation operations** (Reverse, Interleave, Concat, OddEven, Slide)
+- **Complete shuffle/permutation operations** (Reverse, Interleave, Concat, OddEven, Slide, TableLookupLanes, Zip, Per4LaneBlockShuffle)
 - **Bit manipulation** (PopCount, LeadingZeroCount, TrailingZeroCount, RotateRight, ReverseBits)
+- **Complete comparison operations** (Equal, NotEqual, LessThan, GreaterThan, IsNaN, IsInf, IsFinite, TestBit)
 - **Type conversions** (ConvertTo, Round, Trunc, Ceil, Floor, BitCast)
 - **Type width conversions** (PromoteTo, DemoteTo for all integer/float types)
 - **Compress/Expand operations** (Compress, Expand, CompressStore)
 - **Gather/Scatter operations** (GatherIndex, ScatterIndex, masked variants)
-- **Comprehensive mask operations** (CountTrue, AllTrue, FindFirstTrue, MaskFromBits)
+- **Comprehensive mask operations** (CountTrue, AllTrue, FindFirstTrue, MaskFromBits, IfThenElseZero, ZeroIfNegative)
 - Code generation tool (hwygen) for multi-target dispatch
 - Clean API leveraging Go generics
 - Automatic tail handling for non-aligned sizes
