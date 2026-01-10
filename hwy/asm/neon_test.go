@@ -2297,3 +2297,218 @@ func BenchmarkSinCosF32_Scalar(b *testing.B) {
 		}
 	}
 }
+
+// F64 Additional Transcendental Tests
+
+func TestTanF64(t *testing.T) {
+	input := []float64{0, 0.5, 1.0, -0.5, -1.0, 0.25, 0.75, 1.25}
+	result := make([]float64, len(input))
+
+	TanF64(input, result)
+
+	for i := range input {
+		expected := math.Tan(input[i])
+		relErr := math.Abs(result[i]-expected) / (math.Abs(expected) + 1e-15)
+		if relErr > 1e-6 {
+			t.Errorf("TanF64[%d]: got %v, want %v (relative error: %v)", i, result[i], expected, relErr)
+		}
+	}
+}
+
+func TestAtanF64(t *testing.T) {
+	input := []float64{0, 0.5, 1.0, 2.0, -0.5, -1.0, -2.0, 10.0}
+	result := make([]float64, len(input))
+
+	AtanF64(input, result)
+
+	for i := range input {
+		expected := math.Atan(input[i])
+		absErr := math.Abs(result[i] - expected)
+		if absErr > 1e-6 {
+			t.Errorf("AtanF64[%d]: got %v, want %v (error: %v)", i, result[i], expected, absErr)
+		}
+	}
+}
+
+func TestAtan2F64(t *testing.T) {
+	y := []float64{1, 1, -1, -1, 0, 1, 0, -1}
+	x := []float64{1, -1, 1, -1, 1, 0, -1, 0}
+	result := make([]float64, len(y))
+
+	Atan2F64(y, x, result)
+
+	for i := range y {
+		expected := math.Atan2(y[i], x[i])
+		absErr := math.Abs(result[i] - expected)
+		if absErr > 1e-6 {
+			t.Errorf("Atan2F64[%d]: got %v, want %v (error: %v)", i, result[i], expected, absErr)
+		}
+	}
+}
+
+func TestPowF64(t *testing.T) {
+	base := []float64{2, 2, 10, 10, 3, 4, 2.5, 1.5}
+	exp := []float64{0, 1, 2, 0.5, 3, 0.5, 2, 3}
+	result := make([]float64, len(base))
+
+	PowF64(base, exp, result)
+
+	for i := range base {
+		expected := math.Pow(base[i], exp[i])
+		relErr := math.Abs(result[i]-expected) / (math.Abs(expected) + 1e-15)
+		if relErr > 1e-3 {
+			t.Errorf("PowF64[%d]: got %v, want %v (relative error: %v)", i, result[i], expected, relErr)
+		}
+	}
+}
+
+func TestErfF64(t *testing.T) {
+	input := []float64{0, 0.5, 1.0, 2.0, -0.5, -1.0, 0.25, 1.5}
+	result := make([]float64, len(input))
+
+	ErfF64(input, result)
+
+	for i := range input {
+		expected := math.Erf(input[i])
+		absErr := math.Abs(result[i] - expected)
+		if absErr > 1e-3 {
+			t.Errorf("ErfF64[%d]: got %v, want %v (error: %v)", i, result[i], expected, absErr)
+		}
+	}
+}
+
+func TestLog10F64(t *testing.T) {
+	input := []float64{1, 10, 100, 1000, 0.1, 0.01, 2, 5}
+	result := make([]float64, len(input))
+
+	Log10F64(input, result)
+
+	for i := range input {
+		expected := math.Log10(input[i])
+		absErr := math.Abs(result[i] - expected)
+		if absErr > 1e-5 { // sqrt(2) range reduction achieves ~1e-5 accuracy
+			t.Errorf("Log10F64[%d]: got %v, want %v (error: %v)", i, result[i], expected, absErr)
+		}
+	}
+}
+
+func TestExp10F64(t *testing.T) {
+	input := []float64{0, 1, 2, -1, -2, 0.5, 1.5, 3}
+	result := make([]float64, len(input))
+
+	Exp10F64(input, result)
+
+	for i := range input {
+		expected := math.Pow(10, input[i])
+		relErr := math.Abs(result[i]-expected) / (math.Abs(expected) + 1e-15)
+		if relErr > 1e-6 {
+			t.Errorf("Exp10F64[%d]: got %v, want %v (relative error: %v)", i, result[i], expected, relErr)
+		}
+	}
+}
+
+func TestSinCosF64(t *testing.T) {
+	input := []float64{0, 0.5, 1.0, 1.5, 2.0, 3.14159265, -1.0, -2.0}
+	sinResult := make([]float64, len(input))
+	cosResult := make([]float64, len(input))
+
+	SinCosF64(input, sinResult, cosResult)
+
+	for i := range input {
+		expectedSin := math.Sin(input[i])
+		expectedCos := math.Cos(input[i])
+
+		sinErr := math.Abs(sinResult[i] - expectedSin)
+		cosErr := math.Abs(cosResult[i] - expectedCos)
+
+		if sinErr > 1e-6 {
+			t.Errorf("SinCosF64[%d] sin: got %v, want %v (error: %v)", i, sinResult[i], expectedSin, sinErr)
+		}
+		if cosErr > 1e-6 {
+			t.Errorf("SinCosF64[%d] cos: got %v, want %v (error: %v)", i, cosResult[i], expectedCos, cosErr)
+		}
+	}
+}
+
+// F64 Additional Benchmarks
+
+func BenchmarkTanF64_NEON(b *testing.B) {
+	n := 1024
+	input := make([]float64, n)
+	result := make([]float64, n)
+	for i := range input {
+		input[i] = float64(i) * 0.01
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		TanF64(input, result)
+	}
+}
+
+func BenchmarkAtanF64_NEON(b *testing.B) {
+	n := 1024
+	input := make([]float64, n)
+	result := make([]float64, n)
+	for i := range input {
+		input[i] = float64(i-512) * 0.01
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		AtanF64(input, result)
+	}
+}
+
+func BenchmarkPowF64_NEON(b *testing.B) {
+	n := 1024
+	base := make([]float64, n)
+	exp := make([]float64, n)
+	result := make([]float64, n)
+	for i := range base {
+		base[i] = float64(i%10) + 1
+		exp[i] = float64(i%5) + 0.5
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PowF64(base, exp, result)
+	}
+}
+
+func BenchmarkLog10F64_NEON(b *testing.B) {
+	n := 1024
+	input := make([]float64, n)
+	result := make([]float64, n)
+	for i := range input {
+		input[i] = float64(i+1) * 0.1
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Log10F64(input, result)
+	}
+}
+
+func BenchmarkExp10F64_NEON(b *testing.B) {
+	n := 1024
+	input := make([]float64, n)
+	result := make([]float64, n)
+	for i := range input {
+		input[i] = float64(i%6) - 2
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Exp10F64(input, result)
+	}
+}
+
+func BenchmarkSinCosF64_NEON(b *testing.B) {
+	n := 1024
+	input := make([]float64, n)
+	sinResult := make([]float64, n)
+	cosResult := make([]float64, n)
+	for i := range input {
+		input[i] = float64(i) * 0.01
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		SinCosF64(input, sinResult, cosResult)
+	}
+}

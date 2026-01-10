@@ -172,3 +172,77 @@ func SinCosF32(input, sinResult, cosResult []float32) {
 	n := int64(len(input))
 	sincos_f32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&sinResult[0]), unsafe.Pointer(&cosResult[0]), unsafe.Pointer(&n))
 }
+
+// Float64 Additional Transcendental Operations
+
+// TanF64 computes tangent: result[i] = tan(input[i])
+func TanF64(input, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	tan_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// AtanF64 computes arctangent: result[i] = atan(input[i])
+func AtanF64(input, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	atan_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// Atan2F64 computes 2-argument arctangent: result[i] = atan2(y[i], x[i])
+func Atan2F64(y, x, result []float64) {
+	if len(y) == 0 {
+		return
+	}
+	n := int64(len(y))
+	atan2_f64_neon(unsafe.Pointer(&y[0]), unsafe.Pointer(&x[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// PowF64 computes power: result[i] = base[i] ^ exp[i]
+func PowF64(base, exp, result []float64) {
+	if len(base) == 0 {
+		return
+	}
+	n := int64(len(base))
+	pow_f64_neon(unsafe.Pointer(&base[0]), unsafe.Pointer(&exp[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// ErfF64 computes error function: result[i] = erf(input[i])
+func ErfF64(input, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	erf_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// Log10F64 computes log base 10: result[i] = log10(input[i])
+func Log10F64(input, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	log10_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// Exp10F64 computes 10^x: result[i] = 10^input[i]
+func Exp10F64(input, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	exp10_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// SinCosF64 computes both sin and cos: sin_result[i] = sin(input[i]), cos_result[i] = cos(input[i])
+func SinCosF64(input, sinResult, cosResult []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	sincos_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&sinResult[0]), unsafe.Pointer(&cosResult[0]), unsafe.Pointer(&n))
+}

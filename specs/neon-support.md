@@ -389,16 +389,16 @@ TEXT ·add_f32_neon(SB), $0-32
 | Log2 | ✅ | ✅ | sqrt(2) range reduction + polynomial |
 | Sin | ✅ | ✅ | Range reduction + reflection + polynomial |
 | Cos | ✅ | ✅ | Range reduction + reflection + polynomial |
-| Tan | ✅ | ❌ | Sin/Cos |
+| Tan | ✅ | ✅ | Sin/Cos |
 | Tanh | ✅ | ✅ | Rational approximation |
 | Sigmoid | ✅ | ✅ | 1/(1+exp(-x)) via exp |
-| Erf | ✅ | ❌ | Polynomial approximation |
-| Atan | ✅ | ❌ | Two-level range reduction + polynomial |
-| Atan2 | ✅ | ❌ | Atan with quadrant handling |
-| Pow | ✅ | ❌ | Exp(y * Log(x)) |
-| Log10 | ✅ | ❌ | Log2(x) * log10(2) |
-| Exp10 | ✅ | ❌ | 2^(x * log2(10)) |
-| SinCos | ✅ | ❌ | Combined sin/cos (shared range reduction) |
+| Erf | ✅ | ✅ | Abramowitz & Stegun 7.1.26 |
+| Atan | ✅ | ✅ | Two-level range reduction + polynomial |
+| Atan2 | ✅ | ✅ | Atan with quadrant handling |
+| Pow | ✅ | ✅ | Exp(y * Log(x)) with sqrt(2) reduction |
+| Log10 | ✅ | ✅ | Log2(x) * log10(2) with sqrt(2) reduction |
+| Exp10 | ✅ | ✅ | 2^(x * log2(10)) |
+| SinCos | ✅ | ✅ | Combined sin/cos (shared range reduction) |
 
 **Implementation Notes:**
 - Sin/Cos use proper range reduction to [-π, π] then reflection to [-π/2, π/2]

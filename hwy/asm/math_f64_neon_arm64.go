@@ -28,3 +28,27 @@ func tanh_f64_neon(input, result, len unsafe.Pointer)
 
 //go:noescape
 func sigmoid_f64_neon(input, result, len unsafe.Pointer)
+
+//go:noescape
+func tan_f64_neon(input, result, len unsafe.Pointer)
+
+//go:noescape
+func atan_f64_neon(input, result, len unsafe.Pointer)
+
+//go:noescape
+func atan2_f64_neon(y_arr, x_arr, result, len unsafe.Pointer)
+
+//go:noescape
+func pow_f64_neon(base, exp_arr, result, len unsafe.Pointer)
+
+//go:noescape
+func erf_f64_neon(input, result, len unsafe.Pointer)
+
+//go:noescape
+func log10_f64_neon(input, result, len unsafe.Pointer)
+
+//go:noescape
+func exp10_f64_neon(input, result, len unsafe.Pointer)
+
+//go:noescape
+func sincos_f64_neon(input, sin_result, cos_result, len unsafe.Pointer)
