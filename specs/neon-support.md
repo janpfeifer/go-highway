@@ -280,32 +280,32 @@ TEXT ·add_f32_neon(SB), $0-32
 | Operation | F32 | F64 | C Function | Notes |
 |-----------|-----|-----|------------|-------|
 | Add | ✅ | ✅ | `add_f32_neon`, `add_f64_neon` | Element-wise |
-| Sub | ✅ | ❌ | `sub_f32_neon` | |
+| Sub | ✅ | ✅ | `sub_f32_neon`, `sub_f64_neon` | |
 | Mul | ✅ | ✅ | `mul_f32_neon`, `mul_f64_neon` | |
-| Div | ✅ | ❌ | `div_f32_neon` | |
+| Div | ✅ | ✅ | `div_f32_neon`, `div_f64_neon` | |
 | FMA | ✅ | ✅ | `fma_f32_neon`, `fma_f64_neon` | a*b + c |
-| Min | ✅ | ❌ | `min_f32_neon` | Element-wise |
-| Max | ✅ | ❌ | `max_f32_neon` | Element-wise |
-| Sqrt | ✅ | ❌ | `sqrt_f32_neon` | |
-| Abs | ✅ | ❌ | `abs_f32_neon` | |
-| Neg | ✅ | ❌ | `neg_f32_neon` | |
+| Min | ✅ | ✅ | `min_f32_neon`, `min_f64_neon` | Element-wise |
+| Max | ✅ | ✅ | `max_f32_neon`, `max_f64_neon` | Element-wise |
+| Sqrt | ✅ | ✅ | `sqrt_f32_neon`, `sqrt_f64_neon` | |
+| Abs | ✅ | ✅ | `abs_f32_neon`, `abs_f64_neon` | |
+| Neg | ✅ | ✅ | `neg_f32_neon`, `neg_f64_neon` | |
 
 ### Phase 3: Reductions ✅ Complete
 
 | Operation | F32 | F64 | C Function | Notes |
 |-----------|-----|-----|------------|-------|
 | ReduceSum | ✅ | ✅ | `reduce_sum_f32_neon`, `reduce_sum_f64_neon` | Horizontal sum |
-| ReduceMin | ✅ | ❌ | `reduce_min_f32_neon` | Horizontal min |
-| ReduceMax | ✅ | ❌ | `reduce_max_f32_neon` | Horizontal max |
+| ReduceMin | ✅ | ✅ | `reduce_min_f32_neon`, `reduce_min_f64_neon` | Horizontal min |
+| ReduceMax | ✅ | ✅ | `reduce_max_f32_neon`, `reduce_max_f64_neon` | Horizontal max |
 
 ### Phase 4: Memory Operations ✅ Complete
 
 | Operation | F32 | F64 | I32 | I64 | C Function | Priority |
 |-----------|-----|-----|-----|-----|------------|----------|
-| GatherIndex | ✅ | ✅ | ✅ | ❌ | `gather_*_neon` | High |
-| ScatterIndex | ✅ | ✅ | ✅ | ❌ | `scatter_*_neon` | High |
-| MaskedLoad | ✅ | ❌ | ❌ | ❌ | `masked_load_*_neon` | Medium |
-| MaskedStore | ✅ | ❌ | ❌ | ❌ | `masked_store_*_neon` | Medium |
+| GatherIndex | ✅ | ✅ | ✅ | ✅ | `gather_*_neon` | High |
+| ScatterIndex | ✅ | ✅ | ✅ | ✅ | `scatter_*_neon` | High |
+| MaskedLoad | ✅ | ✅ | ✅ | ✅ | `masked_load_*_neon` | Medium |
+| MaskedStore | ✅ | ✅ | ✅ | ✅ | `masked_store_*_neon` | Medium |
 
 **Notes:**
 - NEON doesn't have native gather/scatter instructions

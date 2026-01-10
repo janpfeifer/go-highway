@@ -624,6 +624,358 @@ void reduce_sum_f64_neon(double *input, double *result, long *len) {
     *result = sum;
 }
 
+// Vector subtraction: result[i] = a[i] - b[i]
+void sub_f64_neon(double *a, double *b, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_f64(result + i, vsubq_f64(a0, b0));
+        vst1q_f64(result + i + 2, vsubq_f64(a1, b1));
+        vst1q_f64(result + i + 4, vsubq_f64(a2, b2));
+        vst1q_f64(result + i + 6, vsubq_f64(a3, b3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_f64(result + i, vsubq_f64(av, bv));
+    }
+
+    for (; i < n; i++) {
+        result[i] = a[i] - b[i];
+    }
+}
+
+// Vector division: result[i] = a[i] / b[i]
+void div_f64_neon(double *a, double *b, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_f64(result + i, vdivq_f64(a0, b0));
+        vst1q_f64(result + i + 2, vdivq_f64(a1, b1));
+        vst1q_f64(result + i + 4, vdivq_f64(a2, b2));
+        vst1q_f64(result + i + 6, vdivq_f64(a3, b3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_f64(result + i, vdivq_f64(av, bv));
+    }
+
+    for (; i < n; i++) {
+        result[i] = a[i] / b[i];
+    }
+}
+
+// Element-wise minimum: result[i] = min(a[i], b[i])
+void min_f64_neon(double *a, double *b, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_f64(result + i, vminq_f64(a0, b0));
+        vst1q_f64(result + i + 2, vminq_f64(a1, b1));
+        vst1q_f64(result + i + 4, vminq_f64(a2, b2));
+        vst1q_f64(result + i + 6, vminq_f64(a3, b3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_f64(result + i, vminq_f64(av, bv));
+    }
+
+    for (; i < n; i++) {
+        if (a[i] < b[i]) {
+            result[i] = a[i];
+        }
+        if (a[i] >= b[i]) {
+            result[i] = b[i];
+        }
+    }
+}
+
+// Element-wise maximum: result[i] = max(a[i], b[i])
+void max_f64_neon(double *a, double *b, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_f64(result + i, vmaxq_f64(a0, b0));
+        vst1q_f64(result + i + 2, vmaxq_f64(a1, b1));
+        vst1q_f64(result + i + 4, vmaxq_f64(a2, b2));
+        vst1q_f64(result + i + 6, vmaxq_f64(a3, b3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_f64(result + i, vmaxq_f64(av, bv));
+    }
+
+    for (; i < n; i++) {
+        if (a[i] > b[i]) {
+            result[i] = a[i];
+        }
+        if (a[i] <= b[i]) {
+            result[i] = b[i];
+        }
+    }
+}
+
+// Square root: result[i] = sqrt(a[i])
+void sqrt_f64_neon(double *a, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        vst1q_f64(result + i, vsqrtq_f64(a0));
+        vst1q_f64(result + i + 2, vsqrtq_f64(a1));
+        vst1q_f64(result + i + 4, vsqrtq_f64(a2));
+        vst1q_f64(result + i + 6, vsqrtq_f64(a3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        vst1q_f64(result + i, vsqrtq_f64(av));
+    }
+
+    // Scalar remainder - use NEON to compute sqrt for single element
+    for (; i < n; i++) {
+        float64x2_t v = vdupq_n_f64(a[i]);
+        v = vsqrtq_f64(v);
+        result[i] = vgetq_lane_f64(v, 0);
+    }
+}
+
+// Absolute value: result[i] = |a[i]|
+void abs_f64_neon(double *a, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        vst1q_f64(result + i, vabsq_f64(a0));
+        vst1q_f64(result + i + 2, vabsq_f64(a1));
+        vst1q_f64(result + i + 4, vabsq_f64(a2));
+        vst1q_f64(result + i + 6, vabsq_f64(a3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        vst1q_f64(result + i, vabsq_f64(av));
+    }
+
+    for (; i < n; i++) {
+        double val = a[i];
+        if (val < 0) {
+            val = -val;
+        }
+        result[i] = val;
+    }
+}
+
+// Negation: result[i] = -a[i]
+void neg_f64_neon(double *a, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        vst1q_f64(result + i, vnegq_f64(a0));
+        vst1q_f64(result + i + 2, vnegq_f64(a1));
+        vst1q_f64(result + i + 4, vnegq_f64(a2));
+        vst1q_f64(result + i + 6, vnegq_f64(a3));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        vst1q_f64(result + i, vnegq_f64(av));
+    }
+
+    for (; i < n; i++) {
+        result[i] = -a[i];
+    }
+}
+
+// Reduce minimum: result = min(input[0], input[1], ..., input[n-1])
+void reduce_min_f64_neon(double *input, double *result, long *len) {
+    long n = *len;
+    if (n <= 0) {
+        *result = 0.0;
+        return;
+    }
+
+    long i = 0;
+    double min_val = input[0];
+
+    if (n >= 8) {
+        float64x2_t min0 = vld1q_f64(input);
+        float64x2_t min1 = min0;
+        float64x2_t min2 = min0;
+        float64x2_t min3 = min0;
+        i = 2;
+
+        for (; i + 7 < n; i += 8) {
+            min0 = vminq_f64(min0, vld1q_f64(input + i));
+            min1 = vminq_f64(min1, vld1q_f64(input + i + 2));
+            min2 = vminq_f64(min2, vld1q_f64(input + i + 4));
+            min3 = vminq_f64(min3, vld1q_f64(input + i + 6));
+        }
+
+        min0 = vminq_f64(min0, min1);
+        min2 = vminq_f64(min2, min3);
+        min0 = vminq_f64(min0, min2);
+
+        // Extract min from 2-lane vector (no vminvq_f64 in NEON)
+        double lane0 = vgetq_lane_f64(min0, 0);
+        double lane1 = vgetq_lane_f64(min0, 1);
+        if (lane0 < lane1) {
+            min_val = lane0;
+        }
+        if (lane0 >= lane1) {
+            min_val = lane1;
+        }
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t v = vld1q_f64(input + i);
+        double lane0 = vgetq_lane_f64(v, 0);
+        double lane1 = vgetq_lane_f64(v, 1);
+        if (lane0 < min_val) {
+            min_val = lane0;
+        }
+        if (lane1 < min_val) {
+            min_val = lane1;
+        }
+    }
+
+    for (; i < n; i++) {
+        if (input[i] < min_val) {
+            min_val = input[i];
+        }
+    }
+
+    *result = min_val;
+}
+
+// Reduce maximum: result = max(input[0], input[1], ..., input[n-1])
+void reduce_max_f64_neon(double *input, double *result, long *len) {
+    long n = *len;
+    if (n <= 0) {
+        *result = 0.0;
+        return;
+    }
+
+    long i = 0;
+    double max_val = input[0];
+
+    if (n >= 8) {
+        float64x2_t max0 = vld1q_f64(input);
+        float64x2_t max1 = max0;
+        float64x2_t max2 = max0;
+        float64x2_t max3 = max0;
+        i = 2;
+
+        for (; i + 7 < n; i += 8) {
+            max0 = vmaxq_f64(max0, vld1q_f64(input + i));
+            max1 = vmaxq_f64(max1, vld1q_f64(input + i + 2));
+            max2 = vmaxq_f64(max2, vld1q_f64(input + i + 4));
+            max3 = vmaxq_f64(max3, vld1q_f64(input + i + 6));
+        }
+
+        max0 = vmaxq_f64(max0, max1);
+        max2 = vmaxq_f64(max2, max3);
+        max0 = vmaxq_f64(max0, max2);
+
+        // Extract max from 2-lane vector (no vmaxvq_f64 in NEON)
+        double lane0 = vgetq_lane_f64(max0, 0);
+        double lane1 = vgetq_lane_f64(max0, 1);
+        if (lane0 > lane1) {
+            max_val = lane0;
+        }
+        if (lane0 <= lane1) {
+            max_val = lane1;
+        }
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t v = vld1q_f64(input + i);
+        double lane0 = vgetq_lane_f64(v, 0);
+        double lane1 = vgetq_lane_f64(v, 1);
+        if (lane0 > max_val) {
+            max_val = lane0;
+        }
+        if (lane1 > max_val) {
+            max_val = lane1;
+        }
+    }
+
+    for (; i < n; i++) {
+        if (input[i] > max_val) {
+            max_val = input[i];
+        }
+    }
+
+    *result = max_val;
+}
+
 // ============================================================================
 // Type Conversions (Phase 5)
 // ============================================================================
@@ -989,6 +1341,34 @@ void scatter_i32_neon(int *values, int *indices, int *base, long *len) {
     }
 }
 
+// Gather int64: result[i] = base[indices[i]]
+void gather_i64_neon(long *base, int *indices, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    // Process 2 elements at a time (int64x2_t)
+    for (; i + 1 < n; i += 2) {
+        long tmp[2];
+        tmp[0] = base[indices[i]];
+        tmp[1] = base[indices[i + 1]];
+        vst1q_s64(result + i, vld1q_s64(tmp));
+    }
+
+    // Scalar remainder
+    for (; i < n; i++) {
+        result[i] = base[indices[i]];
+    }
+}
+
+// Scatter int64: base[indices[i]] = values[i]
+void scatter_i64_neon(long *values, int *indices, long *base, long *len) {
+    long n = *len;
+
+    for (long i = 0; i < n; i++) {
+        base[indices[i]] = values[i];
+    }
+}
+
 // Masked load float32: result[i] = mask[i] ? input[i] : 0
 void masked_load_f32_neon(float *input, int *mask, float *result, long *len) {
     long n = *len;
@@ -1017,6 +1397,123 @@ void masked_store_f32_neon(float *input, int *mask, float *output, long *len) {
     long n = *len;
 
     // Masked store needs to preserve existing values, so process element by element
+    for (long i = 0; i < n; i++) {
+        if (mask[i]) {
+            output[i] = input[i];
+        }
+    }
+}
+
+// Masked load float64: result[i] = mask[i] ? input[i] : 0
+void masked_load_f64_neon(double *input, long *mask, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    // Process 2 elements at a time
+    for (; i + 1 < n; i += 2) {
+        float64x2_t v = vld1q_f64(input + i);
+        int64x2_t m = vld1q_s64(mask + i);
+        // Convert mask to all 1s or 0s: compare != 0
+        uint64x2_t cmp = vcgtq_s64(m, vdupq_n_s64(0));
+        // Use bit select: where mask is 1, use v; where 0, use zero
+        float64x2_t zero = vdupq_n_f64(0);
+        float64x2_t selected = vbslq_f64(cmp, v, zero);
+        vst1q_f64(result + i, selected);
+    }
+
+    // Scalar remainder
+    for (; i < n; i++) {
+        if (mask[i]) {
+            result[i] = input[i];
+        }
+        if (!mask[i]) {
+            result[i] = 0.0;
+        }
+    }
+}
+
+// Masked store float64: if mask[i] then output[i] = input[i]
+void masked_store_f64_neon(double *input, long *mask, double *output, long *len) {
+    long n = *len;
+
+    for (long i = 0; i < n; i++) {
+        if (mask[i]) {
+            output[i] = input[i];
+        }
+    }
+}
+
+// Masked load int32: result[i] = mask[i] ? input[i] : 0
+void masked_load_i32_neon(int *input, int *mask, int *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    // Process 4 elements at a time
+    for (; i + 3 < n; i += 4) {
+        int32x4_t v = vld1q_s32(input + i);
+        int32x4_t m = vld1q_s32(mask + i);
+        // Convert mask to all 1s or 0s: compare != 0
+        uint32x4_t cmp = vcgtq_s32(m, vdupq_n_s32(0));
+        // Use bit select: where mask is 1, use v; where 0, use zero
+        int32x4_t zero = vdupq_n_s32(0);
+        int32x4_t selected = vbslq_s32(cmp, v, zero);
+        vst1q_s32(result + i, selected);
+    }
+
+    // Scalar remainder
+    for (; i < n; i++) {
+        if (mask[i]) {
+            result[i] = input[i];
+        }
+        if (!mask[i]) {
+            result[i] = 0;
+        }
+    }
+}
+
+// Masked store int32: if mask[i] then output[i] = input[i]
+void masked_store_i32_neon(int *input, int *mask, int *output, long *len) {
+    long n = *len;
+
+    for (long i = 0; i < n; i++) {
+        if (mask[i]) {
+            output[i] = input[i];
+        }
+    }
+}
+
+// Masked load int64: result[i] = mask[i] ? input[i] : 0
+void masked_load_i64_neon(long *input, long *mask, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    // Process 2 elements at a time
+    for (; i + 1 < n; i += 2) {
+        int64x2_t v = vld1q_s64(input + i);
+        int64x2_t m = vld1q_s64(mask + i);
+        // Convert mask to all 1s or 0s: compare != 0
+        uint64x2_t cmp = vcgtq_s64(m, vdupq_n_s64(0));
+        // Use bit select: where mask is 1, use v; where 0, use zero
+        int64x2_t zero = vdupq_n_s64(0);
+        int64x2_t selected = vbslq_s64(cmp, v, zero);
+        vst1q_s64(result + i, selected);
+    }
+
+    // Scalar remainder
+    for (; i < n; i++) {
+        if (mask[i]) {
+            result[i] = input[i];
+        }
+        if (!mask[i]) {
+            result[i] = 0;
+        }
+    }
+}
+
+// Masked store int64: if mask[i] then output[i] = input[i]
+void masked_store_i64_neon(long *input, long *mask, long *output, long *len) {
+    long n = *len;
+
     for (long i = 0; i < n; i++) {
         if (mask[i]) {
             output[i] = input[i];

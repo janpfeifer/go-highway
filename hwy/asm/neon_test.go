@@ -637,6 +637,155 @@ func TestMaskedStoreF32(t *testing.T) {
 	}
 }
 
+func TestGatherI64(t *testing.T) {
+	base := []int64{10, 20, 30, 40, 50, 60, 70, 80}
+	indices := []int32{7, 0, 3, 5, 2, 1, 6, 4}
+	result := make([]int64, len(indices))
+
+	GatherI64(base, indices, result)
+
+	for i := range indices {
+		expected := base[indices[i]]
+		if result[i] != expected {
+			t.Errorf("GatherI64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestScatterI64(t *testing.T) {
+	values := []int64{100, 200, 300, 400}
+	indices := []int32{3, 1, 7, 5}
+	base := make([]int64, 8)
+
+	ScatterI64(values, indices, base)
+
+	for i := range indices {
+		if base[indices[i]] != values[i] {
+			t.Errorf("ScatterI64: base[%d] = %v, want %v", indices[i], base[indices[i]], values[i])
+		}
+	}
+}
+
+func TestMaskedLoadF64(t *testing.T) {
+	input := []float64{1, 2, 3, 4, 5, 6, 7, 8}
+	mask := []int64{1, 0, 1, 0, 1, 0, 1, 0}
+	result := make([]float64, len(input))
+
+	MaskedLoadF64(input, mask, result)
+
+	for i := range input {
+		var expected float64
+		if mask[i] != 0 {
+			expected = input[i]
+		} else {
+			expected = 0
+		}
+		if result[i] != expected {
+			t.Errorf("MaskedLoadF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestMaskedStoreF64(t *testing.T) {
+	input := []float64{100, 200, 300, 400, 500, 600, 700, 800}
+	mask := []int64{1, 0, 1, 0, 1, 0, 1, 0}
+	output := []float64{1, 2, 3, 4, 5, 6, 7, 8}
+
+	MaskedStoreF64(input, mask, output)
+
+	for i := range input {
+		var expected float64
+		if mask[i] != 0 {
+			expected = input[i]
+		} else {
+			expected = float64(i + 1) // original value
+		}
+		if output[i] != expected {
+			t.Errorf("MaskedStoreF64[%d]: got %v, want %v", i, output[i], expected)
+		}
+	}
+}
+
+func TestMaskedLoadI32(t *testing.T) {
+	input := []int32{1, 2, 3, 4, 5, 6, 7, 8}
+	mask := []int32{1, 0, 1, 0, 1, 0, 1, 0}
+	result := make([]int32, len(input))
+
+	MaskedLoadI32(input, mask, result)
+
+	for i := range input {
+		var expected int32
+		if mask[i] != 0 {
+			expected = input[i]
+		} else {
+			expected = 0
+		}
+		if result[i] != expected {
+			t.Errorf("MaskedLoadI32[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestMaskedStoreI32(t *testing.T) {
+	input := []int32{100, 200, 300, 400, 500, 600, 700, 800}
+	mask := []int32{1, 0, 1, 0, 1, 0, 1, 0}
+	output := []int32{1, 2, 3, 4, 5, 6, 7, 8}
+
+	MaskedStoreI32(input, mask, output)
+
+	for i := range input {
+		var expected int32
+		if mask[i] != 0 {
+			expected = input[i]
+		} else {
+			expected = int32(i + 1) // original value
+		}
+		if output[i] != expected {
+			t.Errorf("MaskedStoreI32[%d]: got %v, want %v", i, output[i], expected)
+		}
+	}
+}
+
+func TestMaskedLoadI64(t *testing.T) {
+	input := []int64{1, 2, 3, 4, 5, 6, 7, 8}
+	mask := []int64{1, 0, 1, 0, 1, 0, 1, 0}
+	result := make([]int64, len(input))
+
+	MaskedLoadI64(input, mask, result)
+
+	for i := range input {
+		var expected int64
+		if mask[i] != 0 {
+			expected = input[i]
+		} else {
+			expected = 0
+		}
+		if result[i] != expected {
+			t.Errorf("MaskedLoadI64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestMaskedStoreI64(t *testing.T) {
+	input := []int64{100, 200, 300, 400, 500, 600, 700, 800}
+	mask := []int64{1, 0, 1, 0, 1, 0, 1, 0}
+	output := []int64{1, 2, 3, 4, 5, 6, 7, 8}
+
+	MaskedStoreI64(input, mask, output)
+
+	for i := range input {
+		var expected int64
+		if mask[i] != 0 {
+			expected = input[i]
+		} else {
+			expected = int64(i + 1) // original value
+		}
+		if output[i] != expected {
+			t.Errorf("MaskedStoreI64[%d]: got %v, want %v", i, output[i], expected)
+		}
+	}
+}
+
 // Test non-aligned sizes for new operations
 func TestTypeConversionsNonAligned(t *testing.T) {
 	// Test with 7 elements (not multiple of 4)
@@ -2510,5 +2659,274 @@ func BenchmarkSinCosF64_NEON(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		SinCosF64(input, sinResult, cosResult)
+	}
+}
+
+// F64 Core Arithmetic Tests (Phase 2 & 3)
+
+// Test non-aligned sizes (scalar remainder)
+func TestF64NonAlignedSizes(t *testing.T) {
+	// Test SqrtF64 with 9 elements (not multiple of 2)
+	input := []float64{1, 4, 9, 16, 25, 36, 49, 64, 81}
+	result := make([]float64, 9)
+	SqrtF64(input, result)
+	for i := range result {
+		expected := math.Sqrt(input[i])
+		if result[i] != expected {
+			t.Errorf("SqrtF64 (9 elements)[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+
+	// Test ReduceMinF64 with 11 elements
+	input2 := []float64{5, 2, 8, 1, 7, 3, 9, 4, 6, 0.5, 10}
+	result2 := ReduceMinF64(input2)
+	if result2 != 0.5 {
+		t.Errorf("ReduceMinF64 (11 elements): got %v, want 0.5", result2)
+	}
+
+	// Test ReduceMaxF64 with 11 elements
+	result3 := ReduceMaxF64(input2)
+	if result3 != 10 {
+		t.Errorf("ReduceMaxF64 (11 elements): got %v, want 10", result3)
+	}
+
+	// Test SubF64 with 5 elements
+	a := []float64{10, 20, 30, 40, 50}
+	b := []float64{1, 2, 3, 4, 5}
+	result4 := make([]float64, 5)
+	SubF64(a, b, result4)
+	for i := range result4 {
+		expected := a[i] - b[i]
+		if result4[i] != expected {
+			t.Errorf("SubF64 (5 elements)[%d]: got %v, want %v", i, result4[i], expected)
+		}
+	}
+}
+
+func TestSubF64(t *testing.T) {
+	a := []float64{5.0, 10.0, 3.0, 8.0, 1.0, 7.0, 4.0, 9.0}
+	b := []float64{2.0, 3.0, 1.0, 4.0, 0.5, 2.5, 1.5, 3.5}
+	result := make([]float64, len(a))
+	SubF64(a, b, result)
+	for i := range result {
+		expected := a[i] - b[i]
+		if result[i] != expected {
+			t.Errorf("SubF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestDivF64(t *testing.T) {
+	a := []float64{10.0, 20.0, 9.0, 16.0, 5.0, 15.0, 8.0, 12.0}
+	b := []float64{2.0, 4.0, 3.0, 4.0, 2.5, 3.0, 2.0, 4.0}
+	result := make([]float64, len(a))
+	DivF64(a, b, result)
+	for i := range result {
+		expected := a[i] / b[i]
+		if result[i] != expected {
+			t.Errorf("DivF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestMinF64(t *testing.T) {
+	a := []float64{5.0, 2.0, 8.0, 1.0, 7.0, 3.0, 9.0, 4.0}
+	b := []float64{3.0, 4.0, 6.0, 2.0, 5.0, 8.0, 7.0, 6.0}
+	result := make([]float64, len(a))
+	MinF64(a, b, result)
+	for i := range result {
+		expected := a[i]
+		if b[i] < expected {
+			expected = b[i]
+		}
+		if result[i] != expected {
+			t.Errorf("MinF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestMaxF64(t *testing.T) {
+	a := []float64{5.0, 2.0, 8.0, 1.0, 7.0, 3.0, 9.0, 4.0}
+	b := []float64{3.0, 4.0, 6.0, 2.0, 5.0, 8.0, 7.0, 6.0}
+	result := make([]float64, len(a))
+	MaxF64(a, b, result)
+	for i := range result {
+		expected := a[i]
+		if b[i] > expected {
+			expected = b[i]
+		}
+		if result[i] != expected {
+			t.Errorf("MaxF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestSqrtF64(t *testing.T) {
+	input := []float64{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0}
+	result := make([]float64, len(input))
+	SqrtF64(input, result)
+	for i := range result {
+		expected := math.Sqrt(input[i])
+		if result[i] != expected {
+			t.Errorf("SqrtF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestAbsF64(t *testing.T) {
+	input := []float64{-5.0, 3.0, -8.0, 0.0, -1.5, 2.5, -7.0, 4.0}
+	result := make([]float64, len(input))
+	AbsF64(input, result)
+	for i := range result {
+		expected := math.Abs(input[i])
+		if result[i] != expected {
+			t.Errorf("AbsF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestNegF64(t *testing.T) {
+	input := []float64{5.0, -3.0, 8.0, 0.0, 1.5, -2.5, 7.0, -4.0}
+	result := make([]float64, len(input))
+	NegF64(input, result)
+	for i := range result {
+		expected := -input[i]
+		if result[i] != expected {
+			t.Errorf("NegF64[%d]: got %v, want %v", i, result[i], expected)
+		}
+	}
+}
+
+func TestReduceMinF64(t *testing.T) {
+	input := []float64{5.0, 2.0, 8.0, 1.0, 7.0, 3.0, 9.0, 4.0}
+	result := ReduceMinF64(input)
+	expected := 1.0
+	if result != expected {
+		t.Errorf("ReduceMinF64: got %v, want %v", result, expected)
+	}
+}
+
+func TestReduceMaxF64(t *testing.T) {
+	input := []float64{5.0, 2.0, 8.0, 1.0, 7.0, 3.0, 9.0, 4.0}
+	result := ReduceMaxF64(input)
+	expected := 9.0
+	if result != expected {
+		t.Errorf("ReduceMaxF64: got %v, want %v", result, expected)
+	}
+}
+
+// F64 Core Arithmetic Benchmarks
+
+func BenchmarkSubF64_NEON(b *testing.B) {
+	a := make([]float64, 1024)
+	bv := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range a {
+		a[i] = float64(i)
+		bv[i] = float64(i) * 0.5
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		SubF64(a, bv, result)
+	}
+}
+
+func BenchmarkDivF64_NEON(b *testing.B) {
+	a := make([]float64, 1024)
+	bv := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range a {
+		a[i] = float64(i + 1)
+		bv[i] = float64(i+1) * 0.5
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		DivF64(a, bv, result)
+	}
+}
+
+func BenchmarkMinF64_NEON(b *testing.B) {
+	a := make([]float64, 1024)
+	bv := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range a {
+		a[i] = float64(i)
+		bv[i] = float64(1024 - i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		MinF64(a, bv, result)
+	}
+}
+
+func BenchmarkMaxF64_NEON(b *testing.B) {
+	a := make([]float64, 1024)
+	bv := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range a {
+		a[i] = float64(i)
+		bv[i] = float64(1024 - i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		MaxF64(a, bv, result)
+	}
+}
+
+func BenchmarkSqrtF64_NEON(b *testing.B) {
+	input := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range input {
+		input[i] = float64(i + 1)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		SqrtF64(input, result)
+	}
+}
+
+func BenchmarkAbsF64_NEON(b *testing.B) {
+	input := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range input {
+		input[i] = float64(i) - 512
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		AbsF64(input, result)
+	}
+}
+
+func BenchmarkNegF64_NEON(b *testing.B) {
+	input := make([]float64, 1024)
+	result := make([]float64, 1024)
+	for i := range input {
+		input[i] = float64(i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		NegF64(input, result)
+	}
+}
+
+func BenchmarkReduceMinF64_NEON(b *testing.B) {
+	input := make([]float64, 1024)
+	for i := range input {
+		input[i] = float64(i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ReduceMinF64(input)
+	}
+}
+
+func BenchmarkReduceMaxF64_NEON(b *testing.B) {
+	input := make([]float64, 1024)
+	for i := range input {
+		input[i] = float64(i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ReduceMaxF64(input)
 	}
 }

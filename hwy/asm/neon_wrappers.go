@@ -173,6 +173,91 @@ func ReduceSumF64(input []float64) float64 {
 	return result
 }
 
+// SubF64 performs element-wise subtraction: result[i] = a[i] - b[i]
+func SubF64(a, b, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	sub_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// DivF64 performs element-wise division: result[i] = a[i] / b[i]
+func DivF64(a, b, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	div_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// MinF64 computes element-wise minimum: result[i] = min(a[i], b[i])
+func MinF64(a, b, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	min_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// MaxF64 computes element-wise maximum: result[i] = max(a[i], b[i])
+func MaxF64(a, b, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	max_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// SqrtF64 computes square root: result[i] = sqrt(a[i])
+func SqrtF64(a, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	sqrt_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// AbsF64 computes absolute value: result[i] = |a[i]|
+func AbsF64(a, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	abs_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// NegF64 computes negation: result[i] = -a[i]
+func NegF64(a, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	neg_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// ReduceMinF64 finds the minimum value across all elements
+func ReduceMinF64(input []float64) float64 {
+	if len(input) == 0 {
+		return 0
+	}
+	n := int64(len(input))
+	var result float64
+	reduce_min_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result), unsafe.Pointer(&n))
+	return result
+}
+
+// ReduceMaxF64 finds the maximum value across all elements
+func ReduceMaxF64(input []float64) float64 {
+	if len(input) == 0 {
+		return 0
+	}
+	n := int64(len(input))
+	var result float64
+	reduce_max_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result), unsafe.Pointer(&n))
+	return result
+}
+
 // Type conversions (Phase 5)
 
 // PromoteF32ToF64 converts float32 to float64: result[i] = float64(input[i])
@@ -276,6 +361,15 @@ func GatherI32(base []int32, indices []int32, result []int32) {
 	gather_i32_neon(unsafe.Pointer(&base[0]), unsafe.Pointer(&indices[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
 }
 
+// GatherI64 gathers values: result[i] = base[indices[i]]
+func GatherI64(base []int64, indices []int32, result []int64) {
+	if len(indices) == 0 {
+		return
+	}
+	n := int64(len(indices))
+	gather_i64_neon(unsafe.Pointer(&base[0]), unsafe.Pointer(&indices[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
 // ScatterF32 scatters values: base[indices[i]] = values[i]
 func ScatterF32(values []float32, indices []int32, base []float32) {
 	if len(indices) == 0 {
@@ -303,6 +397,15 @@ func ScatterI32(values []int32, indices []int32, base []int32) {
 	scatter_i32_neon(unsafe.Pointer(&values[0]), unsafe.Pointer(&indices[0]), unsafe.Pointer(&base[0]), unsafe.Pointer(&n))
 }
 
+// ScatterI64 scatters values: base[indices[i]] = values[i]
+func ScatterI64(values []int64, indices []int32, base []int64) {
+	if len(indices) == 0 {
+		return
+	}
+	n := int64(len(indices))
+	scatter_i64_neon(unsafe.Pointer(&values[0]), unsafe.Pointer(&indices[0]), unsafe.Pointer(&base[0]), unsafe.Pointer(&n))
+}
+
 // MaskedLoadF32 loads with mask: result[i] = mask[i] ? input[i] : 0
 func MaskedLoadF32(input []float32, mask []int32, result []float32) {
 	if len(input) == 0 {
@@ -319,6 +422,60 @@ func MaskedStoreF32(input []float32, mask []int32, output []float32) {
 	}
 	n := int64(len(input))
 	masked_store_f32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&output[0]), unsafe.Pointer(&n))
+}
+
+// MaskedLoadF64 loads with mask: result[i] = mask[i] ? input[i] : 0
+func MaskedLoadF64(input []float64, mask []int64, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	masked_load_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// MaskedStoreF64 stores with mask: if mask[i] then output[i] = input[i]
+func MaskedStoreF64(input []float64, mask []int64, output []float64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	masked_store_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&output[0]), unsafe.Pointer(&n))
+}
+
+// MaskedLoadI32 loads with mask: result[i] = mask[i] ? input[i] : 0
+func MaskedLoadI32(input []int32, mask []int32, result []int32) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	masked_load_i32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// MaskedStoreI32 stores with mask: if mask[i] then output[i] = input[i]
+func MaskedStoreI32(input []int32, mask []int32, output []int32) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	masked_store_i32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&output[0]), unsafe.Pointer(&n))
+}
+
+// MaskedLoadI64 loads with mask: result[i] = mask[i] ? input[i] : 0
+func MaskedLoadI64(input []int64, mask []int64, result []int64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	masked_load_i64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// MaskedStoreI64 stores with mask: if mask[i] then output[i] = input[i]
+func MaskedStoreI64(input []int64, mask []int64, output []int64) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	masked_store_i64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&mask[0]), unsafe.Pointer(&output[0]), unsafe.Pointer(&n))
 }
 
 // Shuffle/Permutation operations (Phase 6)
