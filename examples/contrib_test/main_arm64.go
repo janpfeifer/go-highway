@@ -1,7 +1,7 @@
 // Example demonstrating the ARM64 NEON SIMD operations.
 // This shows the low-level NEON operations on arm64.
 
-//go:build arm64 && goexperiment.simd
+//go:build arm64
 
 package main
 
