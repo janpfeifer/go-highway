@@ -8,8 +8,11 @@ on:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -36,9 +39,9 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-1.26rc1-${{ hashFiles('**/go.sum') }}
+          key: ${{ matrix.os }}-go-1.26rc1-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-1.26rc1-
+            ${{ matrix.os }}-go-1.26rc1-
 
       - name: Run go vet
         env:
