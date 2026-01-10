@@ -2,3 +2,7 @@
 /hwygen
 examples/basic/basic
 examples/contrib_test/contrib_test
+
+# GOAT build artifacts
+hwy/c/*.o
+hwy/c/*.s
