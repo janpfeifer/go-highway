@@ -250,6 +250,9 @@ func BenchmarkPow_AVX2_F64x4(b *testing.B) {
 }
 
 func BenchmarkPow_AVX512_F32x16(b *testing.B) {
+	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
+		b.Skip("AVX-512 not available")
+	}
 	x := archsimd.BroadcastFloat32x16(2.5)
 	y := archsimd.BroadcastFloat32x16(3.7)
 	b.ResetTimer()
@@ -259,6 +262,9 @@ func BenchmarkPow_AVX512_F32x16(b *testing.B) {
 }
 
 func BenchmarkPow_AVX512_F64x8(b *testing.B) {
+	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
+		b.Skip("AVX-512 not available")
+	}
 	x := archsimd.BroadcastFloat64x8(2.5)
 	y := archsimd.BroadcastFloat64x8(3.7)
 	b.ResetTimer()
