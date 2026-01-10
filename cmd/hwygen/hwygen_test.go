@@ -192,8 +192,9 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Check that expected files were created
+	// Note: dispatch files are now architecture-specific (dispatch_amd64.gen.go for AVX2)
 	expectedFiles := []string{
-		"dispatch.gen.go",
+		"dispatch_amd64.gen.go",
 		"add_avx2.gen.go",
 		"add_fallback.gen.go",
 	}
@@ -225,7 +226,7 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Check dispatcher file specifically
-	dispatchPath := filepath.Join(tmpDir, "dispatch.gen.go")
+	dispatchPath := filepath.Join(tmpDir, "dispatch_amd64.gen.go")
 	dispatchContent, err := os.ReadFile(dispatchPath)
 	if err != nil {
 		t.Fatalf("Failed to read dispatcher: %v", err)
