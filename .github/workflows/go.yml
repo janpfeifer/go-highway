@@ -61,15 +61,59 @@ jobs:
           GOEXPERIMENT: simd
         run: go test -bench=. -benchmem -run=^$ ./hwy/contrib/...
 
-      - name: Build examples
+      - name: Build hwygen
+        run: go build -o bin/hwygen ./cmd/hwygen
+
+      - name: Generate examples
+        run: |
+          export PATH=$PWD/bin:$PATH
+          cd examples/softmax && go generate ./...
+          cd ../gelu && go generate ./...
+
+      - name: Build examples (amd64 with SIMD experiment)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
         run: |
-          go build -o bin/hwygen ./cmd/hwygen
           go build -o examples/basic/basic ./examples/basic
           go build -o examples/contrib_test/contrib_test ./examples/contrib_test
+          go build -o examples/softmax/softmax_test ./examples/softmax
+          go build -o examples/gelu/gelu_test ./examples/gelu
 
-      - name: Run basic example
+      - name: Build examples (arm64 without SIMD experiment)
+        if: runner.arch == 'ARM64'
+        run: |
+          go build -o examples/basic/basic ./examples/basic
+          go build -o examples/contrib_test/contrib_test ./examples/contrib_test
+          go build -o examples/softmax/softmax_test ./examples/softmax
+          go build -o examples/gelu/gelu_test ./examples/gelu
+
+      - name: Run basic example (amd64)
+        if: runner.arch == 'X64'
         env:
           GOEXPERIMENT: simd
         run: ./examples/basic/basic
+
+      - name: Run basic example (arm64)
+        if: runner.arch == 'ARM64'
+        run: ./examples/basic/basic
+
+      - name: Test softmax example (amd64)
+        if: runner.arch == 'X64'
+        env:
+          GOEXPERIMENT: simd
+        run: go test -v ./examples/softmax/...
+
+      - name: Test softmax example (arm64)
+        if: runner.arch == 'ARM64'
+        run: go test -v ./examples/softmax/...
+
+      - name: Test gelu example (amd64)
+        if: runner.arch == 'X64'
+        env:
+          GOEXPERIMENT: simd
+        run: go test -v ./examples/gelu/...
+
+      - name: Test gelu example (arm64)
+        if: runner.arch == 'ARM64'
+        run: go test -v ./examples/gelu/...
