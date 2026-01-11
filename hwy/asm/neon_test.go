@@ -1244,6 +1244,98 @@ func TestGeI32(t *testing.T) {
 	}
 }
 
+// Float64 comparison tests
+
+func TestEqF64(t *testing.T) {
+	a := []float64{1, 2, 3, 4, 5, 6, 7, 8}
+	b := []float64{1, 0, 3, 0, 5, 0, 7, 0}
+	result := make([]int64, len(a))
+
+	EqF64(a, b, result)
+
+	for i := range a {
+		expected := int64(0)
+		if a[i] == b[i] {
+			expected = -1
+		}
+		if result[i] != expected {
+			t.Errorf("EqF64[%d]: got %v, want %v (a=%v, b=%v)", i, result[i], expected, a[i], b[i])
+		}
+	}
+}
+
+func TestGtF64(t *testing.T) {
+	a := []float64{1, 5, 3, 7, 2, 8, 4, 6}
+	b := []float64{1, 3, 3, 5, 2, 4, 4, 3}
+	result := make([]int64, len(a))
+
+	GtF64(a, b, result)
+
+	for i := range a {
+		expected := int64(0)
+		if a[i] > b[i] {
+			expected = -1
+		}
+		if result[i] != expected {
+			t.Errorf("GtF64[%d]: got %v, want %v (a=%v, b=%v)", i, result[i], expected, a[i], b[i])
+		}
+	}
+}
+
+func TestGeF64(t *testing.T) {
+	a := []float64{1, 5, 3, 7, 2, 8, 4, 6}
+	b := []float64{1, 3, 3, 5, 2, 4, 4, 3}
+	result := make([]int64, len(a))
+
+	GeF64(a, b, result)
+
+	for i := range a {
+		expected := int64(0)
+		if a[i] >= b[i] {
+			expected = -1
+		}
+		if result[i] != expected {
+			t.Errorf("GeF64[%d]: got %v, want %v (a=%v, b=%v)", i, result[i], expected, a[i], b[i])
+		}
+	}
+}
+
+func TestLtF64(t *testing.T) {
+	a := []float64{1, 5, 3, 7, 2, 8, 4, 6}
+	b := []float64{1, 3, 3, 5, 2, 4, 4, 3}
+	result := make([]int64, len(a))
+
+	LtF64(a, b, result)
+
+	for i := range a {
+		expected := int64(0)
+		if a[i] < b[i] {
+			expected = -1
+		}
+		if result[i] != expected {
+			t.Errorf("LtF64[%d]: got %v, want %v (a=%v, b=%v)", i, result[i], expected, a[i], b[i])
+		}
+	}
+}
+
+func TestLeF64(t *testing.T) {
+	a := []float64{1, 5, 3, 7, 2, 8, 4, 6}
+	b := []float64{1, 3, 3, 5, 2, 4, 4, 3}
+	result := make([]int64, len(a))
+
+	LeF64(a, b, result)
+
+	for i := range a {
+		expected := int64(0)
+		if a[i] <= b[i] {
+			expected = -1
+		}
+		if result[i] != expected {
+			t.Errorf("LeF64[%d]: got %v, want %v (a=%v, b=%v)", i, result[i], expected, a[i], b[i])
+		}
+	}
+}
+
 // Non-aligned size tests for new operations
 func TestShuffleNonAligned(t *testing.T) {
 	// Test with 7 elements (not multiple of 4)

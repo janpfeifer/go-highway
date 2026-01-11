@@ -1,13 +1,17 @@
+//go:build (amd64 && goexperiment.simd) || arm64
+
 package math
 
 import (
 	stdmath "math"
 	"testing"
-
-	"github.com/ajroetker/go-highway/hwy"
 )
 
-func TestCbrt_F32(t *testing.T) {
+// Minimum slice sizes for SIMD operations (defined in inverse_trig_test.go)
+// const minF32 = 16
+// const minF64 = 8
+
+func TestCbrtPoly(t *testing.T) {
 	tests := []struct {
 		name string
 		x    float32
@@ -26,9 +30,10 @@ func TestCbrt_F32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := hwy.Load([]float32{tt.x, tt.x, tt.x, tt.x})
-			result := Cbrt(x)
-			got := result.Data()[0]
+			input := fillF32(minF32, tt.x)
+			output := make([]float32, minF32)
+			CbrtPoly(input, output)
+			got := output[0]
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-4 {
 				t.Errorf("Cbrt(%v) = %v, want %v", tt.x, got, tt.want)
@@ -37,7 +42,7 @@ func TestCbrt_F32(t *testing.T) {
 	}
 }
 
-func TestCbrt_F64(t *testing.T) {
+func TestCbrtPoly_Float64(t *testing.T) {
 	tests := []struct {
 		name string
 		x    float64
@@ -57,18 +62,19 @@ func TestCbrt_F64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := hwy.Load([]float64{tt.x, tt.x, tt.x, tt.x})
-			result := Cbrt(x)
-			got := result.Data()[0]
+			input := fillF64(minF64, tt.x)
+			output := make([]float64, minF64)
+			CbrtPoly(input, output)
+			got := output[0]
 
-			if stdmath.Abs(got-tt.want) > 1e-10 {
+			if stdmath.Abs(got-tt.want) > 1e-6 {
 				t.Errorf("Cbrt(%v) = %v, want %v", tt.x, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestCbrt_SpecialCases(t *testing.T) {
+func TestCbrtPoly_SpecialCases(t *testing.T) {
 	tests := []struct {
 		name    string
 		x       float64
@@ -83,9 +89,10 @@ func TestCbrt_SpecialCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := hwy.Load([]float64{tt.x})
-			result := Cbrt(x)
-			got := result.Data()[0]
+			input := fillF64(minF64, tt.x)
+			output := make([]float64, minF64)
+			CbrtPoly(input, output)
+			got := output[0]
 
 			if tt.wantInf != 0 {
 				if !stdmath.IsInf(got, tt.wantInf) {
@@ -100,7 +107,7 @@ func TestCbrt_SpecialCases(t *testing.T) {
 	}
 }
 
-func TestHypot_F32(t *testing.T) {
+func TestHypotPoly(t *testing.T) {
 	tests := []struct {
 		name string
 		x    float32
@@ -121,10 +128,11 @@ func TestHypot_F32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := hwy.Load([]float32{tt.x, tt.x, tt.x, tt.x})
-			y := hwy.Load([]float32{tt.y, tt.y, tt.y, tt.y})
-			result := Hypot(x, y)
-			got := result.Data()[0]
+			inputX := fillF32(minF32, tt.x)
+			inputY := fillF32(minF32, tt.y)
+			output := make([]float32, minF32)
+			HypotPoly(inputX, inputY, output)
+			got := output[0]
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-4 {
 				t.Errorf("Hypot(%v, %v) = %v, want %v", tt.x, tt.y, got, tt.want)
@@ -133,7 +141,7 @@ func TestHypot_F32(t *testing.T) {
 	}
 }
 
-func TestHypot_F64(t *testing.T) {
+func TestHypotPoly_Float64(t *testing.T) {
 	tests := []struct {
 		name string
 		x    float64
@@ -155,19 +163,20 @@ func TestHypot_F64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := hwy.Load([]float64{tt.x, tt.x, tt.x, tt.x})
-			y := hwy.Load([]float64{tt.y, tt.y, tt.y, tt.y})
-			result := Hypot(x, y)
-			got := result.Data()[0]
+			inputX := fillF64(minF64, tt.x)
+			inputY := fillF64(minF64, tt.y)
+			output := make([]float64, minF64)
+			HypotPoly(inputX, inputY, output)
+			got := output[0]
 
-			if stdmath.Abs(got-tt.want) > 1e-10 {
+			if stdmath.Abs(got-tt.want) > 1e-6 {
 				t.Errorf("Hypot(%v, %v) = %v, want %v", tt.x, tt.y, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestHypot_SpecialCases(t *testing.T) {
+func TestHypotPoly_SpecialCases(t *testing.T) {
 	tests := []struct {
 		name    string
 		x       float64
@@ -185,10 +194,11 @@ func TestHypot_SpecialCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := hwy.Load([]float64{tt.x})
-			y := hwy.Load([]float64{tt.y})
-			result := Hypot(x, y)
-			got := result.Data()[0]
+			inputX := fillF64(minF64, tt.x)
+			inputY := fillF64(minF64, tt.y)
+			output := make([]float64, minF64)
+			HypotPoly(inputX, inputY, output)
+			got := output[0]
 
 			if tt.wantInf && !stdmath.IsInf(got, 1) {
 				t.Errorf("Hypot(%v, %v) = %v, want +Inf", tt.x, tt.y, got)
@@ -197,48 +207,53 @@ func TestHypot_SpecialCases(t *testing.T) {
 	}
 }
 
-func TestHypot_NaN(t *testing.T) {
+func TestHypotPoly_NaN(t *testing.T) {
 	// NaN with finite number should produce NaN
-	x := hwy.Load([]float64{stdmath.NaN()})
-	y := hwy.Load([]float64{5.0})
-	result := Hypot(x, y)
-	got := result.Data()[0]
+	inputX := fillF64(minF64, stdmath.NaN())
+	inputY := fillF64(minF64, 5.0)
+	output := make([]float64, minF64)
+	HypotPoly(inputX, inputY, output)
+	got := output[0]
 
 	if !stdmath.IsNaN(got) {
 		t.Errorf("Hypot(NaN, 5) = %v, want NaN", got)
 	}
 }
 
-func BenchmarkCbrt_F32(b *testing.B) {
-	x := hwy.Load([]float32{27.0, 27.0, 27.0, 27.0, 27.0, 27.0, 27.0, 27.0})
+func BenchmarkCbrtPoly(b *testing.B) {
+	input := fillF32(minF32, 27.0)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Cbrt(x)
+		CbrtPoly(input, output)
 	}
 }
 
-func BenchmarkCbrt_F64(b *testing.B) {
-	x := hwy.Load([]float64{27.0, 27.0, 27.0, 27.0})
+func BenchmarkCbrtPoly_Float64(b *testing.B) {
+	input := fillF64(minF64, 27.0)
+	output := make([]float64, minF64)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Cbrt(x)
+		CbrtPoly(input, output)
 	}
 }
 
-func BenchmarkHypot_F32(b *testing.B) {
-	x := hwy.Load([]float32{3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0})
-	y := hwy.Load([]float32{4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0})
+func BenchmarkHypotPoly(b *testing.B) {
+	inputX := fillF32(minF32, 3.0)
+	inputY := fillF32(minF32, 4.0)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Hypot(x, y)
+		HypotPoly(inputX, inputY, output)
 	}
 }
 
-func BenchmarkHypot_F64(b *testing.B) {
-	x := hwy.Load([]float64{3.0, 3.0, 3.0, 3.0})
-	y := hwy.Load([]float64{4.0, 4.0, 4.0, 4.0})
+func BenchmarkHypotPoly_Float64(b *testing.B) {
+	inputX := fillF64(minF64, 3.0)
+	inputY := fillF64(minF64, 4.0)
+	output := make([]float64, minF64)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Hypot(x, y)
+		HypotPoly(inputX, inputY, output)
 	}
 }

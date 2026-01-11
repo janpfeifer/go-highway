@@ -141,3 +141,37 @@ func NearestInt_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	}
 	return archsimd.LoadFloat64x4Slice(data[:])
 }
+
+// Pow2_AVX2_F32x8 computes 2^k for each lane using IEEE 754 bit manipulation.
+// Takes Int32x8 exponents and returns Float32x8 results.
+func Pow2_AVX2_F32x8(k archsimd.Int32x8) archsimd.Float32x8 {
+	// For float32: 2^k = ((k + 127) << 23) as float32 bits
+	bias := archsimd.BroadcastInt32x8(127)
+	biased := k.Add(bias)
+	expBits := biased.ShiftAllLeft(23)
+	return expBits.AsFloat32x8()
+}
+
+// Pow2_AVX2_F64x4 computes 2^k for each lane using IEEE 754 bit manipulation.
+// Takes Int32x4 exponents (widened from int32) and returns Float64x4 results.
+// Note: For float64, we need 64-bit operations which AVX2 doesn't handle well,
+// so we use scalar fallback.
+func Pow2_AVX2_F64x4(k archsimd.Int32x4) archsimd.Float64x4 {
+	// For float64: 2^k = ((k + 1023) << 52) as float64 bits
+	// AVX2 lacks proper 64-bit integer shift, so use scalar
+	var kData [4]int32
+	var result [4]float64
+	k.StoreSlice(kData[:])
+	for i := 0; i < 4; i++ {
+		ki := kData[i]
+		if ki < -1022 {
+			result[i] = 0
+		} else if ki > 1023 {
+			result[i] = math.Inf(1)
+		} else {
+			bits := uint64(int64(ki)+1023) << 52
+			result[i] = math.Float64frombits(bits)
+		}
+	}
+	return archsimd.LoadFloat64x4Slice(result[:])
+}

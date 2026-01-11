@@ -5,11 +5,35 @@ package softmax
 
 import (
 	"os"
+
+	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 )
 
-var Softmax func(input []float32, output []float32)
+var SoftmaxFloat32 func(input []float32, output []float32)
 var SoftmaxFloat64 func(input []float64, output []float64)
+var SoftmaxScalarFloat32 func(input []float32, output []float32)
+var SoftmaxScalarFloat64 func(input []float64, output []float64)
+
+// Softmax is the generic API that dispatches to the appropriate SIMD implementation.
+func Softmax[T hwy.Floats](input []T, output []T) {
+	switch any(input).(type) {
+	case []float32:
+		SoftmaxFloat32(any(input).([]float32), any(output).([]float32))
+	case []float64:
+		SoftmaxFloat64(any(input).([]float64), any(output).([]float64))
+	}
+}
+
+// SoftmaxScalar is the generic API that dispatches to the appropriate SIMD implementation.
+func SoftmaxScalar[T hwy.Floats](input []T, output []T) {
+	switch any(input).(type) {
+	case []float32:
+		SoftmaxScalarFloat32(any(input).([]float32), any(output).([]float32))
+	case []float64:
+		SoftmaxScalarFloat64(any(input).([]float64), any(output).([]float64))
+	}
+}
 
 func init() {
 	if os.Getenv("HWY_NO_SIMD") != "" {
@@ -28,16 +52,22 @@ func init() {
 }
 
 func initAVX2() {
-	Softmax = BaseSoftmax_avx2
+	SoftmaxFloat32 = BaseSoftmax_avx2
 	SoftmaxFloat64 = BaseSoftmax_avx2_Float64
+	SoftmaxScalarFloat32 = BaseSoftmaxScalar_avx2
+	SoftmaxScalarFloat64 = BaseSoftmaxScalar_avx2_Float64
 }
 
 func initAVX512() {
-	Softmax = BaseSoftmax_avx512
+	SoftmaxFloat32 = BaseSoftmax_avx512
 	SoftmaxFloat64 = BaseSoftmax_avx512_Float64
+	SoftmaxScalarFloat32 = BaseSoftmaxScalar_avx512
+	SoftmaxScalarFloat64 = BaseSoftmaxScalar_avx512_Float64
 }
 
 func initFallback() {
-	Softmax = BaseSoftmax_fallback
+	SoftmaxFloat32 = BaseSoftmax_fallback
 	SoftmaxFloat64 = BaseSoftmax_fallback_Float64
+	SoftmaxScalarFloat32 = BaseSoftmaxScalar_fallback
+	SoftmaxScalarFloat64 = BaseSoftmaxScalar_fallback_Float64
 }

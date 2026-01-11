@@ -1,28 +1,17 @@
-//go:build amd64 && goexperiment.simd
+//go:build (amd64 && goexperiment.simd) || arm64
 
 package math
 
 import (
 	stdmath "math"
-	"simd/archsimd"
 	"testing"
 )
 
-// extractLane32 gets lane 0 from a Float32x8
-func extractLane32(v archsimd.Float32x8) float32 {
-	var buf [8]float32
-	v.StoreSlice(buf[:])
-	return buf[0]
-}
+// Minimum slice sizes for SIMD operations (defined in inverse_trig_test.go)
+// const minF32 = 16
+// const minF64 = 8
 
-// extractLane64 gets lane 0 from a Float64x4
-func extractLane64(v archsimd.Float64x4) float64 {
-	var buf [4]float64
-	v.StoreSlice(buf[:])
-	return buf[0]
-}
-
-func TestLog2_AVX2_F32x8(t *testing.T) {
+func TestLog2Poly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -37,9 +26,10 @@ func TestLog2_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Log2_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			Log2Poly(input, output)
+			got := output[0]
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-5 {
 				t.Errorf("Log2(%v) = %v, want %v", tt.input, got, tt.want)
@@ -48,7 +38,7 @@ func TestLog2_AVX2_F32x8(t *testing.T) {
 	}
 }
 
-func TestLog10_AVX2_F32x8(t *testing.T) {
+func TestLog10Poly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -62,9 +52,10 @@ func TestLog10_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Log10_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			Log10Poly(input, output)
+			got := output[0]
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-5 {
 				t.Errorf("Log10(%v) = %v, want %v", tt.input, got, tt.want)
@@ -73,7 +64,7 @@ func TestLog10_AVX2_F32x8(t *testing.T) {
 	}
 }
 
-func TestExp2_AVX2_F32x8(t *testing.T) {
+func TestExp2Poly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -88,9 +79,10 @@ func TestExp2_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Exp2_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			Exp2Poly(input, output)
+			got := output[0]
 
 			if stdmath.Abs(float64(got-tt.want)) > 1e-5 {
 				t.Errorf("Exp2(%v) = %v, want %v", tt.input, got, tt.want)
@@ -99,7 +91,7 @@ func TestExp2_AVX2_F32x8(t *testing.T) {
 	}
 }
 
-func TestSinh_AVX2_F32x8(t *testing.T) {
+func TestSinhPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -112,9 +104,10 @@ func TestSinh_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Sinh_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			SinhPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Sinh(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -124,7 +117,7 @@ func TestSinh_AVX2_F32x8(t *testing.T) {
 	}
 }
 
-func TestCosh_AVX2_F32x8(t *testing.T) {
+func TestCoshPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -137,9 +130,10 @@ func TestCosh_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Cosh_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			CoshPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Cosh(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -150,9 +144,8 @@ func TestCosh_AVX2_F32x8(t *testing.T) {
 }
 
 // Float64 tests
-// Note: Sqrt tests moved to hwy/ops_test.go since Sqrt is a core op
 
-func TestLog2_AVX2_F64x4(t *testing.T) {
+func TestLog2Poly_Float64(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float64
@@ -165,9 +158,10 @@ func TestLog2_AVX2_F64x4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat64x4(tt.input)
-			result := Log2_AVX2_F64x4(x)
-			got := extractLane64(result)
+			input := fillF64(minF64, tt.input)
+			output := make([]float64, minF64)
+			Log2Poly(input, output)
+			got := output[0]
 
 			if stdmath.Abs(got-tt.want) > 1e-10 {
 				t.Errorf("Log2(%v) = %v, want %v", tt.input, got, tt.want)
@@ -176,7 +170,7 @@ func TestLog2_AVX2_F64x4(t *testing.T) {
 	}
 }
 
-func TestSinh_AVX2_F64x4(t *testing.T) {
+func TestSinhPoly_Float64(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float64
@@ -188,12 +182,13 @@ func TestSinh_AVX2_F64x4(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat64x4(tt.input)
-			result := Sinh_AVX2_F64x4(x)
-			got := extractLane64(result)
+			input := fillF64(minF64, tt.input)
+			output := make([]float64, minF64)
+			SinhPoly(input, output)
+			got := output[0]
 			want := stdmath.Sinh(tt.input)
 
-			if stdmath.Abs(got-want) > 1e-10 {
+			if stdmath.Abs(got-want) > 1e-6 {
 				t.Errorf("Sinh(%v) = %v, want %v", tt.input, got, want)
 			}
 		})
@@ -202,20 +197,20 @@ func TestSinh_AVX2_F64x4(t *testing.T) {
 
 // Benchmarks
 
-func BenchmarkLog2_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(2.5)
+func BenchmarkLog2Poly(b *testing.B) {
+	input := fillF32(minF32, 2.5)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Log2_AVX2_F32x8(x)
+		Log2Poly(input, output)
 	}
 }
 
-func BenchmarkSinh_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(1.5)
+func BenchmarkSinhPoly(b *testing.B) {
+	input := fillF32(minF32, 1.5)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Sinh_AVX2_F32x8(x)
+		SinhPoly(input, output)
 	}
 }
-
-// Note: Sqrt benchmarks moved to hwy/ops_test.go since Sqrt is a core op

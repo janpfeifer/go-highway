@@ -15,6 +15,7 @@ import (
 	stdmath "math"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/algo"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
 )
 
@@ -25,8 +26,7 @@ import (
 // The max subtraction provides numerical stability by preventing overflow
 // in the exponential computation.
 //
-// This function processes the input in SIMD-width chunks. For inputs that
-// aren't multiples of the SIMD width, tail elements are handled correctly.
+// This function uses algo.BaseApply for efficient SIMD processing.
 func BaseSoftmax[T hwy.Floats](input, output []T) {
 	size := min(len(input), len(output))
 	if size == 0 {
@@ -41,42 +41,53 @@ func BaseSoftmax[T hwy.Floats](input, output []T) {
 		}
 	}
 
-	// Step 2: Compute exp(x - max) and sum
-	vMax := hwy.Set(maxVal)
-	var expSum T
+	// Step 2: Subtract max from input (for numerical stability)
+	shifted := make([]T, size)
+	for i := 0; i < size; i++ {
+		shifted[i] = input[i] - maxVal
+	}
 
-	// First pass: compute exponentials and sum
-	for ii := 0; ii < size; ii += vMax.NumLanes() {
-		remaining := size - ii
-		if remaining >= vMax.NumLanes() {
-			x := hwy.Load(input[ii:])
-			xShifted := hwy.Sub(x, vMax)
-			expX := math.Exp(xShifted)
-			hwy.Store(expX, output[ii:])
-			expSum += hwy.ReduceSum(expX)
-		} else {
-			// Handle tail elements scalar
-			for i := ii; i < size; i++ {
-				exp := T(stdmath.Exp(float64(input[i] - maxVal)))
-				output[i] = exp
-				expSum += exp
-			}
+	// Step 3: Compute exp(shifted) using SIMD via BaseApply
+	algo.BaseApply(shifted, output, math.BaseExpVec[T])
+
+	// Step 4: Compute sum of exponentials
+	var expSum T
+	for i := 0; i < size; i++ {
+		expSum += output[i]
+	}
+
+	// Step 5: Normalize by dividing by sum
+	invSum := T(1.0) / expSum
+	for i := 0; i < size; i++ {
+		output[i] = output[i] * invSum
+	}
+}
+
+// BaseSoftmaxScalar is a scalar reference implementation for comparison.
+func BaseSoftmaxScalar[T hwy.Floats](input, output []T) {
+	size := min(len(input), len(output))
+	if size == 0 {
+		return
+	}
+
+	// Find max
+	maxVal := input[0]
+	for i := 1; i < size; i++ {
+		if input[i] > maxVal {
+			maxVal = input[i]
 		}
 	}
 
-	// Step 3: Normalize by dividing by sum
-	vSum := hwy.Set(expSum)
-	for ii := 0; ii < size; ii += vSum.NumLanes() {
-		remaining := size - ii
-		if remaining >= vSum.NumLanes() {
-			expX := hwy.Load(output[ii:])
-			normalized := hwy.Div(expX, vSum)
-			hwy.Store(normalized, output[ii:])
-		} else {
-			// Handle tail elements scalar
-			for i := ii; i < size; i++ {
-				output[i] = output[i] / expSum
-			}
-		}
+	// Compute exp and sum
+	var expSum T
+	for i := 0; i < size; i++ {
+		output[i] = T(stdmath.Exp(float64(input[i] - maxVal)))
+		expSum += output[i]
+	}
+
+	// Normalize
+	invSum := T(1.0) / expSum
+	for i := 0; i < size; i++ {
+		output[i] = output[i] * invSum
 	}
 }

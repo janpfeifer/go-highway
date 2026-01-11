@@ -76,6 +76,17 @@ func GtI32(a, b, result []int32)           { panic("NEON not available") }
 func GeF32(a, b []float32, result []int32) { panic("NEON not available") }
 func GeI32(a, b, result []int32)           { panic("NEON not available") }
 
+// Float64 comparison operations
+func EqF64(a, b []float64, result []int64) { panic("NEON not available") }
+func GtF64(a, b []float64, result []int64) { panic("NEON not available") }
+func GeF64(a, b []float64, result []int64) { panic("NEON not available") }
+func LtF64(a, b []float64, result []int64) { panic("NEON not available") }
+func LeF64(a, b []float64, result []int64) { panic("NEON not available") }
+
+// Power of 2 operations
+func Pow2F32(k []int32, result []float32) { panic("NEON not available") }
+func Pow2F64(k []int32, result []float64) { panic("NEON not available") }
+
 // Bitwise operations (Phase 8)
 func AndI32(a, b, result []int32)                  { panic("NEON not available") }
 func OrI32(a, b, result []int32)                   { panic("NEON not available") }

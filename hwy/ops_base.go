@@ -809,3 +809,81 @@ func getSignBit[T Lanes]() T {
 		return T(0)
 	}
 }
+
+// ============================================================================
+// Math support operations (for contrib/math code generation)
+// ============================================================================
+
+// MulAdd performs fused multiply-add: a*b + c.
+// This is an alias for FMA with the common a.MulAdd(b, c) semantics.
+func MulAdd[T Floats](a, b, c Vec[T]) Vec[T] {
+	return FMA(a, b, c)
+}
+
+// RoundToEven rounds to the nearest even integer (banker's rounding).
+// This is the default IEEE 754 rounding mode.
+func RoundToEven[T Floats](v Vec[T]) Vec[T] {
+	result := make([]T, len(v.data))
+	for i, x := range v.data {
+		result[i] = T(math.RoundToEven(float64(x)))
+	}
+	return Vec[T]{data: result}
+}
+
+// Greater performs element-wise greater-than comparison.
+// Alias for GreaterThan for compatibility with SIMD method naming.
+func Greater[T Lanes](a, b Vec[T]) Mask[T] {
+	return GreaterThan(a, b)
+}
+
+// Less performs element-wise less-than comparison.
+// Alias for LessThan for compatibility with SIMD method naming.
+func Less[T Lanes](a, b Vec[T]) Mask[T] {
+	return LessThan(a, b)
+}
+
+// Merge selects elements from a where mask is true, from b otherwise.
+// This is equivalent to IfThenElse(mask, a, b).
+func Merge[T Lanes](a, b Vec[T], mask Mask[T]) Vec[T] {
+	return IfThenElse(mask, a, b)
+}
+
+// ============================================================================
+// Type reinterpretation operations (bit cast, no value conversion)
+// ============================================================================
+
+// AsInt32 reinterprets a float32 vector as int32 (bit cast).
+func AsInt32(v Vec[float32]) Vec[int32] {
+	result := make([]int32, len(v.data))
+	for i, x := range v.data {
+		result[i] = int32(math.Float32bits(x))
+	}
+	return Vec[int32]{data: result}
+}
+
+// AsFloat32 reinterprets an int32 vector as float32 (bit cast).
+func AsFloat32(v Vec[int32]) Vec[float32] {
+	result := make([]float32, len(v.data))
+	for i, x := range v.data {
+		result[i] = math.Float32frombits(uint32(x))
+	}
+	return Vec[float32]{data: result}
+}
+
+// AsInt64 reinterprets a float64 vector as int64 (bit cast).
+func AsInt64(v Vec[float64]) Vec[int64] {
+	result := make([]int64, len(v.data))
+	for i, x := range v.data {
+		result[i] = int64(math.Float64bits(x))
+	}
+	return Vec[int64]{data: result}
+}
+
+// AsFloat64 reinterprets an int64 vector as float64 (bit cast).
+func AsFloat64(v Vec[int64]) Vec[float64] {
+	result := make([]float64, len(v.data))
+	for i, x := range v.data {
+		result[i] = math.Float64frombits(uint64(x))
+	}
+	return Vec[float64]{data: result}
+}

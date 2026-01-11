@@ -66,7 +66,7 @@ func TestDot(t *testing.T) {
 	}
 }
 
-func TestDot64(t *testing.T) {
+func TestDotFloat64(t *testing.T) {
 	tests := []struct {
 		name string
 		a    []float64
@@ -107,9 +107,9 @@ func TestDot64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Dot64(tt.a, tt.b)
+			got := DotFloat64(tt.a, tt.b)
 			if math.Abs(got-tt.want) > 1e-10 {
-				t.Errorf("Dot64() = %v, want %v", got, tt.want)
+				t.Errorf("DotFloat64() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -194,7 +194,7 @@ func BenchmarkDot(b *testing.B) {
 	}
 }
 
-func BenchmarkDot64(b *testing.B) {
+func BenchmarkDotFloat64(b *testing.B) {
 	sizes := []int{16, 64, 256, 1024, 4096}
 
 	for _, size := range sizes {
@@ -209,7 +209,7 @@ func BenchmarkDot64(b *testing.B) {
 			b.ReportAllocs()
 			var result float64
 			for i := 0; i < b.N; i++ {
-				result = Dot64(a, c)
+				result = DotFloat64(a, c)
 			}
 			_ = result
 		})

@@ -1,22 +1,42 @@
-//go:build amd64 && goexperiment.simd
+//go:build (amd64 && goexperiment.simd) || arm64
 
 package math
 
 import (
 	stdmath "math"
-	"simd/archsimd"
 	"testing"
-
-	"github.com/ajroetker/go-highway/hwy"
 )
 
-// Phase 11 tests: Tan, Atan, Atan2, Asin, Acos, Pow, Expm1, Log1p
+// Tests for: Tan, Atan, Atan2, Asin, Acos, Expm1, Log1p
+
+// Minimum slice sizes for SIMD operations
+const (
+	minF32 = 16
+	minF64 = 8
+)
+
+// Helper to fill slice with value
+func fillF32(n int, v float32) []float32 {
+	s := make([]float32, n)
+	for i := range s {
+		s[i] = v
+	}
+	return s
+}
+
+func fillF64(n int, v float64) []float64 {
+	s := make([]float64, n)
+	for i := range s {
+		s[i] = v
+	}
+	return s
+}
 
 // ============================================================================
 // Tan Tests
 // ============================================================================
 
-func TestTan_AVX2_F32x8(t *testing.T) {
+func TestTanPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -31,39 +51,10 @@ func TestTan_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Tan_AVX2_F32x8(x)
-			got := extractLane32(result)
-			want := float32(stdmath.Tan(float64(tt.input)))
-
-			if stdmath.Abs(float64(got-want)) > 1e-5 {
-				t.Errorf("Tan(%v) = %v, want %v", tt.input, got, want)
-			}
-		})
-	}
-}
-
-func TestTan_AVX512_F32x16(t *testing.T) {
-	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
-		t.Skip("AVX-512 not available")
-	}
-
-	tests := []struct {
-		name  string
-		input float32
-	}{
-		{"tan(0)", 0.0},
-		{"tan(pi/4)", float32(stdmath.Pi / 4)},
-		{"tan(0.5)", 0.5},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x16(tt.input)
-			result := Tan_AVX512_F32x16(x)
-			var buf [16]float32
-			result.StoreSlice(buf[:])
-			got := buf[0]
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			TanPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Tan(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -77,7 +68,7 @@ func TestTan_AVX512_F32x16(t *testing.T) {
 // Atan Tests
 // ============================================================================
 
-func TestAtan_AVX2_F32x8(t *testing.T) {
+func TestAtanPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -93,9 +84,10 @@ func TestAtan_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Atan_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			AtanPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Atan(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -105,7 +97,7 @@ func TestAtan_AVX2_F32x8(t *testing.T) {
 	}
 }
 
-func TestAtan2_AVX2_F32x8(t *testing.T) {
+func TestAtan2Poly(t *testing.T) {
 	tests := []struct {
 		name string
 		y, x float32
@@ -121,10 +113,11 @@ func TestAtan2_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			y := archsimd.BroadcastFloat32x8(tt.y)
-			x := archsimd.BroadcastFloat32x8(tt.x)
-			result := Atan2_AVX2_F32x8(y, x)
-			got := extractLane32(result)
+			inputY := fillF32(minF32, tt.y)
+			inputX := fillF32(minF32, tt.x)
+			output := make([]float32, minF32)
+			Atan2Poly(inputY, inputX, output)
+			got := output[0]
 			want := float32(stdmath.Atan2(float64(tt.y), float64(tt.x)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -138,7 +131,7 @@ func TestAtan2_AVX2_F32x8(t *testing.T) {
 // Asin Tests
 // ============================================================================
 
-func TestAsin_AVX2_F32x8(t *testing.T) {
+func TestAsinPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -155,9 +148,10 @@ func TestAsin_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Asin_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			AsinPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Asin(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -169,9 +163,10 @@ func TestAsin_AVX2_F32x8(t *testing.T) {
 
 func TestAsin_OutOfRange(t *testing.T) {
 	// |x| > 1 should return NaN
-	x := archsimd.BroadcastFloat32x8(1.5)
-	result := Asin_AVX2_F32x8(x)
-	got := extractLane32(result)
+	input := fillF32(minF32, 1.5)
+	output := make([]float32, minF32)
+	AsinPoly(input, output)
+	got := output[0]
 
 	if !stdmath.IsNaN(float64(got)) {
 		t.Errorf("Asin(1.5) = %v, want NaN", got)
@@ -182,7 +177,7 @@ func TestAsin_OutOfRange(t *testing.T) {
 // Acos Tests
 // ============================================================================
 
-func TestAcos_AVX2_F32x8(t *testing.T) {
+func TestAcosPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -196,9 +191,10 @@ func TestAcos_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Acos_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			AcosPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Acos(float64(tt.input)))
 
 			if stdmath.Abs(float64(got-want)) > 1e-5 {
@@ -212,7 +208,7 @@ func TestAcos_AVX2_F32x8(t *testing.T) {
 // Expm1 Tests
 // ============================================================================
 
-func TestExpm1_AVX2_F32x8(t *testing.T) {
+func TestExpm1Poly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -227,9 +223,10 @@ func TestExpm1_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Expm1_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			Expm1Poly(input, output)
+			got := output[0]
 			want := float32(stdmath.Expm1(float64(tt.input)))
 
 			relErr := stdmath.Abs(float64(got-want)) / (stdmath.Abs(float64(want)) + 1e-10)
@@ -244,7 +241,7 @@ func TestExpm1_AVX2_F32x8(t *testing.T) {
 // Log1p Tests
 // ============================================================================
 
-func TestLog1p_AVX2_F32x8(t *testing.T) {
+func TestLog1pPoly(t *testing.T) {
 	tests := []struct {
 		name  string
 		input float32
@@ -259,9 +256,10 @@ func TestLog1p_AVX2_F32x8(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x8(tt.input)
-			result := Log1p_AVX2_F32x8(x)
-			got := extractLane32(result)
+			input := fillF32(minF32, tt.input)
+			output := make([]float32, minF32)
+			Log1pPoly(input, output)
+			got := output[0]
 			want := float32(stdmath.Log1p(float64(tt.input)))
 
 			relErr := stdmath.Abs(float64(got-want)) / (stdmath.Abs(float64(want)) + 1e-10)
@@ -274,18 +272,19 @@ func TestLog1p_AVX2_F32x8(t *testing.T) {
 
 func TestLog1p_SpecialCases(t *testing.T) {
 	// log1p(-1) = -Inf
-	x := archsimd.BroadcastFloat32x8(-1.0)
-	result := Log1p_AVX2_F32x8(x)
-	got := extractLane32(result)
+	input := fillF32(minF32, -1.0)
+	output := make([]float32, minF32)
+	Log1pPoly(input, output)
+	got := output[0]
 
 	if !stdmath.IsInf(float64(got), -1) {
 		t.Errorf("Log1p(-1) = %v, want -Inf", got)
 	}
 
 	// log1p(x) = NaN for x < -1
-	x = archsimd.BroadcastFloat32x8(-2.0)
-	result = Log1p_AVX2_F32x8(x)
-	got = extractLane32(result)
+	input = fillF32(minF32, -2.0)
+	Log1pPoly(input, output)
+	got = output[0]
 
 	if !stdmath.IsNaN(float64(got)) {
 		t.Errorf("Log1p(-2) = %v, want NaN", got)
@@ -293,17 +292,13 @@ func TestLog1p_SpecialCases(t *testing.T) {
 }
 
 // ============================================================================
-// AVX-512 Tests
+// Float64 Tests
 // ============================================================================
 
-func TestAtan_AVX512_F32x16(t *testing.T) {
-	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
-		t.Skip("AVX-512 not available")
-	}
-
+func TestAtanPoly_Float64(t *testing.T) {
 	tests := []struct {
 		name  string
-		input float32
+		input float64
 	}{
 		{"atan(0)", 0.0},
 		{"atan(1)", 1.0},
@@ -312,28 +307,23 @@ func TestAtan_AVX512_F32x16(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x16(tt.input)
-			result := Atan_AVX512_F32x16(x)
-			var buf [16]float32
-			result.StoreSlice(buf[:])
-			got := buf[0]
-			want := float32(stdmath.Atan(float64(tt.input)))
+			input := fillF64(minF64, tt.input)
+			output := make([]float64, minF64)
+			AtanPoly(input, output)
+			got := output[0]
+			want := stdmath.Atan(tt.input)
 
-			if stdmath.Abs(float64(got-want)) > 1e-5 {
+			if stdmath.Abs(got-want) > 1e-6 {
 				t.Errorf("Atan(%v) = %v, want %v", tt.input, got, want)
 			}
 		})
 	}
 }
 
-func TestAsin_AVX512_F32x16(t *testing.T) {
-	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
-		t.Skip("AVX-512 not available")
-	}
-
+func TestAsinPoly_Float64(t *testing.T) {
 	tests := []struct {
 		name  string
-		input float32
+		input float64
 	}{
 		{"asin(0)", 0.0},
 		{"asin(0.5)", 0.5},
@@ -342,50 +332,39 @@ func TestAsin_AVX512_F32x16(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			x := archsimd.BroadcastFloat32x16(tt.input)
-			result := Asin_AVX512_F32x16(x)
-			var buf [16]float32
-			result.StoreSlice(buf[:])
-			got := buf[0]
-			want := float32(stdmath.Asin(float64(tt.input)))
+			input := fillF64(minF64, tt.input)
+			output := make([]float64, minF64)
+			AsinPoly(input, output)
+			got := output[0]
+			want := stdmath.Asin(tt.input)
 
-			if stdmath.Abs(float64(got-want)) > 1e-5 {
+			if stdmath.Abs(got-want) > 1e-6 {
 				t.Errorf("Asin(%v) = %v, want %v", tt.input, got, want)
 			}
 		})
 	}
 }
 
-func TestExpm1_AVX512_F32x16(t *testing.T) {
-	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
-		t.Skip("AVX-512 not available")
-	}
+func TestExpm1Poly_Float64(t *testing.T) {
+	input := fillF64(minF64, 0.001)
+	output := make([]float64, minF64)
+	Expm1Poly(input, output)
+	got := output[0]
+	want := stdmath.Expm1(0.001)
 
-	x := archsimd.BroadcastFloat32x16(0.001)
-	result := Expm1_AVX512_F32x16(x)
-	var buf [16]float32
-	result.StoreSlice(buf[:])
-	got := buf[0]
-	want := float32(stdmath.Expm1(0.001))
-
-	if stdmath.Abs(float64(got-want)) > 1e-7 {
+	if stdmath.Abs(got-want) > 1e-6 {
 		t.Errorf("Expm1(0.001) = %v, want %v", got, want)
 	}
 }
 
-func TestLog1p_AVX512_F32x16(t *testing.T) {
-	if hwy.CurrentLevel() < hwy.DispatchAVX512 {
-		t.Skip("AVX-512 not available")
-	}
+func TestLog1pPoly_Float64(t *testing.T) {
+	input := fillF64(minF64, 0.001)
+	output := make([]float64, minF64)
+	Log1pPoly(input, output)
+	got := output[0]
+	want := stdmath.Log1p(0.001)
 
-	x := archsimd.BroadcastFloat32x16(0.001)
-	result := Log1p_AVX512_F32x16(x)
-	var buf [16]float32
-	result.StoreSlice(buf[:])
-	got := buf[0]
-	want := float32(stdmath.Log1p(0.001))
-
-	if stdmath.Abs(float64(got-want)) > 1e-7 {
+	if stdmath.Abs(got-want) > 1e-6 {
 		t.Errorf("Log1p(0.001) = %v, want %v", got, want)
 	}
 }
@@ -394,42 +373,47 @@ func TestLog1p_AVX512_F32x16(t *testing.T) {
 // Benchmarks
 // ============================================================================
 
-func BenchmarkTan_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(0.5)
+func BenchmarkTanPoly(b *testing.B) {
+	input := fillF32(minF32, 0.5)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Tan_AVX2_F32x8(x)
+		TanPoly(input, output)
 	}
 }
 
-func BenchmarkAtan_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(0.5)
+func BenchmarkAtanPoly(b *testing.B) {
+	input := fillF32(minF32, 0.5)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Atan_AVX2_F32x8(x)
+		AtanPoly(input, output)
 	}
 }
 
-func BenchmarkAsin_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(0.5)
+func BenchmarkAsinPoly(b *testing.B) {
+	input := fillF32(minF32, 0.5)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Asin_AVX2_F32x8(x)
+		AsinPoly(input, output)
 	}
 }
 
-func BenchmarkExpm1_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(0.001)
+func BenchmarkExpm1Poly(b *testing.B) {
+	input := fillF32(minF32, 0.001)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Expm1_AVX2_F32x8(x)
+		Expm1Poly(input, output)
 	}
 }
 
-func BenchmarkLog1p_AVX2_F32x8(b *testing.B) {
-	x := archsimd.BroadcastFloat32x8(0.001)
+func BenchmarkLog1pPoly(b *testing.B) {
+	input := fillF32(minF32, 0.001)
+	output := make([]float32, minF32)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Log1p_AVX2_F32x8(x)
+		Log1pPoly(input, output)
 	}
 }

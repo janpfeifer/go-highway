@@ -44,7 +44,7 @@ func BaseGELU[T hwy.Floats](input, output []T) {
 
 			// Compute erf(x / sqrt(2)) = erf(x * invSqrt2)
 			xScaled := hwy.Mul(x, vInvSqrt2)
-			erfX := math.Erf(xScaled)
+			erfX := math.BaseErfVec(xScaled)
 
 			// Compute 0.5 * (1 + erf(...))
 			onePlusErf := hwy.Add(vOne, erfX)
@@ -85,7 +85,7 @@ func BaseGELUApprox[T hwy.Floats](input, output []T) {
 
 			// Compute sigmoid(1.702 * x)
 			xScaled := hwy.Mul(x, vCoeff)
-			sigmoidX := math.Sigmoid(xScaled)
+			sigmoidX := math.BaseSigmoidVec(xScaled)
 
 			// Compute x * sigmoid(1.702 * x)
 			result := hwy.Mul(x, sigmoidX)

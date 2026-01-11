@@ -106,8 +106,50 @@ Generate optimized target-specific code from generic implementations:
 
 ```bash
 go build -o bin/hwygen ./cmd/hwygen
-./bin/hwygen -input mycode.go -target avx2 -output mycode_avx2.go
+./bin/hwygen -input mycode.go -output . -targets avx2,avx512,neon,fallback
 ```
+
+### Generic Dispatch
+
+hwygen generates type-safe generic functions that automatically dispatch to the best implementation:
+
+```go
+// Write once with generics
+func BaseSoftmax[T hwy.Floats](input, output []T) {
+    // ... implementation using hwy.Load, hwy.Store, etc.
+}
+
+// hwygen generates:
+// - BaseSoftmax_avx2, BaseSoftmax_avx2_Float64
+// - BaseSoftmax_avx512, BaseSoftmax_avx512_Float64
+// - BaseSoftmax_neon, BaseSoftmax_neon_Float64
+// - BaseSoftmax_fallback, BaseSoftmax_fallback_Float64
+
+// Plus a generic dispatcher:
+func Softmax[T hwy.Floats](input, output []T)  // dispatches by type
+
+// And type-specific function variables:
+var SoftmaxFloat32 func(input, output []float32)
+var SoftmaxFloat64 func(input, output []float64)
+
+// Tail handling is automatic - remaining elements that don't
+// fit a full SIMD width are processed via the fallback path.
+```
+
+Usage:
+
+```go
+// Generic API - works with any float type
+data32 := []float32{1, 2, 3, 4}
+out32 := make([]float32, 4)
+softmax.Softmax(data32, out32)
+
+data64 := []float64{1, 2, 3, 4}
+out64 := make([]float64, 4)
+softmax.Softmax(data64, out64)
+```
+
+See `examples/gelu` and `examples/softmax` for complete examples.
 
 ## Building
 

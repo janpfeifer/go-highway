@@ -5,12 +5,34 @@ package gelu
 
 import (
 	"os"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
-var GELU func(input []float32, output []float32)
+var GELUFloat32 func(input []float32, output []float32)
 var GELUFloat64 func(input []float64, output []float64)
-var GELUApprox func(input []float32, output []float32)
+var GELUApproxFloat32 func(input []float32, output []float32)
 var GELUApproxFloat64 func(input []float64, output []float64)
+
+// GELU is the generic API that dispatches to the appropriate SIMD implementation.
+func GELU[T hwy.Floats](input []T, output []T) {
+	switch any(input).(type) {
+	case []float32:
+		GELUFloat32(any(input).([]float32), any(output).([]float32))
+	case []float64:
+		GELUFloat64(any(input).([]float64), any(output).([]float64))
+	}
+}
+
+// GELUApprox is the generic API that dispatches to the appropriate SIMD implementation.
+func GELUApprox[T hwy.Floats](input []T, output []T) {
+	switch any(input).(type) {
+	case []float32:
+		GELUApproxFloat32(any(input).([]float32), any(output).([]float32))
+	case []float64:
+		GELUApproxFloat64(any(input).([]float64), any(output).([]float64))
+	}
+}
 
 func init() {
 	if os.Getenv("HWY_NO_SIMD") != "" {
@@ -22,15 +44,15 @@ func init() {
 }
 
 func initNEON() {
-	GELU = BaseGELU_neon
+	GELUFloat32 = BaseGELU_neon
 	GELUFloat64 = BaseGELU_neon_Float64
-	GELUApprox = BaseGELUApprox_neon
+	GELUApproxFloat32 = BaseGELUApprox_neon
 	GELUApproxFloat64 = BaseGELUApprox_neon_Float64
 }
 
 func initFallback() {
-	GELU = BaseGELU_fallback
+	GELUFloat32 = BaseGELU_fallback
 	GELUFloat64 = BaseGELU_fallback_Float64
-	GELUApprox = BaseGELUApprox_fallback
+	GELUApproxFloat32 = BaseGELUApprox_fallback
 	GELUApproxFloat64 = BaseGELUApprox_fallback_Float64
 }

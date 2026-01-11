@@ -8,22 +8,64 @@ import (
 	"strings"
 )
 
+// TransformResult contains the transformed function and any hoisted constants.
+type TransformResult struct {
+	FuncDecl      *ast.FuncDecl
+	HoistedConsts []HoistedConst
+}
+
+// HoistedConst represents a constant that was hoisted from a function to package level.
+type HoistedConst struct {
+	VarName   string // Package-level var name (e.g., "BaseSigmoid_one_f32")
+	Value     string // The constant value (e.g., "1.0")
+	VecType   string // Vector type (e.g., "Float32x8")
+	Broadcast string // Broadcast function (e.g., "archsimd.BroadcastFloat32x8")
+}
+
+// TransformOptions contains additional context for transformation.
+type TransformOptions struct {
+	TypeSpecificConsts map[string]*TypeSpecificConst
+	ConditionalBlocks  []ConditionalBlock
+	FileSet            *token.FileSet    // For resolving line numbers in conditional blocks
+	Imports            map[string]string // map[local_name]import_path for resolving package references
+}
+
 // Transform transforms a parsed function for a specific target and element type.
 // It clones the AST, specializes generics, and transforms hwy operations.
-func Transform(pf *ParsedFunc, target Target, elemType string) *ast.FuncDecl {
+func Transform(pf *ParsedFunc, target Target, elemType string) *TransformResult {
+	return TransformWithOptions(pf, target, elemType, nil)
+}
+
+// TransformWithOptions transforms a parsed function with additional options.
+func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *TransformOptions) *TransformResult {
+	if opts == nil {
+		opts = &TransformOptions{}
+	}
+
+	// First, filter the original body based on conditional blocks.
+	// We need to do this BEFORE cloning because the original AST has valid positions.
+	var filteredBody *ast.BlockStmt
+	if len(opts.ConditionalBlocks) > 0 && opts.FileSet != nil {
+		filteredBody = filterConditionalBlocks(pf.Body, opts.ConditionalBlocks, opts.FileSet, target.Name, elemType)
+	} else {
+		filteredBody = pf.Body
+	}
+
 	// Create new function declaration (don't copy Doc - emitter handles comments)
 	funcDecl := &ast.FuncDecl{
 		Name: ast.NewIdent(pf.Name + target.Suffix()),
 		Type: &ast.FuncType{
 			Params:  &ast.FieldList{},
-			Results: pf.buildResults(elemType),
+			Results: pf.buildResultsWithTarget(elemType, target),
 		},
-		Body: cloneBlockStmt(pf.Body),
+		Body: cloneBlockStmt(filteredBody),
 	}
 
 	// Build parameter list with specialized types
 	for _, param := range pf.Params {
 		paramType := specializeType(param.Type, pf.TypeParams, elemType)
+		// Also transform hwy.Vec[T] to concrete vector types for SIMD targets
+		paramType = specializeVecType(paramType, elemType, target)
 		field := &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(param.Name)},
 			Type:  parseTypeExpr(paramType),
@@ -33,11 +75,29 @@ func Transform(pf *ParsedFunc, target Target, elemType string) *ast.FuncDecl {
 
 	// Transform the function body
 	ctx := &transformContext{
-		target:     target,
-		elemType:   elemType,
-		typeParams: pf.TypeParams,
-		loopInfo:   pf.LoopInfo,
+		target:             target,
+		elemType:           elemType,
+		typeParams:         pf.TypeParams,
+		loopInfo:           pf.LoopInfo,
+		lanesVars:          make(map[string]bool),
+		localVars:          make(map[string]bool),
+		stackArrayVars:     make(map[string]bool),
+		hoistedConsts:      make(map[string]HoistedConst),
+		funcName:           pf.Name,
+		typeSpecificConsts: opts.TypeSpecificConsts,
+		conditionalBlocks:  opts.ConditionalBlocks,
+		fset:               opts.FileSet,
+		imports:            opts.Imports,
 	}
+
+	// Collect all locally-defined variable names to avoid hoisting them as constants
+	collectLocalVariables(funcDecl.Body, ctx)
+
+	// Resolve type-specific constant references
+	// Pattern 1: expC0 -> expC0_f32 (base name lookup)
+	// Pattern 2: expC0_f32 -> expC0_f64 (suffix swapping for compilable base files)
+	transformIdentifiers(funcDecl.Body, ctx)
+
 	transformNode(funcDecl.Body, ctx)
 
 	// Post-process to replace NumLanes() calls and ReduceSum() calls
@@ -45,19 +105,101 @@ func Transform(pf *ParsedFunc, target Target, elemType string) *ast.FuncDecl {
 		postProcessSIMD(funcDecl.Body, ctx)
 	}
 
-	// Insert tail handling if there's a loop
-	if pf.LoopInfo != nil {
+	// Post-process to convert stack array usages to slice expressions
+	if target.Name != "Fallback" && len(ctx.stackArrayVars) > 0 {
+		convertStackArrayUsages(funcDecl.Body, ctx)
+	}
+
+	// Insert tail handling if there's a loop and function doesn't return a value
+	// (functions that return values have their own tail handling in the template)
+	if pf.LoopInfo != nil && len(pf.Returns) == 0 {
 		insertTailHandling(funcDecl.Body, pf.LoopInfo, elemType, target, pf.Name, pf.Params)
 	}
 
-	return funcDecl
+	// Collect hoisted constants
+	var hoisted []HoistedConst
+	for _, hc := range ctx.hoistedConsts {
+		hoisted = append(hoisted, hc)
+	}
+
+	return &TransformResult{
+		FuncDecl:      funcDecl,
+		HoistedConsts: hoisted,
+	}
 }
 
 type transformContext struct {
-	target     Target
-	elemType   string
-	typeParams []TypeParam
-	loopInfo   *LoopInfo
+	target             Target
+	elemType           string
+	typeParams         []TypeParam
+	lanesVars          map[string]bool                   // Variables assigned from NumLanes()
+	localVars          map[string]bool                   // Variables defined locally in the function
+	stackArrayVars     map[string]bool                   // Variables that are stack arrays (need [:] when used as slice)
+	loopInfo           *LoopInfo
+	hoistedConsts      map[string]HoistedConst           // Hoisted constants (key is local var name)
+	funcName           string                            // Current function name for generating unique hoisted names
+	typeSpecificConsts map[string]*TypeSpecificConst     // Type-specific constant registry
+	conditionalBlocks  []ConditionalBlock                // Conditional blocks to process
+	fset               *token.FileSet                    // For resolving line numbers
+	imports            map[string]string                 // map[local_name]import_path for resolving package references
+}
+
+// collectLocalVariables walks the AST and collects all locally-defined variable names.
+// This is used to exclude local variables from constant hoisting.
+func collectLocalVariables(node ast.Node, ctx *transformContext) {
+	if node == nil {
+		return
+	}
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch stmt := n.(type) {
+		case *ast.AssignStmt:
+			// Collect all LHS identifiers from := and = assignments
+			// Only := definitely defines new variables, but we track both to be safe
+			if stmt.Tok == token.DEFINE {
+				for _, lhs := range stmt.Lhs {
+					if ident, ok := lhs.(*ast.Ident); ok {
+						ctx.localVars[ident.Name] = true
+					}
+				}
+			}
+		case *ast.DeclStmt:
+			// var declarations
+			if genDecl, ok := stmt.Decl.(*ast.GenDecl); ok {
+				if genDecl.Tok == token.VAR {
+					for _, spec := range genDecl.Specs {
+						if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+							for _, name := range valueSpec.Names {
+								ctx.localVars[name.Name] = true
+							}
+						}
+					}
+				}
+			}
+		case *ast.RangeStmt:
+			// for k, v := range ...
+			if stmt.Tok == token.DEFINE {
+				if ident, ok := stmt.Key.(*ast.Ident); ok && ident.Name != "_" {
+					ctx.localVars[ident.Name] = true
+				}
+				if ident, ok := stmt.Value.(*ast.Ident); ok && ident.Name != "_" {
+					ctx.localVars[ident.Name] = true
+				}
+			}
+		case *ast.ForStmt:
+			// for i := 0; ... - the init statement
+			if stmt.Init != nil {
+				if assign, ok := stmt.Init.(*ast.AssignStmt); ok && assign.Tok == token.DEFINE {
+					for _, lhs := range assign.Lhs {
+						if ident, ok := lhs.(*ast.Ident); ok {
+							ctx.localVars[ident.Name] = true
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
 }
 
 // transformNode recursively transforms AST nodes.
@@ -72,6 +214,8 @@ func transformNode(node ast.Node, ctx *transformContext) {
 			transformCallExpr(node, ctx)
 			// Also check for type conversions like T(1)
 			transformTypeConversion(node, ctx)
+			// Transform function references passed as arguments
+			transformFuncRefArgs(node, ctx)
 		case *ast.DeclStmt:
 			// Transform variable declarations
 			if genDecl, ok := node.Decl.(*ast.GenDecl); ok {
@@ -91,6 +235,8 @@ func transformNode(node ast.Node, ctx *transformContext) {
 // transformForStmt transforms for loops for SIMD targets.
 // Changes: for ii := 0; ii < size; ii += v.NumLanes()
 // To:      for ii := 0; ii+8 <= size; ii += 8
+// Also handles: for ii := 0; ii < size; ii += lanes (where lanes was from NumLanes())
+// Only transforms loops that use NumLanes() stride (not scalar tail loops).
 func transformForStmt(stmt *ast.ForStmt, ctx *transformContext) {
 	if ctx.target.Name == "Fallback" || ctx.loopInfo == nil {
 		return
@@ -98,12 +244,16 @@ func transformForStmt(stmt *ast.ForStmt, ctx *transformContext) {
 
 	lanes := ctx.target.LanesFor(ctx.elemType)
 
-	// Transform post: ii += v.NumLanes() -> ii += lanes
+	// Check if this loop uses NumLanes() stride - only transform those loops
+	isSimdLoop := false
 	if assignStmt, ok := stmt.Post.(*ast.AssignStmt); ok {
 		if len(assignStmt.Rhs) == 1 {
+			// Case 1: ii += v.NumLanes() - direct call
 			if call, ok := assignStmt.Rhs[0].(*ast.CallExpr); ok {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 					if sel.Sel.Name == "NumElements" || sel.Sel.Name == "NumLanes" {
+						isSimdLoop = true
+						// Transform post: ii += v.NumLanes() -> ii += lanes
 						assignStmt.Rhs[0] = &ast.BasicLit{
 							Kind:  token.INT,
 							Value: strconv.Itoa(lanes),
@@ -111,21 +261,41 @@ func transformForStmt(stmt *ast.ForStmt, ctx *transformContext) {
 					}
 				}
 			}
+			// Case 2: ii += lanes - variable assigned from NumLanes()
+			if ident, ok := assignStmt.Rhs[0].(*ast.Ident); ok {
+				if ctx.lanesVars[ident.Name] {
+					isSimdLoop = true
+					// The variable was already replaced with a constant in transformAssignStmt,
+					// but we still need to transform the loop condition
+				}
+			}
+			// Case 3: ii += 8 (or other constant) - already transformed
+			if lit, ok := assignStmt.Rhs[0].(*ast.BasicLit); ok {
+				if lit.Kind == token.INT {
+					// Check if the value matches our lanes - this means it was already transformed
+					if lit.Value == strconv.Itoa(lanes) {
+						isSimdLoop = true
+					}
+				}
+			}
 		}
 	}
 
-	// Transform condition: ii < size -> ii+lanes <= size
-	if binExpr, ok := stmt.Cond.(*ast.BinaryExpr); ok {
-		if binExpr.Op == token.LSS {
-			// Change ii < size to ii+lanes <= size
-			binExpr.Op = token.LEQ
-			binExpr.X = &ast.BinaryExpr{
-				X:  binExpr.X,
-				Op: token.ADD,
-				Y: &ast.BasicLit{
-					Kind:  token.INT,
-					Value: strconv.Itoa(lanes),
-				},
+	// Only transform condition for SIMD loops (not scalar tail loops)
+	if isSimdLoop {
+		// Transform condition: ii < size -> ii+lanes <= size
+		if binExpr, ok := stmt.Cond.(*ast.BinaryExpr); ok {
+			if binExpr.Op == token.LSS {
+				// Change ii < size to ii+lanes <= size
+				binExpr.Op = token.LEQ
+				binExpr.X = &ast.BinaryExpr{
+					X:  binExpr.X,
+					Op: token.ADD,
+					Y: &ast.BasicLit{
+						Kind:  token.INT,
+						Value: strconv.Itoa(lanes),
+					},
+				}
 			}
 		}
 	}
@@ -151,8 +321,101 @@ func transformTypeConversion(call *ast.CallExpr, ctx *transformContext) {
 
 // transformCallExpr transforms hwy.* and contrib.* function calls.
 func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
-	selExpr, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
+	// First, check for calls to other Base* functions and add target suffix
+	// This applies to ALL targets including fallback, since generated functions
+	// are always concrete (BaseApply_fallback, not generic BaseApply)
+	if ident, ok := call.Fun.(*ast.Ident); ok {
+		if strings.HasPrefix(ident.Name, "Base") {
+			// Transform BaseFoo to BaseFoo_avx2 (or BaseFoo_fallback, etc.)
+			suffix := ctx.target.Suffix()
+			if ctx.elemType == "float64" {
+				suffix = suffix + "_Float64"
+			}
+			ident.Name = ident.Name + suffix
+		}
+	}
+
+	// Transform Vec method calls like .Store() -> .StoreSlice() for SIMD targets
+	// This handles cases like fn(x).Store(dst) where fn returns a Vec
+	// Skip this for package-level function calls like hwy.Store() which are handled later
+	if ctx.target.Name != "Fallback" {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			// Don't transform package-level function calls
+			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "hwy" {
+				// Skip - this is a package-level function, handled later
+			} else {
+				switch sel.Sel.Name {
+				case "Store":
+					// Transform .Store(dst) -> .StoreSlice(dst)
+					sel.Sel.Name = "StoreSlice"
+				}
+			}
+		}
+	}
+
+	// Also handle generic Base* calls like BaseFoo[T](x)
+	// All targets get the suffix since generated functions are concrete
+	if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
+		if ident, ok := indexExpr.X.(*ast.Ident); ok {
+			if strings.HasPrefix(ident.Name, "Base") {
+				suffix := ctx.target.Suffix()
+				if ctx.elemType == "float64" {
+					suffix = suffix + "_Float64"
+				}
+				// Strip the type param and add suffix
+				call.Fun = ast.NewIdent(ident.Name + suffix)
+			}
+		}
+	}
+
+	var selExpr *ast.SelectorExpr
+	var ok bool
+
+	// Handle both regular calls (hwy.Load) and generic calls (hwy.Zero[T])
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		selExpr = fun
+	case *ast.IndexExpr:
+		// Generic function call like hwy.Zero[T]()
+		// The IndexExpr wraps the SelectorExpr
+		selExpr, ok = fun.X.(*ast.SelectorExpr)
+		if !ok {
+			return
+		}
+		if ctx.target.Name == "Fallback" {
+			// For fallback, replace type param with concrete type
+			// hwy.Zero[T]() -> hwy.Zero[float32]()
+			for _, tp := range ctx.typeParams {
+				if ident, ok := fun.Index.(*ast.Ident); ok && ident.Name == tp.Name {
+					ident.Name = ctx.elemType
+				}
+			}
+			// Keep the IndexExpr (with type param), just update the type
+		} else {
+			// For SIMD targets, strip the type param (will be transformed later)
+			call.Fun = selExpr
+		}
+	case *ast.IndexListExpr:
+		// Generic function call with multiple type params like hwy.Func[T, U]()
+		selExpr, ok = fun.X.(*ast.SelectorExpr)
+		if !ok {
+			return
+		}
+		if ctx.target.Name == "Fallback" {
+			// For fallback, replace type params with concrete types
+			for i, idx := range fun.Indices {
+				if ident, ok := idx.(*ast.Ident); ok {
+					for _, tp := range ctx.typeParams {
+						if ident.Name == tp.Name {
+							fun.Indices[i] = ast.NewIdent(ctx.elemType)
+						}
+					}
+				}
+			}
+		} else {
+			call.Fun = selExpr
+		}
+	default:
 		return
 	}
 
@@ -170,6 +433,18 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 	}
 
 	funcName := selExpr.Sel.Name
+
+	// Handle cross-package Base* function calls (e.g., algo.BaseApply, math.BaseExpVec)
+	// These need target suffix added, similar to same-package Base* calls
+	if strings.HasPrefix(funcName, "Base") {
+		suffix := ctx.target.Suffix()
+		if ctx.elemType == "float64" {
+			suffix = suffix + "_Float64"
+		}
+		selExpr.Sel.Name = funcName + suffix
+		return
+	}
+
 	opInfo, ok := ctx.target.OpMap[funcName]
 	if !ok {
 		// Unknown operation, leave as-is
@@ -194,8 +469,13 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 	// For fallback, keep hwy calls as-is (don't convert to method calls)
 	if ctx.target.Name == "Fallback" {
 		// Just update the package name if needed
-		if selExpr, ok := call.Fun.(*ast.SelectorExpr); ok {
-			selExpr.X = ast.NewIdent("hwy")
+		switch fun := call.Fun.(type) {
+		case *ast.SelectorExpr:
+			fun.X = ast.NewIdent("hwy")
+		case *ast.IndexExpr:
+			if sel, ok := fun.X.(*ast.SelectorExpr); ok {
+				sel.X = ast.NewIdent("hwy")
+			}
 		}
 		return
 	}
@@ -244,6 +524,227 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			// Args stays as [x]
 		}
 
+	case "Pow2":
+		// hwy.Pow2[T](kInt) -> kInt.Pow2Float32() or kInt.Pow2Float64()
+		// based on context element type
+		if len(call.Args) >= 1 {
+			var methodName string
+			switch ctx.elemType {
+			case "float32":
+				methodName = "Pow2Float32"
+			case "float64":
+				methodName = "Pow2Float64"
+			default:
+				methodName = "Pow2Float32" // fallback
+			}
+			call.Fun = &ast.SelectorExpr{
+				X:   call.Args[0],
+				Sel: ast.NewIdent(methodName),
+			}
+			call.Args = nil
+		}
+
+	case "Abs":
+		// hwy.Abs(x) -> x.Max(negX) where negX = pkg.Broadcast*(0).Sub(x)
+		// archsimd doesn't have Abs method, so we implement |x| = max(x, -x)
+		if opInfo.Package == "special" && len(call.Args) >= 1 {
+			vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+			pkgName := getVecPackageName(ctx.target)
+			x := call.Args[0]
+			// Create pkg.Broadcast*(0)
+			zeroLit := &ast.BasicLit{Kind: token.INT, Value: "0"}
+			zeroCall := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent(pkgName),
+					Sel: ast.NewIdent("Broadcast" + vecTypeName),
+				},
+				Args: []ast.Expr{zeroLit},
+			}
+			// Create pkg.Broadcast*(0).Sub(x) = -x
+			negX := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   zeroCall,
+					Sel: ast.NewIdent("Sub"),
+				},
+				Args: []ast.Expr{cloneExpr(x)},
+			}
+			// Create x.Max(-x)
+			call.Fun = &ast.SelectorExpr{
+				X:   x,
+				Sel: ast.NewIdent("Max"),
+			}
+			call.Args = []ast.Expr{negX}
+		} else {
+			// Normal Abs method call
+			if len(call.Args) >= 1 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent(opInfo.Name),
+				}
+				call.Args = nil
+			}
+		}
+
+	case "IsNaN":
+		// hwy.IsNaN(x) -> x.Equal(x).Xor(one.Equal(one))
+		// NaN != NaN, so x.Equal(x) is false (all 0s) for NaN elements
+		// We XOR with all-true mask to invert, giving true for NaN
+		if opInfo.Package == "special" && len(call.Args) >= 1 {
+			vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+			pkgName := getVecPackageName(ctx.target)
+			x := call.Args[0]
+			// Create pkg.Broadcast*(1.0)
+			oneLit := &ast.BasicLit{Kind: token.FLOAT, Value: "1.0"}
+			oneCall := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent(pkgName),
+					Sel: ast.NewIdent("Broadcast" + vecTypeName),
+				},
+				Args: []ast.Expr{oneLit},
+			}
+			// Create one.Equal(one) to get all-true mask
+			allTrue := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   oneCall,
+					Sel: ast.NewIdent("Equal"),
+				},
+				Args: []ast.Expr{cloneExpr(oneCall)},
+			}
+			// Create x.Equal(x)
+			xEqX := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   x,
+					Sel: ast.NewIdent("Equal"),
+				},
+				Args: []ast.Expr{cloneExpr(x)},
+			}
+			// Create x.Equal(x).Xor(allTrue) to invert
+			call.Fun = &ast.SelectorExpr{
+				X:   xEqX,
+				Sel: ast.NewIdent("Xor"),
+			}
+			call.Args = []ast.Expr{allTrue}
+		}
+
+	case "IsInf":
+		// hwy.IsInf(x, sign) -> compare with +Inf and/or -Inf
+		// sign=0: either +Inf or -Inf, sign=1: +Inf only, sign=-1: -Inf only
+		if opInfo.Package == "special" && len(call.Args) >= 2 {
+			vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+			pkgName := getVecPackageName(ctx.target)
+			x := call.Args[0]
+			signArg := call.Args[1]
+
+			// Determine sign value (0, 1, or -1)
+			signVal := 0
+			if lit, ok := signArg.(*ast.BasicLit); ok && lit.Kind == token.INT {
+				if lit.Value == "1" {
+					signVal = 1
+				} else if lit.Value == "-1" {
+					signVal = -1
+				}
+			} else if unary, ok := signArg.(*ast.UnaryExpr); ok && unary.Op == token.SUB {
+				if lit, ok := unary.X.(*ast.BasicLit); ok && lit.Kind == token.INT && lit.Value == "1" {
+					signVal = -1
+				}
+			}
+
+			// Create math.Inf(1) with type conversion for float32
+			posInfExpr := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent("stdmath"),
+					Sel: ast.NewIdent("Inf"),
+				},
+				Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "1"}},
+			}
+			// For float32, wrap in type conversion
+			var posInfArg ast.Expr = posInfExpr
+			if ctx.elemType == "float32" {
+				posInfArg = &ast.CallExpr{
+					Fun:  ast.NewIdent("float32"),
+					Args: []ast.Expr{posInfExpr},
+				}
+			}
+
+			// Create pkg.Broadcast*(posInf) for +Inf
+			posInfCall := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent(pkgName),
+					Sel: ast.NewIdent("Broadcast" + vecTypeName),
+				},
+				Args: []ast.Expr{posInfArg},
+			}
+
+			// Create math.Inf(-1) with type conversion for float32
+			negInfExpr := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent("stdmath"),
+					Sel: ast.NewIdent("Inf"),
+				},
+				Args: []ast.Expr{
+					&ast.UnaryExpr{
+						Op: token.SUB,
+						X:  &ast.BasicLit{Kind: token.INT, Value: "1"},
+					},
+				},
+			}
+			// For float32, wrap in type conversion
+			var negInfArg ast.Expr = negInfExpr
+			if ctx.elemType == "float32" {
+				negInfArg = &ast.CallExpr{
+					Fun:  ast.NewIdent("float32"),
+					Args: []ast.Expr{negInfExpr},
+				}
+			}
+
+			// Create pkg.Broadcast*(negInf) for -Inf
+			negInfCall := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent(pkgName),
+					Sel: ast.NewIdent("Broadcast" + vecTypeName),
+				},
+				Args: []ast.Expr{negInfArg},
+			}
+
+			switch signVal {
+			case 1:
+				// Check +Inf only: x.Equal(posInf)
+				call.Fun = &ast.SelectorExpr{
+					X:   x,
+					Sel: ast.NewIdent("Equal"),
+				}
+				call.Args = []ast.Expr{posInfCall}
+			case -1:
+				// Check -Inf only: x.Equal(negInf)
+				call.Fun = &ast.SelectorExpr{
+					X:   x,
+					Sel: ast.NewIdent("Equal"),
+				}
+				call.Args = []ast.Expr{negInfCall}
+			default:
+				// Check either: x.Equal(posInf).Or(x.Equal(negInf))
+				posInfMask := &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   cloneExpr(x),
+						Sel: ast.NewIdent("Equal"),
+					},
+					Args: []ast.Expr{posInfCall},
+				}
+				negInfMask := &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   x,
+						Sel: ast.NewIdent("Equal"),
+					},
+					Args: []ast.Expr{negInfCall},
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   posInfMask,
+					Sel: ast.NewIdent("Or"),
+				}
+				call.Args = []ast.Expr{negInfMask}
+			}
+		}
+
 	default:
 		// Binary operations: hwy.Add(a, b) -> a.Add(b)
 		if len(call.Args) >= 2 {
@@ -265,7 +766,17 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 
 // transformToFunction converts hwy.Load(src) to archsimd.LoadFloat32x8Slice(src).
 func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *transformContext) {
-	selExpr := call.Fun.(*ast.SelectorExpr)
+	// Handle both SelectorExpr (hwy.Load) and IndexExpr (hwy.Zero[float32])
+	var selExpr *ast.SelectorExpr
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		selExpr = fun
+	case *ast.IndexExpr:
+		// For fallback generic functions like hwy.Zero[float32]()
+		selExpr = fun.X.(*ast.SelectorExpr)
+	default:
+		return
+	}
 
 	if ctx.target.Name == "Fallback" {
 		// For fallback, use the appropriate package
@@ -293,8 +804,16 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		fullName = fmt.Sprintf("Broadcast%s", vecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
 	case "Zero":
-		fullName = fmt.Sprintf("Zero%s", vecTypeName)
-		selExpr.X = ast.NewIdent(pkgName)
+		if opInfo.Package == "special" {
+			// archsimd doesn't have Zero*, use Broadcast with 0
+			fullName = fmt.Sprintf("Broadcast%s", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+			// Add 0 as argument
+			call.Args = []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}}
+		} else {
+			fullName = fmt.Sprintf("Zero%s", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+		}
 	case "MaskLoad":
 		fullName = fmt.Sprintf("MaskLoad%sSlice", vecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
@@ -369,20 +888,40 @@ func transformGenDecl(decl *ast.GenDecl, ctx *transformContext) {
 	}
 }
 
-// transformAssignStmt transforms assignments, particularly for loop stride calculations.
+// transformAssignStmt transforms assignments, particularly for loop stride calculations
+// and hoisting hwy.Set calls with constant values.
 func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
-	if ctx.loopInfo == nil {
-		return
-	}
-
 	// For fallback, don't replace NumLanes with a constant - keep it dynamic
 	if ctx.target.Name == "Fallback" {
 		return
 	}
 
-	// Look for v.NumElements() or similar and replace with constant
+	// Look for v.NumElements(), hwy.Lanes[T](), or similar and replace with constant
 	for i, rhs := range stmt.Rhs {
 		if call, ok := rhs.(*ast.CallExpr); ok {
+			// Check for hwy.Lanes[T]() - IndexExpr wrapping SelectorExpr
+			if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
+				if sel, ok := indexExpr.X.(*ast.SelectorExpr); ok {
+					if pkgIdent, ok := sel.X.(*ast.Ident); ok {
+						if pkgIdent.Name == "hwy" && (sel.Sel.Name == "Lanes" || sel.Sel.Name == "MaxLanes") {
+							// Replace with constant lane count
+							lanes := ctx.target.LanesFor(ctx.elemType)
+							stmt.Rhs[i] = &ast.BasicLit{
+								Kind:  token.INT,
+								Value: strconv.Itoa(lanes),
+							}
+							// Track the variable name
+							if len(stmt.Lhs) > i {
+								if ident, ok := stmt.Lhs[i].(*ast.Ident); ok {
+									ctx.lanesVars[ident.Name] = true
+								}
+							}
+							continue
+						}
+					}
+				}
+			}
+			// Check for v.NumElements() or v.NumLanes()
 			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 				if sel.Sel.Name == "NumElements" || sel.Sel.Name == "NumLanes" {
 					// Replace with constant lane count
@@ -391,10 +930,322 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 						Kind:  token.INT,
 						Value: strconv.Itoa(lanes),
 					}
+					// Track the variable name so we can recognize it in loop strides
+					if len(stmt.Lhs) > i {
+						if ident, ok := stmt.Lhs[i].(*ast.Ident); ok {
+							ctx.lanesVars[ident.Name] = true
+						}
+					}
+				}
+			}
+		}
+
+		// Check for make([]T, ...) calls
+		if call, ok := rhs.(*ast.CallExpr); ok {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "make" {
+				if len(call.Args) >= 2 {
+					// Check if first arg is []T (slice type)
+					if arrayType, ok := call.Args[0].(*ast.ArrayType); ok {
+						if arrayType.Len == nil { // It's a slice, not an array
+							// Specialize the element type (T -> float32/float64)
+							elemTypeStr := exprToString(arrayType.Elt)
+							specializedType := specializeType(elemTypeStr, ctx.typeParams, ctx.elemType)
+
+							// Check if second arg is a lanes variable or literal for stack array optimization
+							var lanesCount int
+							switch sizeArg := call.Args[1].(type) {
+							case *ast.Ident:
+								if ctx.lanesVars[sizeArg.Name] {
+									lanesCount = ctx.target.LanesFor(ctx.elemType)
+								}
+							case *ast.BasicLit:
+								if sizeArg.Kind == token.INT {
+									lanesCount, _ = strconv.Atoi(sizeArg.Value)
+								}
+							}
+
+							if lanesCount > 0 {
+								// Replace make([]T, lanes) with [lanes]T{} (zero-valued array literal)
+								stmt.Rhs[i] = &ast.CompositeLit{
+									Type: &ast.ArrayType{
+										Len: &ast.BasicLit{
+											Kind:  token.INT,
+											Value: strconv.Itoa(lanesCount),
+										},
+										Elt: parseTypeExpr(specializedType),
+									},
+								}
+								// Track this variable as a stack array
+								if len(stmt.Lhs) > i {
+									if ident, ok := stmt.Lhs[i].(*ast.Ident); ok {
+										ctx.stackArrayVars[ident.Name] = true
+									}
+								}
+							} else if elemTypeStr != specializedType {
+								// Just replace T with concrete type in make call
+								arrayType.Elt = parseTypeExpr(specializedType)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Check for hwy.Set[T](constant) calls that can be hoisted
+		if hoistedName := tryHoistSetCall(stmt, i, rhs, ctx); hoistedName != "" {
+			// Replace RHS with reference to hoisted variable
+			stmt.Rhs[i] = ast.NewIdent(hoistedName)
+		}
+	}
+}
+
+// tryHoistSetCall checks if an expression is a hwy.Set[T](constant) call
+// and if so, registers it for hoisting and returns the hoisted variable name.
+func tryHoistSetCall(stmt *ast.AssignStmt, rhsIndex int, rhs ast.Expr, ctx *transformContext) string {
+	call, ok := rhs.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+
+	// Check for hwy.Set[T](arg) pattern - could be IndexExpr wrapping SelectorExpr
+	var selExpr *ast.SelectorExpr
+	var typeParam string
+	switch fun := call.Fun.(type) {
+	case *ast.IndexExpr:
+		// hwy.Set[T](arg)
+		selExpr, ok = fun.X.(*ast.SelectorExpr)
+		if !ok {
+			return ""
+		}
+		// Extract the type parameter
+		if typeIdent, ok := fun.Index.(*ast.Ident); ok {
+			typeParam = typeIdent.Name
+		}
+	case *ast.SelectorExpr:
+		// hwy.Set(arg) - non-generic, shouldn't happen but handle it
+		selExpr = fun
+	default:
+		return ""
+	}
+
+	// Verify it's hwy.Set
+	ident, ok := selExpr.X.(*ast.Ident)
+	if !ok || ident.Name != "hwy" {
+		return ""
+	}
+	if selExpr.Sel.Name != "Set" {
+		return ""
+	}
+
+	// Determine the actual element type for this Set call
+	// If the type parameter is explicitly "int32", use that instead of ctx.elemType
+	actualElemType := ctx.elemType
+	if typeParam == "int32" {
+		actualElemType = "int32"
+	}
+
+	// Check if the argument is a constant (literal or type conversion of constant)
+	if len(call.Args) != 1 {
+		return ""
+	}
+	arg := call.Args[0]
+	constValue := extractConstantValue(arg, actualElemType, ctx)
+	if constValue == "" {
+		return ""
+	}
+
+	// Get the local variable name being assigned
+	if rhsIndex >= len(stmt.Lhs) {
+		return ""
+	}
+	localIdent, ok := stmt.Lhs[rhsIndex].(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	localVarName := localIdent.Name
+
+	// Generate unique hoisted variable name (include target to avoid conflicts)
+	// For int32 constants, we need separate versions for f32 and f64 functions
+	// because they have different lane counts
+	elemSuffix := "f32"
+	if ctx.elemType == "float64" {
+		elemSuffix = "f64"
+	}
+	if actualElemType == "int32" {
+		// Include parent element type in suffix for proper lane matching
+		if ctx.elemType == "float64" {
+			elemSuffix = "i32_f64"
+		} else {
+			elemSuffix = "i32_f32"
+		}
+	}
+	hoistedName := fmt.Sprintf("%s_%s_%s_%s", ctx.funcName, ctx.target.Name, localVarName, elemSuffix)
+
+	// Get vector type and broadcast function for this target
+	// For int32 types used in float operations, match the lane count of the parent element type
+	vecTypeName := getVectorTypeNameForInt(actualElemType, ctx.elemType, ctx.target)
+	pkgName := getVecPackageName(ctx.target)
+	broadcastFunc := fmt.Sprintf("%s.Broadcast%s", pkgName, vecTypeName)
+
+	// Register the hoisted constant
+	ctx.hoistedConsts[localVarName] = HoistedConst{
+		VarName:   hoistedName,
+		Value:     constValue,
+		VecType:   vecTypeName,
+		Broadcast: broadcastFunc,
+	}
+
+	return hoistedName
+}
+
+// extractConstantValue extracts the string representation of a constant value.
+// Returns empty string if the expression is not a constant.
+// The elemType parameter is used to add type conversion when needed.
+// The ctx is used to check if a variable is locally-defined (not a constant).
+func extractConstantValue(expr ast.Expr, elemType string, ctx *transformContext) string {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		// Literal like 1.0, 0.5, etc.
+		return e.Value
+	case *ast.UnaryExpr:
+		// Handle negative literals like -1.0
+		if e.Op == token.SUB {
+			if inner := extractConstantValueRaw(e.X, ctx); inner != "" {
+				return "-" + inner
+			}
+		}
+	case *ast.CallExpr:
+		// Type conversion like T(1.0) or float32(sigmoidC1)
+		// Get the inner value without adding another type conversion
+		if len(e.Args) == 1 {
+			inner := extractConstantValueRaw(e.Args[0], ctx)
+			if inner != "" {
+				// Add the target type conversion
+				return fmt.Sprintf("%s(%s)", elemType, inner)
+			}
+		}
+	case *ast.Ident:
+		// Variable reference - only hoist if it's NOT a local variable
+		name := e.Name
+		if ctx.localVars[name] {
+			// This is a locally-defined variable, not a package-level constant
+			return ""
+		}
+		if isLikelyConstant(name) {
+			// Add type conversion in case the var type differs from target type
+			return fmt.Sprintf("%s(%s)", elemType, name)
+		}
+	}
+	return ""
+}
+
+// extractConstantValueRaw extracts the raw constant value without type conversion.
+func extractConstantValueRaw(expr ast.Expr, ctx *transformContext) string {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		return e.Value
+	case *ast.UnaryExpr:
+		if e.Op == token.SUB {
+			if inner := extractConstantValueRaw(e.X, ctx); inner != "" {
+				return "-" + inner
+			}
+		}
+	case *ast.Ident:
+		name := e.Name
+		// Skip if it's a locally-defined variable
+		if ctx != nil && ctx.localVars[name] {
+			return ""
+		}
+		if isLikelyConstant(name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// isLikelyConstant checks if a name looks like a package-level constant.
+// This is a heuristic - constants typically have specific naming patterns.
+// Note: This function is only called AFTER checking that the name is not
+// in ctx.localVars, so locally-defined variables are already excluded.
+func isLikelyConstant(name string) bool {
+	// Skip very common short names that are almost never constants
+	skipNames := map[string]bool{
+		"i": true, "j": true, "k": true, "ii": true, "jj": true,
+		"x": true, "y": true, "z": true, "n": true, "m": true,
+		"a": true, "b": true, "c": true, "v": true, "w": true,
+		"err": true, "ok": true,
+	}
+	if skipNames[name] {
+		return false
+	}
+
+	// Constants typically:
+	// 1. Contain digits (e.g., sigmoidC1, ln2Hi, exp2bias, c1, c2)
+	// 2. Are all uppercase (e.g., PI, MAX_VALUE)
+	hasDigit := false
+	hasLower := false
+	hasUpper := false
+	for _, r := range name {
+		if r >= '0' && r <= '9' {
+			hasDigit = true
+		} else if r >= 'a' && r <= 'z' {
+			hasLower = true
+		} else if r >= 'A' && r <= 'Z' {
+			hasUpper = true
+		}
+	}
+
+	// Accept if it has a digit (like sigmoidC1, ln2Hi)
+	if hasDigit {
+		return true
+	}
+
+	// Accept if all uppercase (like PI, MAX_VALUE)
+	if hasUpper && !hasLower {
+		return true
+	}
+
+	// Reject short lowercase names that look like local variables
+	if len(name) <= 4 && hasLower {
+		return false
+	}
+
+	// Accept longer camelCase names that look like package-level constants
+	// (e.g., sigmoidScale, expBias, tanhClamp)
+	return len(name) > 4
+}
+
+// matchesLoopIterator checks if a for loop uses the given iterator name.
+// It checks both the init statement (for ii := 0) and the condition (ii < size).
+func matchesLoopIterator(forStmt *ast.ForStmt, iteratorName string) bool {
+	// Check init statement: for ii := 0
+	if forStmt.Init != nil {
+		if assign, ok := forStmt.Init.(*ast.AssignStmt); ok {
+			for _, lhs := range assign.Lhs {
+				if ident, ok := lhs.(*ast.Ident); ok && ident.Name == iteratorName {
+					return true
 				}
 			}
 		}
 	}
+
+	// Check condition: ii < size or ii+N <= size
+	if forStmt.Cond != nil {
+		if binExpr, ok := forStmt.Cond.(*ast.BinaryExpr); ok {
+			// Check LHS directly (ii < size)
+			if ident, ok := binExpr.X.(*ast.Ident); ok && ident.Name == iteratorName {
+				return true
+			}
+			// Check LHS if it's a binary expression (ii+N <= size)
+			if innerBin, ok := binExpr.X.(*ast.BinaryExpr); ok {
+				if ident, ok := innerBin.X.(*ast.Ident); ok && ident.Name == iteratorName {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // insertTailHandling adds scalar tail handling after the vectorized loop.
@@ -403,23 +1254,27 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 		return
 	}
 
-	// For fallback, don't add tail handling - the hwy API handles it
+	// For fallback, no tail handling needed - callers must provide inputs >= vector width
 	if target.Name == "Fallback" {
 		return
 	}
 
-	// Find the main loop
-	var loopIdx int
+	// Find the SIMD loop that uses loopInfo.Iterator as its iterator.
+	// This ensures we don't add tail handling after unrelated loops (e.g., scalar loops).
+	var loopIdx int = -1
 	var mainLoop *ast.ForStmt
 	for i, stmt := range body.List {
 		if forStmt, ok := stmt.(*ast.ForStmt); ok {
-			loopIdx = i
-			mainLoop = forStmt
-			break
+			// Check if this loop's iterator matches loopInfo.Iterator
+			if matchesLoopIterator(forStmt, loopInfo.Iterator) {
+				loopIdx = i
+				mainLoop = forStmt
+				break
+			}
 		}
 	}
 
-	if mainLoop == nil {
+	if mainLoop == nil || loopIdx < 0 {
 		return
 	}
 
@@ -441,21 +1296,26 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 		fallbackFuncName = fallbackFuncName + "_" + strings.Title(elemType)
 	}
 
-	// Build slice expressions for each parameter: param[ii:size]
+	// Build arguments for the fallback call
+	// For slice parameters: param[ii:size]
+	// For non-slice parameters: pass as-is
 	var callArgs []ast.Expr
 	for _, param := range params {
-		// Create param[ii:size] for slice parameters
 		if strings.HasPrefix(param.Type, "[]") {
+			// Create param[ii:size] for slice parameters
 			sliceExpr := &ast.SliceExpr{
 				X:    ast.NewIdent(param.Name),
 				Low:  ast.NewIdent(loopInfo.Iterator),
 				High: ast.NewIdent(loopInfo.End),
 			}
 			callArgs = append(callArgs, sliceExpr)
+		} else {
+			// Pass non-slice parameters as-is
+			callArgs = append(callArgs, ast.NewIdent(param.Name))
 		}
 	}
 
-	// Create the fallback call: BaseSigmoid_fallback(in[ii:size], out[ii:size])
+	// Create the fallback call: BasePoly2_fallback(x[ii:size], c0, c1, c2, result[ii:size])
 	fallbackCall := &ast.CallExpr{
 		Fun:  ast.NewIdent(fallbackFuncName),
 		Args: callArgs,
@@ -487,14 +1347,48 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 	body.List = newStmts
 }
 
+
 // specializeType replaces generic type parameters with concrete types.
+// For SIMD targets, also transforms hwy.Vec[T] to archsimd/asm vector types.
 func specializeType(typeStr string, typeParams []TypeParam, elemType string) string {
 	for _, tp := range typeParams {
+		// Replace hwy.Vec[T] with concrete vector type placeholder
+		// This will be further processed by specializeVecType
+		typeStr = strings.ReplaceAll(typeStr, "hwy.Vec["+tp.Name+"]", "hwy.Vec["+elemType+"]")
 		// Replace []T with []float32, etc.
 		typeStr = strings.ReplaceAll(typeStr, "[]"+tp.Name, "[]"+elemType)
 		typeStr = strings.ReplaceAll(typeStr, tp.Name, elemType)
 	}
 	return typeStr
+}
+
+// specializeVecType transforms hwy.Vec[elemType] to the concrete archsimd/asm type.
+// For example: hwy.Vec[float32] -> archsimd.Float32x8 (for AVX2)
+func specializeVecType(typeStr string, elemType string, target Target) string {
+	vecPlaceholder := "hwy.Vec[" + elemType + "]"
+	if !strings.Contains(typeStr, vecPlaceholder) {
+		return typeStr
+	}
+
+	if target.Name == "Fallback" {
+		// For fallback, keep hwy.Vec[float32] etc.
+		return typeStr
+	}
+
+	// Get the concrete vector type from target's TypeMap
+	vecTypeName, ok := target.TypeMap[elemType]
+	if !ok {
+		return typeStr
+	}
+
+	// Build fully qualified type: archsimd.Float32x8 or asm.Float32x4
+	pkgName := target.VecPackage
+	if pkgName == "" {
+		pkgName = "archsimd" // default
+	}
+	concreteType := pkgName + "." + vecTypeName
+
+	return strings.ReplaceAll(typeStr, vecPlaceholder, concreteType)
 }
 
 // getVectorTypeName returns the vector type name for archsimd functions.
@@ -514,6 +1408,27 @@ func getVectorTypeName(elemType string, target Target) string {
 	}
 }
 
+// getVectorTypeNameForInt returns the vector type name for int types used
+// in float operations. The lane count matches the parent element type.
+// For example, int32 in a float64 function needs Int32x2 (matching Float64x2 lanes).
+func getVectorTypeNameForInt(intType, parentElemType string, target Target) string {
+	if intType != "int32" && intType != "int64" {
+		// Non-integer type, use regular logic
+		return getVectorTypeName(intType, target)
+	}
+
+	// Match lanes to parent element type
+	lanes := target.LanesFor(parentElemType)
+	switch intType {
+	case "int32":
+		return fmt.Sprintf("Int32x%d", lanes)
+	case "int64":
+		return fmt.Sprintf("Int64x%d", lanes)
+	default:
+		return getVectorTypeName(intType, target)
+	}
+}
+
 // parseTypeExpr converts a type string back to an AST expression.
 func parseTypeExpr(typeStr string) ast.Expr {
 	// Handle slice types
@@ -530,6 +1445,29 @@ func parseTypeExpr(typeStr string) ast.Expr {
 		}
 	}
 
+	// Handle function types like func(archsimd.Float32x8) archsimd.Float32x8
+	if strings.HasPrefix(typeStr, "func(") {
+		return parseFuncType(typeStr)
+	}
+
+	// Handle generic types like hwy.Vec[float32] or Vec[float32]
+	if bracketIdx := strings.Index(typeStr, "["); bracketIdx >= 0 {
+		closeBracket := strings.LastIndex(typeStr, "]")
+		if closeBracket > bracketIdx {
+			baseType := typeStr[:bracketIdx]
+			typeArg := typeStr[bracketIdx+1 : closeBracket]
+
+			// Parse the base type (could be pkg.Type or just Type)
+			baseExpr := parseTypeExpr(baseType)
+
+			// Create IndexExpr for the generic instantiation
+			return &ast.IndexExpr{
+				X:     baseExpr,
+				Index: parseTypeExpr(typeArg),
+			}
+		}
+	}
+
 	// Handle qualified names (pkg.Type)
 	if idx := strings.Index(typeStr, "."); idx >= 0 {
 		return &ast.SelectorExpr{
@@ -540,6 +1478,100 @@ func parseTypeExpr(typeStr string) ast.Expr {
 
 	// Simple identifier
 	return ast.NewIdent(typeStr)
+}
+
+// parseFuncType parses a function type string like "func(archsimd.Float32x8) archsimd.Float32x8"
+func parseFuncType(typeStr string) *ast.FuncType {
+	// Find the matching closing paren for the params
+	parenDepth := 0
+	paramsEnd := -1
+	for i := 5; i < len(typeStr); i++ { // Start after "func("
+		switch typeStr[i] {
+		case '(':
+			parenDepth++
+		case ')':
+			if parenDepth == 0 {
+				paramsEnd = i
+				break
+			}
+			parenDepth--
+		}
+		if paramsEnd >= 0 {
+			break
+		}
+	}
+	if paramsEnd < 0 {
+		// Malformed, return empty func type
+		return &ast.FuncType{}
+	}
+
+	// Extract params string (between "func(" and ")")
+	paramsStr := typeStr[5:paramsEnd]
+
+	// Extract results string (after ")")
+	resultsStr := strings.TrimSpace(typeStr[paramsEnd+1:])
+	// Remove surrounding parens from results if present
+	if strings.HasPrefix(resultsStr, "(") && strings.HasSuffix(resultsStr, ")") {
+		resultsStr = resultsStr[1 : len(resultsStr)-1]
+	}
+
+	// Parse params
+	var params []*ast.Field
+	if paramsStr != "" {
+		for _, paramType := range splitTypeList(paramsStr) {
+			paramType = strings.TrimSpace(paramType)
+			if paramType != "" {
+				params = append(params, &ast.Field{
+					Type: parseTypeExpr(paramType),
+				})
+			}
+		}
+	}
+
+	// Parse results
+	var results []*ast.Field
+	if resultsStr != "" {
+		for _, resultType := range splitTypeList(resultsStr) {
+			resultType = strings.TrimSpace(resultType)
+			if resultType != "" {
+				results = append(results, &ast.Field{
+					Type: parseTypeExpr(resultType),
+				})
+			}
+		}
+	}
+
+	funcType := &ast.FuncType{
+		Params: &ast.FieldList{List: params},
+	}
+	if len(results) > 0 {
+		funcType.Results = &ast.FieldList{List: results}
+	}
+	return funcType
+}
+
+// splitTypeList splits a comma-separated type list, respecting nested brackets and parens.
+func splitTypeList(s string) []string {
+	var parts []string
+	depth := 0
+	start := 0
+	for i, c := range s {
+		switch c {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, s[start:i])
+				start = i + 1
+			}
+		}
+	}
+	if start < len(s) {
+		parts = append(parts, s[start:])
+	}
+	return parts
 }
 
 // cloneBlockStmt creates a deep copy of a block statement.
@@ -792,6 +1824,32 @@ func (pf *ParsedFunc) buildResults(elemType string) *ast.FieldList {
 	return fieldList
 }
 
+// buildResultsWithTarget builds the return type list with target-specific Vec types.
+func (pf *ParsedFunc) buildResultsWithTarget(elemType string, target Target) *ast.FieldList {
+	if len(pf.Returns) == 0 {
+		return nil
+	}
+
+	fieldList := &ast.FieldList{
+		List: make([]*ast.Field, 0, len(pf.Returns)),
+	}
+
+	for _, ret := range pf.Returns {
+		retType := specializeType(ret.Type, pf.TypeParams, elemType)
+		// Transform hwy.Vec[T] to concrete vector types for SIMD targets
+		retType = specializeVecType(retType, elemType, target)
+		field := &ast.Field{
+			Type: parseTypeExpr(retType),
+		}
+		if ret.Name != "" {
+			field.Names = []*ast.Ident{ast.NewIdent(ret.Name)}
+		}
+		fieldList.List = append(fieldList.List, field)
+	}
+
+	return fieldList
+}
+
 // postProcessSIMD walks the AST and replaces NumLanes() calls with constants
 // and transforms ReduceSum() calls to store+sum patterns.
 func postProcessSIMD(node ast.Node, ctx *transformContext) {
@@ -976,5 +2034,291 @@ func createReduceSumExpr(call *ast.CallExpr, lanes int, vecTypeName, elemType st
 	// Call the function literal immediately
 	return &ast.CallExpr{
 		Fun: funcLit,
+	}
+}
+
+// filterConditionalBlocks filters statements based on //hwy:if, //hwy:else, //hwy:endif directives.
+// It returns a new BlockStmt with only the statements that match the current target and element type.
+// The original AST is not modified.
+func filterConditionalBlocks(body *ast.BlockStmt, blocks []ConditionalBlock, fset *token.FileSet, targetName, elemType string) *ast.BlockStmt {
+	if body == nil || len(blocks) == 0 {
+		return body
+	}
+
+	// Create a new block with filtered statements
+	newBody := &ast.BlockStmt{
+		Lbrace: body.Lbrace,
+		Rbrace: body.Rbrace,
+	}
+
+	for _, stmt := range body.List {
+		// Get the line number of this statement
+		stmtLine := fset.Position(stmt.Pos()).Line
+
+		// Check if this statement is within any conditional block
+		included := true
+		for _, block := range blocks {
+			if stmtLine > block.StartLine && stmtLine < block.EndLine {
+				// Statement is within this conditional block
+				conditionMatches := block.ParsedCondition.Evaluate(targetName, elemType)
+
+				if block.ElseLine > 0 {
+					// Block has an else clause
+					if stmtLine < block.ElseLine {
+						// Statement is in the "if" part
+						included = conditionMatches
+					} else {
+						// Statement is in the "else" part
+						included = !conditionMatches
+					}
+				} else {
+					// No else clause - include only if condition matches
+					included = conditionMatches
+				}
+				break // Found the innermost containing block
+			}
+		}
+
+		if included {
+			// Recursively filter nested blocks (e.g., for statements, if statements)
+			filteredStmt := filterNestedConditionalBlocks(stmt, blocks, fset, targetName, elemType)
+			newBody.List = append(newBody.List, filteredStmt)
+		}
+	}
+
+	return newBody
+}
+
+// filterNestedConditionalBlocks recursively filters conditional blocks within nested statements.
+func filterNestedConditionalBlocks(stmt ast.Stmt, blocks []ConditionalBlock, fset *token.FileSet, targetName, elemType string) ast.Stmt {
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		return filterConditionalBlocks(s, blocks, fset, targetName, elemType)
+	case *ast.IfStmt:
+		newIf := *s // shallow copy
+		if s.Body != nil {
+			newIf.Body = filterConditionalBlocks(s.Body, blocks, fset, targetName, elemType)
+		}
+		if s.Else != nil {
+			newIf.Else = filterNestedConditionalBlocks(s.Else, blocks, fset, targetName, elemType)
+		}
+		return &newIf
+	case *ast.ForStmt:
+		newFor := *s // shallow copy
+		if s.Body != nil {
+			newFor.Body = filterConditionalBlocks(s.Body, blocks, fset, targetName, elemType)
+		}
+		return &newFor
+	case *ast.RangeStmt:
+		newRange := *s // shallow copy
+		if s.Body != nil {
+			newRange.Body = filterConditionalBlocks(s.Body, blocks, fset, targetName, elemType)
+		}
+		return &newRange
+	case *ast.SwitchStmt:
+		newSwitch := *s // shallow copy
+		if s.Body != nil {
+			newSwitch.Body = filterConditionalBlocks(s.Body, blocks, fset, targetName, elemType)
+		}
+		return &newSwitch
+	case *ast.TypeSwitchStmt:
+		newSwitch := *s // shallow copy
+		if s.Body != nil {
+			newSwitch.Body = filterConditionalBlocks(s.Body, blocks, fset, targetName, elemType)
+		}
+		return &newSwitch
+	case *ast.SelectStmt:
+		newSelect := *s // shallow copy
+		if s.Body != nil {
+			newSelect.Body = filterConditionalBlocks(s.Body, blocks, fset, targetName, elemType)
+		}
+		return &newSelect
+	default:
+		return stmt
+	}
+}
+
+// resolveTypeSpecificConst resolves type-specific constant references.
+// It supports two patterns:
+//
+// Pattern 1 (base name): "expC0" -> "expC0_f32" or "expC0_f64"
+//   - Looks up base name in typeSpecificConsts map
+//   - Resolves to variant matching target element type
+//
+// Pattern 2 (suffix swap): "expC0_f32" -> "expC0_f64"
+//   - Detects existing type suffix in the name
+//   - Swaps to suffix matching target element type
+//   - This allows base files to be compilable while hwygen adjusts for other types
+func resolveTypeSpecificConst(name string, ctx *transformContext) string {
+	targetSuffix := GetTypeSuffix(ctx.elemType)
+
+	// Pattern 1: Check if this is a base name with type-specific variants
+	if ctx.typeSpecificConsts != nil {
+		if tsc, ok := ctx.typeSpecificConsts[name]; ok {
+			if resolved, exists := tsc.Variants[targetSuffix]; exists {
+				return resolved
+			}
+			// Fallback: if no exact match, try f32 for Float16 (compute type)
+			if targetSuffix == "f16" {
+				if resolved, exists := tsc.Variants["f32"]; exists {
+					return resolved
+				}
+			}
+		}
+	}
+
+	// Pattern 2: Check if name already has a type suffix that needs swapping
+	for _, suffix := range typeSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			// Extract base name and swap suffix
+			baseName := strings.TrimSuffix(name, suffix)
+			newSuffix := "_" + targetSuffix
+
+			// Only swap if target suffix is different
+			if suffix != newSuffix {
+				return baseName + newSuffix
+			}
+			return name // Same suffix, no change needed
+		}
+	}
+
+	return name
+}
+
+// transformIdentifiers walks the AST and resolves type-specific constant references
+// and type parameter substitutions.
+// This handles both Pattern 1 (base name lookup) and Pattern 2 (suffix swapping).
+func transformIdentifiers(node ast.Node, ctx *transformContext) {
+	if node == nil {
+		return
+	}
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch expr := n.(type) {
+		case *ast.Ident:
+			// First check if it's a type parameter that should be replaced
+			for _, tp := range ctx.typeParams {
+				if expr.Name == tp.Name {
+					expr.Name = ctx.elemType
+					return true
+				}
+			}
+			// Otherwise check if it's a constant reference
+			resolved := resolveTypeSpecificConst(expr.Name, ctx)
+			if resolved != expr.Name {
+				expr.Name = resolved
+			}
+		case *ast.SelectorExpr:
+			// Rename math.X to stdmath.X to avoid package name conflict
+			// since generated files are in the math package but need stdlib math.
+			// Only rename if "math" actually refers to the stdlib "math" import,
+			// not a local variable or a different package aliased as "math".
+			if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "math" {
+				if importPath, isImport := ctx.imports[ident.Name]; isImport && importPath == "math" {
+					ident.Name = "stdmath"
+				}
+			}
+		}
+		return true
+	})
+}
+
+// convertStackArrayUsages converts stack array variable usages to slice expressions.
+// For example, if buf is a stack array, convert:
+//   - copy(buf, ...) -> copy(buf[:], ...)
+//   - archsimd.LoadFloat32x8Slice(buf) -> archsimd.LoadFloat32x8Slice(buf[:])
+//   - v.StoreSlice(buf) -> v.StoreSlice(buf[:])
+func convertStackArrayUsages(node ast.Node, ctx *transformContext) {
+	if node == nil {
+		return
+	}
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		// Check each argument
+		for i, arg := range call.Args {
+			// Skip if it's already a slice expression
+			if _, ok := arg.(*ast.SliceExpr); ok {
+				continue
+			}
+
+			// Check if the argument is a stack array variable
+			if ident, ok := arg.(*ast.Ident); ok {
+				if ctx.stackArrayVars[ident.Name] {
+					// Replace buf with buf[:]
+					call.Args[i] = &ast.SliceExpr{
+						X: ident,
+					}
+				}
+			}
+		}
+
+		return true
+	})
+}
+
+// transformFuncRefArgs transforms function references passed as arguments.
+// For example: BaseApply(in, out, math.BaseExpVec)
+// The math.BaseExpVec should become math.BaseExpVec_avx2 for SIMD targets,
+// or math.BaseExpVec_fallback for fallback targets.
+func transformFuncRefArgs(call *ast.CallExpr, ctx *transformContext) {
+	for i, arg := range call.Args {
+		// Handle package.BaseFuncName (SelectorExpr)
+		if sel, ok := arg.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok {
+				// Check if it's a contrib package with a Base* function
+				switch ident.Name {
+				case "math", "dot", "matvec", "algo":
+					if strings.HasPrefix(sel.Sel.Name, "Base") {
+						// Transform math.BaseExpVec to math.BaseExpVec_avx2
+						suffix := ctx.target.Suffix()
+						if ctx.elemType == "float64" {
+							suffix = suffix + "_Float64"
+						}
+						sel.Sel.Name = sel.Sel.Name + suffix
+					}
+				}
+			}
+		}
+
+		// Handle package.BaseFuncName[T] (IndexExpr wrapping SelectorExpr)
+		if indexExpr, ok := arg.(*ast.IndexExpr); ok {
+			if sel, ok := indexExpr.X.(*ast.SelectorExpr); ok {
+				if ident, ok := sel.X.(*ast.Ident); ok {
+					switch ident.Name {
+					case "math", "dot", "matvec", "algo":
+						if strings.HasPrefix(sel.Sel.Name, "Base") {
+							// Transform to non-generic version with suffix
+							suffix := ctx.target.Suffix()
+							if ctx.elemType == "float64" {
+								suffix = suffix + "_Float64"
+							}
+							// Replace the IndexExpr with just the SelectorExpr (strip type param)
+							sel.Sel.Name = sel.Sel.Name + suffix
+							call.Args[i] = sel
+						}
+					}
+				}
+			}
+		}
+
+		// Handle local BaseFuncName[T] (IndexExpr wrapping Ident)
+		if indexExpr, ok := arg.(*ast.IndexExpr); ok {
+			if ident, ok := indexExpr.X.(*ast.Ident); ok {
+				if strings.HasPrefix(ident.Name, "Base") {
+					// Transform BaseFunc[T] to BaseFunc_avx2
+					suffix := ctx.target.Suffix()
+					if ctx.elemType == "float64" {
+						suffix = suffix + "_Float64"
+					}
+					// Replace the IndexExpr with just the Ident
+					call.Args[i] = ast.NewIdent(ident.Name + suffix)
+				}
+			}
+		}
 	}
 }

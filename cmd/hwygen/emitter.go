@@ -15,13 +15,17 @@ import (
 
 // ContribPackages tracks which contrib subpackages are needed for imports.
 type ContribPackages struct {
-	Math   bool // contrib/math (Exp, Log, Sin, etc.)
-	Dot    bool // contrib/dot (Dot product)
-	MatVec bool // contrib/matvec (Matrix-vector ops)
-	Algo   bool // contrib/algo (Transform utilities)
+	Math      bool // contrib/math (Exp, Log, Sin, etc.)
+	Dot       bool // contrib/dot (Dot product)
+	MatVec    bool // contrib/matvec (Matrix-vector ops)
+	Algo      bool // contrib/algo (Transform utilities)
+	HwyPkg    bool // hwy package functions (Pow2, etc.) used in SIMD targets
+	StdMath   bool // stdlib math package (math.Inf, math.NaN, etc.)
+	HwyCore   bool // hwy core ops (Load, Store, Add, etc.) that need vec package
 }
 
 // detectContribPackages analyzes parsed functions to determine which contrib subpackages are used.
+// Returns the combined packages across all targets (for backward compatibility).
 func detectContribPackages(funcs []ParsedFunc, targets []Target) ContribPackages {
 	pkgs := ContribPackages{}
 
@@ -40,7 +44,74 @@ func detectContribPackages(funcs []ParsedFunc, targets []Target) ContribPackages
 					case "algo":
 						pkgs.Algo = true
 					}
+					// HwyPkg is set per-target in detectContribPackagesForTarget
 				}
+			}
+		}
+	}
+
+	return pkgs
+}
+
+// detectContribPackagesForTarget analyzes parsed functions to determine packages used for a specific target.
+func detectContribPackagesForTarget(funcs []ParsedFunc, target Target) ContribPackages {
+	pkgs := ContribPackages{}
+
+	// Known stdlib math functions that might be called
+	stdMathFuncs := map[string]bool{
+		"Inf": true, "NaN": true, "IsInf": true, "IsNaN": true,
+		"Floor": true, "Ceil": true, "Round": true, "Trunc": true,
+		"Sqrt": true, "Cbrt": true, "Abs": true,
+		"Sin": true, "Cos": true, "Tan": true,
+		"Asin": true, "Acos": true, "Atan": true, "Atan2": true,
+		"Sinh": true, "Cosh": true, "Tanh": true,
+		"Asinh": true, "Acosh": true, "Atanh": true,
+		"Exp": true, "Exp2": true, "Expm1": true,
+		"Log": true, "Log2": true, "Log10": true, "Log1p": true,
+		"Pow": true, "Hypot": true, "Erf": true, "Erfc": true,
+		"Copysign": true, "Signbit": true, "Max": true, "Min": true,
+	}
+
+	for _, pf := range funcs {
+		for _, call := range pf.HwyCalls {
+			// Check for stdmath FIRST - it's always stdlib, never in OpMap
+			if call.Package == "stdmath" {
+				pkgs.StdMath = true
+				continue
+			}
+			if opInfo, ok := target.OpMap[call.FuncName]; ok {
+				switch opInfo.SubPackage {
+				case "math":
+					pkgs.Math = true
+				case "dot":
+					pkgs.Dot = true
+				case "matvec":
+					pkgs.MatVec = true
+				case "algo":
+					pkgs.Algo = true
+				}
+				// Check if this is a hwy package function (like RoundToEven for AVX512) for this target
+				if opInfo.Package == "hwy" && !opInfo.IsMethod && target.Name != "Fallback" {
+					pkgs.HwyPkg = true
+				}
+				// Track if core hwy operations are used (Load, Store, Add, etc.)
+				if call.Package == "hwy" {
+					pkgs.HwyCore = true
+				}
+			} else if call.Package == "math" {
+				if stdMathFuncs[call.FuncName] {
+					// This is a stdlib math function call (not in OpMap)
+					pkgs.StdMath = true
+				} else if strings.HasPrefix(call.FuncName, "Base") {
+					// This is a contrib math function reference (like math.BaseExpVec)
+					pkgs.Math = true
+				}
+			} else if call.Package == "algo" && strings.HasPrefix(call.FuncName, "Base") {
+				// This is a contrib algo function reference (like algo.BaseApply)
+				pkgs.Algo = true
+			} else if call.Package == "hwy" {
+				// Other hwy package references
+				pkgs.HwyCore = true
 			}
 		}
 	}
@@ -96,8 +167,53 @@ func EmitDispatcher(funcs []ParsedFunc, targets []Target, pkgName, outPath strin
 	return nil
 }
 
+// hasVecInSignature checks if a function has hwy.Vec anywhere in its parameters or returns.
+// This includes:
+// - Direct Vec params: v hwy.Vec[T]
+// - Function params containing Vec: fn func(hwy.Vec[T]) hwy.Vec[T]
+// - Return types containing Vec
+//
+// Functions with Vec in their signature cannot have dispatch generated because:
+// - The concrete Vec type differs per architecture (archsimd.Float32x8 vs asm.Float32x4)
+// - Function type parameters containing Vec are especially problematic since you can't
+//   assign func(archsimd.Float32x8) to func(hwy.Vec[float32])
+func hasVecInSignature(pf ParsedFunc) bool {
+	for _, param := range pf.Params {
+		if strings.Contains(param.Type, "hwy.Vec[") || strings.Contains(param.Type, "Vec[") {
+			return true
+		}
+	}
+	for _, ret := range pf.Returns {
+		if strings.Contains(ret.Type, "hwy.Vec[") || strings.Contains(ret.Type, "Vec[") {
+			return true
+		}
+	}
+	return false
+}
+
+// filterDispatchableFuncs returns only functions that should have dispatch generated.
+// Functions with Vec anywhere in their signature are excluded because:
+// - Vec→Vec functions have dispatch at the Transform layer
+// - Function type parameters with Vec can't be unified across architectures
+func filterDispatchableFuncs(funcs []ParsedFunc) []ParsedFunc {
+	var result []ParsedFunc
+	for _, pf := range funcs {
+		if !hasVecInSignature(pf) {
+			result = append(result, pf)
+		}
+	}
+	return result
+}
+
 // emitArchDispatcher generates an architecture-specific dispatch file.
 func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bool, pkgName, outPath, arch string) error {
+	// Filter out Vec→Vec functions - they don't need dispatch
+	dispatchableFuncs := filterDispatchableFuncs(funcs)
+	if len(dispatchableFuncs) == 0 {
+		// No dispatchable functions, skip dispatch file generation
+		return nil
+	}
+
 	var buf bytes.Buffer
 
 	// Determine build tag based on architecture
@@ -115,16 +231,29 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 	fmt.Fprintf(&buf, "//go:build %s\n", buildTag)
 	fmt.Fprintf(&buf, "\npackage %s\n\n", pkgName)
 
+	// Check if any function has type params (needs hwy import for generic dispatcher)
+	hasGenerics := false
+	for _, pf := range dispatchableFuncs {
+		if len(pf.TypeParams) > 0 {
+			hasGenerics = true
+			break
+		}
+	}
+
 	// Imports - amd64 needs archsimd, arm64 doesn't
+	// hwy needed for generic dispatcher type constraint
 	fmt.Fprintf(&buf, "import (\n")
 	fmt.Fprintf(&buf, "\t\"os\"\n")
+	if hasGenerics {
+		fmt.Fprintf(&buf, "\n\t\"github.com/ajroetker/go-highway/hwy\"\n")
+	}
 	if arch == "amd64" {
 		fmt.Fprintf(&buf, "\t\"simd/archsimd\"\n")
 	}
 	fmt.Fprintf(&buf, ")\n\n")
 
 	// Declare function variables
-	for _, pf := range funcs {
+	for _, pf := range dispatchableFuncs {
 		var concreteTypes []string
 		if len(pf.TypeParams) > 0 {
 			concreteTypes = GetConcreteTypes(pf.TypeParams[0].Constraint)
@@ -139,6 +268,13 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 		}
 	}
 	fmt.Fprintf(&buf, "\n")
+
+	// Generate generic dispatcher functions for generic source functions
+	for _, pf := range dispatchableFuncs {
+		if len(pf.TypeParams) > 0 {
+			emitGenericDispatcher(&buf, pf)
+		}
+	}
 
 	// Generate init() function
 	fmt.Fprintf(&buf, "func init() {\n")
@@ -178,7 +314,7 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 		initFuncName := "init" + target.Name
 		fmt.Fprintf(&buf, "func %s() {\n", initFuncName)
 
-		for _, pf := range funcs {
+		for _, pf := range dispatchableFuncs {
 			var concreteTypes []string
 			if len(pf.TypeParams) > 0 {
 				concreteTypes = GetConcreteTypes(pf.TypeParams[0].Constraint)
@@ -202,7 +338,7 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 	// Generate fallback init function if needed
 	if hasFallback {
 		fmt.Fprintf(&buf, "func initFallback() {\n")
-		for _, pf := range funcs {
+		for _, pf := range dispatchableFuncs {
 			var concreteTypes []string
 			if len(pf.TypeParams) > 0 {
 				concreteTypes = GetConcreteTypes(pf.TypeParams[0].Constraint)
@@ -240,15 +376,36 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 
 // emitFallbackOnlyDispatcher generates a dispatch file with no build tags for fallback-only builds.
 func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) error {
+	// Filter out Vec→Vec functions - they don't need dispatch
+	dispatchableFuncs := filterDispatchableFuncs(funcs)
+	if len(dispatchableFuncs) == 0 {
+		// No dispatchable functions, skip dispatch file generation
+		return nil
+	}
+
 	var buf bytes.Buffer
+
+	// Check if any function has type params (needs hwy import for generic dispatcher)
+	hasGenerics := false
+	for _, pf := range dispatchableFuncs {
+		if len(pf.TypeParams) > 0 {
+			hasGenerics = true
+			break
+		}
+	}
 
 	fmt.Fprintf(&buf, "// Code generated by hwygen. DO NOT EDIT.\n")
 	fmt.Fprintf(&buf, "\npackage %s\n\n", pkgName)
 
-	fmt.Fprintf(&buf, "import \"os\"\n\n")
+	fmt.Fprintf(&buf, "import (\n")
+	fmt.Fprintf(&buf, "\t\"os\"\n")
+	if hasGenerics {
+		fmt.Fprintf(&buf, "\n\t\"github.com/ajroetker/go-highway/hwy\"\n")
+	}
+	fmt.Fprintf(&buf, ")\n\n")
 
 	// Declare function variables
-	for _, pf := range funcs {
+	for _, pf := range dispatchableFuncs {
 		var concreteTypes []string
 		if len(pf.TypeParams) > 0 {
 			concreteTypes = GetConcreteTypes(pf.TypeParams[0].Constraint)
@@ -264,6 +421,13 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) err
 	}
 	fmt.Fprintf(&buf, "\n")
 
+	// Generate generic dispatcher functions for generic source functions
+	for _, pf := range dispatchableFuncs {
+		if len(pf.TypeParams) > 0 {
+			emitGenericDispatcher(&buf, pf)
+		}
+	}
+
 	// Simple init that just uses fallback
 	fmt.Fprintf(&buf, "func init() {\n")
 	fmt.Fprintf(&buf, "\t_ = os.Getenv // silence unused import\n")
@@ -271,7 +435,7 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) err
 	fmt.Fprintf(&buf, "}\n\n")
 
 	fmt.Fprintf(&buf, "func initFallback() {\n")
-	for _, pf := range funcs {
+	for _, pf := range dispatchableFuncs {
 		var concreteTypes []string
 		if len(pf.TypeParams) > 0 {
 			concreteTypes = GetConcreteTypes(pf.TypeParams[0].Constraint)
@@ -305,7 +469,7 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) err
 }
 
 // EmitTarget generates a target-specific implementation file.
-func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath string, contribPkgs ContribPackages) error {
+func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath string, contribPkgs ContribPackages, hoistedConsts []HoistedConst) error {
 	var buf bytes.Buffer
 
 	// File header
@@ -319,12 +483,18 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 	imports := []string{}
 
 	if target.Name != "Fallback" {
-		// Import the appropriate vector package
-		switch target.VecPackage {
-		case "archsimd":
-			imports = append(imports, `"simd/archsimd"`)
-		case "asm":
-			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/asm"`)
+		// Import the appropriate vector package only if core hwy ops are used
+		if contribPkgs.HwyCore {
+			switch target.VecPackage {
+			case "archsimd":
+				imports = append(imports, `"simd/archsimd"`)
+			case "asm":
+				imports = append(imports, `"github.com/ajroetker/go-highway/hwy/asm"`)
+			}
+		}
+		// Add hwy package import if hwy functions are used (e.g., Pow2)
+		if contribPkgs.HwyPkg {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy"`)
 		}
 		// Add contrib subpackage imports for SIMD targets
 		if contribPkgs.Math {
@@ -339,11 +509,15 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 		if contribPkgs.Algo {
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/algo"`)
 		}
-		// Also add stdmath for scalar tail code that may use math functions
-		imports = append(imports, `stdmath "math"`)
+		// stdmath for scalar tail code - only if HwyCore uses math operations
+		if contribPkgs.StdMath || (contribPkgs.HwyCore && contribPkgs.Math) {
+			imports = append(imports, `stdmath "math"`)
+		}
 	} else {
-		// Fallback uses the hwy package directly for core ops
-		imports = append(imports, `"github.com/ajroetker/go-highway/hwy"`)
+		// Fallback uses the hwy package directly for core ops only if core ops are used
+		if contribPkgs.HwyCore {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy"`)
+		}
 		// Fallback also uses contrib subpackages for their portable generic implementations
 		if contribPkgs.Math {
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/math"`)
@@ -357,8 +531,10 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 		if contribPkgs.Algo {
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/algo"`)
 		}
-		// Also add stdmath for scalar tail code that may use math functions
-		imports = append(imports, `stdmath "math"`)
+		// Include stdmath if the source file uses stdlib math functions
+		if contribPkgs.StdMath {
+			imports = append(imports, `stdmath "math"`)
+		}
 	}
 
 	// Sort imports for consistency
@@ -370,6 +546,11 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 		fmt.Fprintf(&buf, "\t%s\n", imp)
 	}
 	fmt.Fprintf(&buf, ")\n\n")
+
+	// Emit hoisted constants as package-level pre-broadcasted vectors
+	if len(hoistedConsts) > 0 && target.Name != "Fallback" {
+		emitHoistedConstants(&buf, hoistedConsts)
+	}
 
 	// Print each function
 	fset := token.NewFileSet()
@@ -398,19 +579,140 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 	return nil
 }
 
+// emitHoistedConstants writes package-level var declarations for hoisted vector constants.
+func emitHoistedConstants(buf *bytes.Buffer, consts []HoistedConst) {
+	fmt.Fprintf(buf, "// Hoisted constants - pre-broadcasted at package init time\n")
+	fmt.Fprintf(buf, "var (\n")
+	for _, c := range consts {
+		// e.g., var BaseSigmoid_one_f32 = archsimd.BroadcastFloat32x8(1.0)
+		fmt.Fprintf(buf, "\t%s = %s(%s)\n", c.VarName, c.Broadcast, c.Value)
+	}
+	fmt.Fprintf(buf, ")\n\n")
+}
+
+// emitGenericDispatcher generates a generic function that dispatches based on type.
+// For a function like BaseMatMul[T hwy.Floats], this generates:
+//
+//	func MatMul[T hwy.Floats](a, b, c []T, m, n, k int) {
+//	    switch any(a).(type) {
+//	    case []float32:
+//	        MatMulFloat32(any(a).([]float32), any(b).([]float32), any(c).([]float32), m, n, k)
+//	    case []float64:
+//	        MatMulFloat64(any(a).([]float64), any(b).([]float64), any(c).([]float64), m, n, k)
+//	    }
+//	}
+func emitGenericDispatcher(buf *bytes.Buffer, pf ParsedFunc) {
+	genericName := buildGenericFuncName(pf.Name)
+	concreteTypes := GetConcreteTypes(pf.TypeParams[0].Constraint)
+
+	// Function signature with type parameter
+	fmt.Fprintf(buf, "// %s is the generic API that dispatches to the appropriate SIMD implementation.\n", genericName)
+	fmt.Fprintf(buf, "func %s[T %s](", genericName, pf.TypeParams[0].Constraint)
+
+	// Parameters
+	for i, param := range pf.Params {
+		if i > 0 {
+			fmt.Fprintf(buf, ", ")
+		}
+		fmt.Fprintf(buf, "%s %s", param.Name, param.Type)
+	}
+	fmt.Fprintf(buf, ")")
+
+	// Return type if any
+	if len(pf.Returns) > 0 {
+		if len(pf.Returns) == 1 && pf.Returns[0].Name == "" {
+			fmt.Fprintf(buf, " %s", pf.Returns[0].Type)
+		} else {
+			fmt.Fprintf(buf, " (")
+			for i, ret := range pf.Returns {
+				if i > 0 {
+					fmt.Fprintf(buf, ", ")
+				}
+				if ret.Name != "" {
+					fmt.Fprintf(buf, "%s ", ret.Name)
+				}
+				fmt.Fprintf(buf, "%s", ret.Type)
+			}
+			fmt.Fprintf(buf, ")")
+		}
+	}
+
+	fmt.Fprintf(buf, " {\n")
+
+	// Find the first slice parameter to use for type switch
+	var switchParam string
+	for _, param := range pf.Params {
+		if strings.HasPrefix(param.Type, "[]T") || param.Type == "[]T" {
+			switchParam = param.Name
+			break
+		}
+	}
+
+	if switchParam == "" {
+		// No slice parameter found, use first parameter
+		switchParam = pf.Params[0].Name
+	}
+
+	// Generate type switch
+	fmt.Fprintf(buf, "\tswitch any(%s).(type) {\n", switchParam)
+
+	for _, elemType := range concreteTypes {
+		dispatchName := buildDispatchFuncName(pf.Name, elemType)
+		sliceType := "[]" + elemType
+
+		fmt.Fprintf(buf, "\tcase %s:\n", sliceType)
+
+		// Build the call with type assertions
+		if len(pf.Returns) > 0 {
+			fmt.Fprintf(buf, "\t\treturn ")
+		} else {
+			fmt.Fprintf(buf, "\t\t")
+		}
+		fmt.Fprintf(buf, "%s(", dispatchName)
+
+		for i, param := range pf.Params {
+			if i > 0 {
+				fmt.Fprintf(buf, ", ")
+			}
+			// Check if this parameter needs type assertion
+			if strings.HasPrefix(param.Type, "[]T") || param.Type == "[]T" {
+				fmt.Fprintf(buf, "any(%s).(%s)", param.Name, sliceType)
+			} else if param.Type == "T" {
+				fmt.Fprintf(buf, "any(%s).(%s)", param.Name, elemType)
+			} else {
+				fmt.Fprintf(buf, "%s", param.Name)
+			}
+		}
+		fmt.Fprintf(buf, ")\n")
+	}
+
+	fmt.Fprintf(buf, "\t}\n")
+
+	// Add default return if function has return values
+	if len(pf.Returns) > 0 {
+		fmt.Fprintf(buf, "\tpanic(\"unreachable\")\n")
+	}
+
+	fmt.Fprintf(buf, "}\n\n")
+}
+
 // buildDispatchFuncName creates the public function name for the dispatcher.
-// BaseSigmoid[float32] -> Sigmoid
+// BaseSigmoid[float32] -> SigmoidFloat32
 // BaseSigmoid[float64] -> SigmoidFloat64
 func buildDispatchFuncName(baseName, elemType string) string {
 	// Remove "Base" prefix
 	name := strings.TrimPrefix(baseName, "Base")
 
-	// Add type suffix for non-float32 types
-	if elemType != "float32" {
-		name = name + strings.Title(elemType)
-	}
+	// Always add type suffix for explicit dispatch functions
+	name = name + strings.Title(elemType)
 
 	return name
+}
+
+// buildGenericFuncName creates the generic function name (without type suffix).
+// BaseSigmoid -> Sigmoid
+func buildGenericFuncName(baseName string) string {
+	return strings.TrimPrefix(baseName, "Base")
 }
 
 // buildFuncSignature builds a function signature string from ParsedFunc.

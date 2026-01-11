@@ -222,6 +222,27 @@ func ge_f32_neon(a, b, result, len unsafe.Pointer)
 func ge_i32_neon(a, b, result, len unsafe.Pointer)
 
 //go:noescape
+func eq_f64_neon(a, b, result, len unsafe.Pointer)
+
+//go:noescape
+func gt_f64_neon(a, b, result, len unsafe.Pointer)
+
+//go:noescape
+func ge_f64_neon(a, b, result, len unsafe.Pointer)
+
+//go:noescape
+func lt_f64_neon(a, b, result, len unsafe.Pointer)
+
+//go:noescape
+func le_f64_neon(a, b, result, len unsafe.Pointer)
+
+//go:noescape
+func pow2_f32_neon(k, result, len unsafe.Pointer)
+
+//go:noescape
+func pow2_f64_neon(k, result, len unsafe.Pointer)
+
+//go:noescape
 func and_i32_neon(a, b, result, len unsafe.Pointer)
 
 //go:noescape

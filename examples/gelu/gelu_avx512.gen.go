@@ -9,27 +9,39 @@ import (
 	"simd/archsimd"
 )
 
+// Hoisted constants - pre-broadcasted at package init time
+var (
+	BaseGELU_AVX512_vInvSqrt2_f64    = archsimd.BroadcastFloat64x8(float64(0.7071067811865476))
+	BaseGELUApprox_AVX512_vCoeff_f32 = archsimd.BroadcastFloat32x16(float32(1.702))
+	BaseGELUApprox_AVX512_vCoeff_f64 = archsimd.BroadcastFloat64x8(float64(1.702))
+	BaseGELU_AVX512_vOne_f32         = archsimd.BroadcastFloat32x16(float32(1.0))
+	BaseGELU_AVX512_vInvSqrt2_f32    = archsimd.BroadcastFloat32x16(float32(0.7071067811865476))
+	BaseGELU_AVX512_vHalf_f32        = archsimd.BroadcastFloat32x16(float32(0.5))
+	BaseGELU_AVX512_vHalf_f64        = archsimd.BroadcastFloat64x8(float64(0.5))
+	BaseGELU_AVX512_vOne_f64         = archsimd.BroadcastFloat64x8(float64(1.0))
+)
+
 func BaseGELU_avx512(input []float32, output []float32) {
 	size := min(len(input), len(output))
 	if size == 0 {
 		return
 	}
-	vHalf := archsimd.BroadcastFloat32x16(float32(0.5))
-	vOne := archsimd.BroadcastFloat32x16(float32(1.0))
-	vInvSqrt2 := archsimd.BroadcastFloat32x16(float32(0.7071067811865476))
+	vHalf := BaseGELU_AVX512_vHalf_f32
+	vOne := BaseGELU_AVX512_vOne_f32
+	vInvSqrt2 := BaseGELU_AVX512_vInvSqrt2_f32
 	ii := 0
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
 		if remaining >= 16 {
 			x := archsimd.LoadFloat32x16Slice(input[ii:])
 			xScaled := x.Mul(vInvSqrt2)
-			erfX := math.Erf_AVX512_F32x16(xScaled)
+			erfX := math.BaseErfVec_avx512(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+16 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				output[i] = float32(x * 0.5 * (1.0 + stdmath.Erf(x*0.7071067811865476)))
 			}
@@ -45,22 +57,22 @@ func BaseGELU_avx512_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vHalf := archsimd.BroadcastFloat64x8(float64(0.5))
-	vOne := archsimd.BroadcastFloat64x8(float64(1.0))
-	vInvSqrt2 := archsimd.BroadcastFloat64x8(float64(0.7071067811865476))
+	vHalf := BaseGELU_AVX512_vHalf_f64
+	vOne := BaseGELU_AVX512_vOne_f64
+	vInvSqrt2 := BaseGELU_AVX512_vInvSqrt2_f64
 	ii := 0
 	for ; ii+8 <= size; ii += 8 {
 		remaining := size - ii
 		if remaining >= 8 {
 			x := archsimd.LoadFloat64x8Slice(input[ii:])
 			xScaled := x.Mul(vInvSqrt2)
-			erfX := math.Erf_AVX512_F64x8(xScaled)
+			erfX := math.BaseErfVec_avx512_Float64(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+8 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				output[i] = float64(x * 0.5 * (1.0 + stdmath.Erf(x*0.7071067811865476)))
 			}
@@ -76,18 +88,18 @@ func BaseGELUApprox_avx512(input []float32, output []float32) {
 	if size == 0 {
 		return
 	}
-	vCoeff := archsimd.BroadcastFloat32x16(float32(1.702))
+	vCoeff := BaseGELUApprox_AVX512_vCoeff_f32
 	ii := 0
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
 		if remaining >= 16 {
 			x := archsimd.LoadFloat32x16Slice(input[ii:])
 			xScaled := x.Mul(vCoeff)
-			sigmoidX := math.Sigmoid_AVX512_F32x16(xScaled)
+			sigmoidX := math.BaseSigmoidVec_avx512(xScaled)
 			result := x.Mul(sigmoidX)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+16 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				sigmoid := 1.0 / (1.0 + stdmath.Exp(-1.702*x))
 				output[i] = float32(x * sigmoid)
@@ -104,18 +116,18 @@ func BaseGELUApprox_avx512_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vCoeff := archsimd.BroadcastFloat64x8(float64(1.702))
+	vCoeff := BaseGELUApprox_AVX512_vCoeff_f64
 	ii := 0
 	for ; ii+8 <= size; ii += 8 {
 		remaining := size - ii
 		if remaining >= 8 {
 			x := archsimd.LoadFloat64x8Slice(input[ii:])
 			xScaled := x.Mul(vCoeff)
-			sigmoidX := math.Sigmoid_AVX512_F64x8(xScaled)
+			sigmoidX := math.BaseSigmoidVec_avx512_Float64(xScaled)
 			result := x.Mul(sigmoidX)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+8 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				sigmoid := 1.0 / (1.0 + stdmath.Exp(-1.702*x))
 				output[i] = float64(x * sigmoid)

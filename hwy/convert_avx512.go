@@ -150,3 +150,50 @@ func NearestInt_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	}
 	return archsimd.LoadFloat64x8Slice(data[:])
 }
+
+// RoundToEven_AVX512_F32x16 rounds to nearest even integer using SIMD conversion.
+// This uses ConvertToInt32 which does banker's rounding, then converts back.
+// Note: This may not handle values outside int32 range correctly.
+func RoundToEven_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
+	return v.ConvertToInt32().ConvertToFloat32()
+}
+
+// RoundToEven_AVX512_F64x8 rounds to nearest even integer using SIMD conversion.
+// This uses ConvertToInt64 which does banker's rounding, then converts back.
+// Note: This may not handle values outside int64 range correctly.
+func RoundToEven_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
+	return v.ConvertToInt64().ConvertToFloat64()
+}
+
+// Pow2_AVX512_F32x16 computes 2^k for each lane using IEEE 754 bit manipulation.
+// Takes Int32x16 exponents and returns Float32x16 results.
+func Pow2_AVX512_F32x16(k archsimd.Int32x16) archsimd.Float32x16 {
+	// For float32: 2^k = ((k + 127) << 23) as float32 bits
+	bias := archsimd.BroadcastInt32x16(127)
+	biased := k.Add(bias)
+	expBits := biased.ShiftAllLeft(23)
+	return expBits.AsFloat32x16()
+}
+
+// Pow2_AVX512_F64x8 computes 2^k for each lane using IEEE 754 bit manipulation.
+// Takes Int32x8 exponents and returns Float64x8 results.
+// AVX-512 has proper 64-bit integer support.
+func Pow2_AVX512_F64x8(k archsimd.Int32x8) archsimd.Float64x8 {
+	// For float64: 2^k = ((k + 1023) << 52) as float64 bits
+	// Use scalar fallback for now as AVX-512 Int64x8 shift may need verification
+	var kData [8]int32
+	var result [8]float64
+	k.StoreSlice(kData[:])
+	for i := 0; i < 8; i++ {
+		ki := kData[i]
+		if ki < -1022 {
+			result[i] = 0
+		} else if ki > 1023 {
+			result[i] = math.Inf(1)
+		} else {
+			bits := uint64(int64(ki)+1023) << 52
+			result[i] = math.Float64frombits(bits)
+		}
+	}
+	return archsimd.LoadFloat64x8Slice(result[:])
+}

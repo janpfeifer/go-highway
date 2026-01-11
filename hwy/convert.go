@@ -168,3 +168,105 @@ func BitCastF64ToU64(v Vec[float64]) Vec[uint64] {
 	}
 	return Vec[uint64]{data: result}
 }
+
+// ============================================================================
+// IEEE 754 Exponent Manipulation (for range reduction in math functions)
+// ============================================================================
+
+// Pow2[T Floats](k) computes 2^k for integer k values via IEEE 754 bit manipulation.
+// This is essential for reconstructing exp(x) = 2^k * exp(r) after range reduction.
+// k should be in the valid exponent range: [-126, 127] for float32, [-1022, 1023] for float64.
+func Pow2[T Floats](k Vec[int32]) Vec[T] {
+	result := make([]T, len(k.data))
+	// Determine type at runtime
+	var zero T
+	switch any(zero).(type) {
+	case float32:
+		// float32: exponent in bits [23:30], bias = 127
+		// 2^k = bits (k+127) << 23 interpreted as float32
+		for i, ki := range k.data {
+			var f float32
+			if ki < -126 {
+				f = 0 // underflow
+			} else if ki > 127 {
+				f = float32(math.Inf(1)) // overflow
+			} else {
+				bits := uint32(ki+127) << 23
+				f = math.Float32frombits(bits)
+			}
+			result[i] = any(f).(T)
+		}
+	case float64:
+		// float64: exponent in bits [52:62], bias = 1023
+		// 2^k = bits (k+1023) << 52 interpreted as float64
+		for i, ki := range k.data {
+			var f float64
+			if ki < -1022 {
+				f = 0 // underflow
+			} else if ki > 1023 {
+				f = math.Inf(1) // overflow
+			} else {
+				bits := uint64(int64(ki)+1023) << 52
+				f = math.Float64frombits(bits)
+			}
+			result[i] = any(f).(T)
+		}
+	}
+	return Vec[T]{data: result}
+}
+
+// GetExponent[T Floats](v) extracts the unbiased exponent from IEEE 754 floats.
+// Returns the integer exponent such that v ≈ 2^exp * mantissa, where 1 <= mantissa < 2.
+// For denormals and special values, behavior is implementation-defined.
+func GetExponent[T Floats](v Vec[T]) Vec[int32] {
+	result := make([]int32, len(v.data))
+	var zero T
+	switch any(zero).(type) {
+	case float32:
+		for i, x := range v.data {
+			bits := math.Float32bits(any(x).(float32))
+			exp := int32((bits >> 23) & 0xFF)
+			if exp == 0 || exp == 255 {
+				result[i] = 0 // denormal or special
+			} else {
+				result[i] = exp - 127
+			}
+		}
+	case float64:
+		for i, x := range v.data {
+			bits := math.Float64bits(any(x).(float64))
+			exp := int32((bits >> 52) & 0x7FF)
+			if exp == 0 || exp == 2047 {
+				result[i] = 0 // denormal or special
+			} else {
+				result[i] = exp - 1023
+			}
+		}
+	}
+	return Vec[int32]{data: result}
+}
+
+// GetMantissa[T Floats](v) extracts the mantissa with exponent normalized to [1, 2).
+// Returns a value m such that v = 2^exp * m, where 1 <= m < 2.
+// For denormals and special values, behavior is implementation-defined.
+func GetMantissa[T Floats](v Vec[T]) Vec[T] {
+	result := make([]T, len(v.data))
+	var zero T
+	switch any(zero).(type) {
+	case float32:
+		for i, x := range v.data {
+			bits := math.Float32bits(any(x).(float32))
+			// Clear exponent, set to 127 (2^0 = 1)
+			mantissa := (bits & 0x807FFFFF) | 0x3F800000
+			result[i] = any(math.Float32frombits(mantissa)).(T)
+		}
+	case float64:
+		for i, x := range v.data {
+			bits := math.Float64bits(any(x).(float64))
+			// Clear exponent, set to 1023 (2^0 = 1)
+			mantissa := (bits & 0x800FFFFFFFFFFFFF) | 0x3FF0000000000000
+			result[i] = any(math.Float64frombits(mantissa)).(T)
+		}
+	}
+	return Vec[T]{data: result}
+}

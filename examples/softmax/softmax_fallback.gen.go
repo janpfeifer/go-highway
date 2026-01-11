@@ -3,7 +3,7 @@
 package softmax
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/algo"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
 	stdmath "math"
 )
@@ -19,36 +19,18 @@ func BaseSoftmax_fallback(input []float32, output []float32) {
 			maxVal = input[i]
 		}
 	}
-	vMax := hwy.Set(maxVal)
-	var expSum float32
-	for ii := 0; ii < size; ii += vMax.NumLanes() {
-		remaining := size - ii
-		if remaining >= vMax.NumLanes() {
-			x := hwy.Load(input[ii:])
-			xShifted := hwy.Sub(x, vMax)
-			expX := math.Exp(xShifted)
-			hwy.Store(expX, output[ii:])
-			expSum += hwy.ReduceSum(expX)
-		} else {
-			for i := ii; i < size; i++ {
-				exp := float32(stdmath.Exp(float64(input[i] - maxVal)))
-				output[i] = exp
-				expSum += exp
-			}
-		}
+	shifted := make([]float32, size)
+	for i := 0; i < size; i++ {
+		shifted[i] = input[i] - maxVal
 	}
-	vSum := hwy.Set(expSum)
-	for ii := 0; ii < size; ii += vSum.NumLanes() {
-		remaining := size - ii
-		if remaining >= vSum.NumLanes() {
-			expX := hwy.Load(output[ii:])
-			normalized := hwy.Div(expX, vSum)
-			hwy.Store(normalized, output[ii:])
-		} else {
-			for i := ii; i < size; i++ {
-				output[i] = output[i] / expSum
-			}
-		}
+	algo.BaseApply_fallback(shifted, output, math.BaseExpVec_fallback)
+	var expSum float32
+	for i := 0; i < size; i++ {
+		expSum += output[i]
+	}
+	invSum := float32(1.0) / expSum
+	for i := 0; i < size; i++ {
+		output[i] = output[i] * invSum
 	}
 }
 
@@ -63,35 +45,61 @@ func BaseSoftmax_fallback_Float64(input []float64, output []float64) {
 			maxVal = input[i]
 		}
 	}
-	vMax := hwy.Set(maxVal)
+	shifted := make([]float64, size)
+	for i := 0; i < size; i++ {
+		shifted[i] = input[i] - maxVal
+	}
+	algo.BaseApply_fallback_Float64(shifted, output, math.BaseExpVec_fallback_Float64)
 	var expSum float64
-	for ii := 0; ii < size; ii += vMax.NumLanes() {
-		remaining := size - ii
-		if remaining >= vMax.NumLanes() {
-			x := hwy.Load(input[ii:])
-			xShifted := hwy.Sub(x, vMax)
-			expX := math.Exp(xShifted)
-			hwy.Store(expX, output[ii:])
-			expSum += hwy.ReduceSum(expX)
-		} else {
-			for i := ii; i < size; i++ {
-				exp := float64(stdmath.Exp(float64(input[i] - maxVal)))
-				output[i] = exp
-				expSum += exp
-			}
+	for i := 0; i < size; i++ {
+		expSum += output[i]
+	}
+	invSum := float64(1.0) / expSum
+	for i := 0; i < size; i++ {
+		output[i] = output[i] * invSum
+	}
+}
+
+func BaseSoftmaxScalar_fallback(input []float32, output []float32) {
+	size := min(len(input), len(output))
+	if size == 0 {
+		return
+	}
+	maxVal := input[0]
+	for i := 1; i < size; i++ {
+		if input[i] > maxVal {
+			maxVal = input[i]
 		}
 	}
-	vSum := hwy.Set(expSum)
-	for ii := 0; ii < size; ii += vSum.NumLanes() {
-		remaining := size - ii
-		if remaining >= vSum.NumLanes() {
-			expX := hwy.Load(output[ii:])
-			normalized := hwy.Div(expX, vSum)
-			hwy.Store(normalized, output[ii:])
-		} else {
-			for i := ii; i < size; i++ {
-				output[i] = output[i] / expSum
-			}
+	var expSum float32
+	for i := 0; i < size; i++ {
+		output[i] = float32(stdmath.Exp(float64(input[i] - maxVal)))
+		expSum += output[i]
+	}
+	invSum := float32(1.0) / expSum
+	for i := 0; i < size; i++ {
+		output[i] = output[i] * invSum
+	}
+}
+
+func BaseSoftmaxScalar_fallback_Float64(input []float64, output []float64) {
+	size := min(len(input), len(output))
+	if size == 0 {
+		return
+	}
+	maxVal := input[0]
+	for i := 1; i < size; i++ {
+		if input[i] > maxVal {
+			maxVal = input[i]
 		}
+	}
+	var expSum float64
+	for i := 0; i < size; i++ {
+		output[i] = float64(stdmath.Exp(float64(input[i] - maxVal)))
+		expSum += output[i]
+	}
+	invSum := float64(1.0) / expSum
+	for i := 0; i < size; i++ {
+		output[i] = output[i] * invSum
 	}
 }

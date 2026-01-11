@@ -2166,6 +2166,398 @@ void ge_i32_neon(int *a, int *b, int *result, long *len) {
 }
 
 // ============================================================================
+// Float64 Comparison Operations (2 lanes per 128-bit vector)
+// ============================================================================
+
+// Equal float64: result[i] = (a[i] == b[i]) ? 0xFFFFFFFFFFFFFFFF : 0
+void eq_f64_neon(double *a, double *b, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    // Process 8 doubles at a time (4 vectors)
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vceqq_f64(a0, b0)));
+        vst1q_s64(result + i + 2, vreinterpretq_s64_u64(vceqq_f64(a1, b1)));
+        vst1q_s64(result + i + 4, vreinterpretq_s64_u64(vceqq_f64(a2, b2)));
+        vst1q_s64(result + i + 6, vreinterpretq_s64_u64(vceqq_f64(a3, b3)));
+    }
+
+    // Process 2 doubles at a time
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vceqq_f64(av, bv)));
+    }
+
+    // Scalar remainder
+    for (; i < n; i++) {
+        result[i] = (a[i] == b[i]) ? -1L : 0L;
+    }
+}
+
+// Greater than float64: result[i] = (a[i] > b[i]) ? 0xFFFFFFFFFFFFFFFF : 0
+void gt_f64_neon(double *a, double *b, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcgtq_f64(a0, b0)));
+        vst1q_s64(result + i + 2, vreinterpretq_s64_u64(vcgtq_f64(a1, b1)));
+        vst1q_s64(result + i + 4, vreinterpretq_s64_u64(vcgtq_f64(a2, b2)));
+        vst1q_s64(result + i + 6, vreinterpretq_s64_u64(vcgtq_f64(a3, b3)));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcgtq_f64(av, bv)));
+    }
+
+    for (; i < n; i++) {
+        result[i] = (a[i] > b[i]) ? -1L : 0L;
+    }
+}
+
+// Greater than or equal float64: result[i] = (a[i] >= b[i]) ? 0xFFFFFFFFFFFFFFFF : 0
+void ge_f64_neon(double *a, double *b, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcgeq_f64(a0, b0)));
+        vst1q_s64(result + i + 2, vreinterpretq_s64_u64(vcgeq_f64(a1, b1)));
+        vst1q_s64(result + i + 4, vreinterpretq_s64_u64(vcgeq_f64(a2, b2)));
+        vst1q_s64(result + i + 6, vreinterpretq_s64_u64(vcgeq_f64(a3, b3)));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcgeq_f64(av, bv)));
+    }
+
+    for (; i < n; i++) {
+        result[i] = (a[i] >= b[i]) ? -1L : 0L;
+    }
+}
+
+// Less than float64: result[i] = (a[i] < b[i]) ? 0xFFFFFFFFFFFFFFFF : 0
+void lt_f64_neon(double *a, double *b, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcltq_f64(a0, b0)));
+        vst1q_s64(result + i + 2, vreinterpretq_s64_u64(vcltq_f64(a1, b1)));
+        vst1q_s64(result + i + 4, vreinterpretq_s64_u64(vcltq_f64(a2, b2)));
+        vst1q_s64(result + i + 6, vreinterpretq_s64_u64(vcltq_f64(a3, b3)));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcltq_f64(av, bv)));
+    }
+
+    for (; i < n; i++) {
+        result[i] = (a[i] < b[i]) ? -1L : 0L;
+    }
+}
+
+// Less than or equal float64: result[i] = (a[i] <= b[i]) ? 0xFFFFFFFFFFFFFFFF : 0
+void le_f64_neon(double *a, double *b, long *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    for (; i + 7 < n; i += 8) {
+        float64x2_t a0 = vld1q_f64(a + i);
+        float64x2_t a1 = vld1q_f64(a + i + 2);
+        float64x2_t a2 = vld1q_f64(a + i + 4);
+        float64x2_t a3 = vld1q_f64(a + i + 6);
+
+        float64x2_t b0 = vld1q_f64(b + i);
+        float64x2_t b1 = vld1q_f64(b + i + 2);
+        float64x2_t b2 = vld1q_f64(b + i + 4);
+        float64x2_t b3 = vld1q_f64(b + i + 6);
+
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcleq_f64(a0, b0)));
+        vst1q_s64(result + i + 2, vreinterpretq_s64_u64(vcleq_f64(a1, b1)));
+        vst1q_s64(result + i + 4, vreinterpretq_s64_u64(vcleq_f64(a2, b2)));
+        vst1q_s64(result + i + 6, vreinterpretq_s64_u64(vcleq_f64(a3, b3)));
+    }
+
+    for (; i + 1 < n; i += 2) {
+        float64x2_t av = vld1q_f64(a + i);
+        float64x2_t bv = vld1q_f64(b + i);
+        vst1q_s64(result + i, vreinterpretq_s64_u64(vcleq_f64(av, bv)));
+    }
+
+    for (; i < n; i++) {
+        result[i] = (a[i] <= b[i]) ? -1L : 0L;
+    }
+}
+
+// ============================================================================
+// Power of 2 Operations (for exp/log implementations)
+// ============================================================================
+
+// Pow2F32: Compute 2^k for int32 k, result as float32
+// Uses IEEE 754: 2^k = ((k + 127) << 23) as float32 bits
+// Handles overflow (k > 127) -> +Inf, underflow (k < -126) -> 0
+void pow2_f32_neon(int *k, float *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    int32x4_t bias = vdupq_n_s32(127);
+    int32x4_t min_exp = vdupq_n_s32(-126);
+    int32x4_t max_exp = vdupq_n_s32(127);
+    float32x4_t zero = vdupq_n_f32(0.0f);
+    float32x4_t inf = vdupq_n_f32(1.0f / 0.0f);
+
+    // Process 16 elements at a time
+    for (; i + 15 < n; i += 16) {
+        int32x4_t k0 = vld1q_s32(k + i);
+        int32x4_t k1 = vld1q_s32(k + i + 4);
+        int32x4_t k2 = vld1q_s32(k + i + 8);
+        int32x4_t k3 = vld1q_s32(k + i + 12);
+
+        // Compute bits = (k + 127) << 23
+        int32x4_t bits0 = vshlq_n_s32(vaddq_s32(k0, bias), 23);
+        int32x4_t bits1 = vshlq_n_s32(vaddq_s32(k1, bias), 23);
+        int32x4_t bits2 = vshlq_n_s32(vaddq_s32(k2, bias), 23);
+        int32x4_t bits3 = vshlq_n_s32(vaddq_s32(k3, bias), 23);
+
+        // Reinterpret as float
+        float32x4_t r0 = vreinterpretq_f32_s32(bits0);
+        float32x4_t r1 = vreinterpretq_f32_s32(bits1);
+        float32x4_t r2 = vreinterpretq_f32_s32(bits2);
+        float32x4_t r3 = vreinterpretq_f32_s32(bits3);
+
+        // Handle underflow: k < -126 -> 0
+        uint32x4_t under0 = vcltq_s32(k0, min_exp);
+        uint32x4_t under1 = vcltq_s32(k1, min_exp);
+        uint32x4_t under2 = vcltq_s32(k2, min_exp);
+        uint32x4_t under3 = vcltq_s32(k3, min_exp);
+
+        r0 = vbslq_f32(under0, zero, r0);
+        r1 = vbslq_f32(under1, zero, r1);
+        r2 = vbslq_f32(under2, zero, r2);
+        r3 = vbslq_f32(under3, zero, r3);
+
+        // Handle overflow: k > 127 -> inf
+        uint32x4_t over0 = vcgtq_s32(k0, max_exp);
+        uint32x4_t over1 = vcgtq_s32(k1, max_exp);
+        uint32x4_t over2 = vcgtq_s32(k2, max_exp);
+        uint32x4_t over3 = vcgtq_s32(k3, max_exp);
+
+        r0 = vbslq_f32(over0, inf, r0);
+        r1 = vbslq_f32(over1, inf, r1);
+        r2 = vbslq_f32(over2, inf, r2);
+        r3 = vbslq_f32(over3, inf, r3);
+
+        vst1q_f32(result + i, r0);
+        vst1q_f32(result + i + 4, r1);
+        vst1q_f32(result + i + 8, r2);
+        vst1q_f32(result + i + 12, r3);
+    }
+
+    // Process 4 elements at a time
+    for (; i + 3 < n; i += 4) {
+        int32x4_t kv = vld1q_s32(k + i);
+        int32x4_t bits = vshlq_n_s32(vaddq_s32(kv, bias), 23);
+        float32x4_t r = vreinterpretq_f32_s32(bits);
+
+        uint32x4_t under = vcltq_s32(kv, min_exp);
+        r = vbslq_f32(under, zero, r);
+
+        uint32x4_t over = vcgtq_s32(kv, max_exp);
+        r = vbslq_f32(over, inf, r);
+
+        vst1q_f32(result + i, r);
+    }
+
+    // Scalar remainder - simplified, just handle edge cases
+    // The vectorized path handles all aligned elements
+    for (; i < n; i++) {
+        int kv = k[i];
+        if (kv < -126) {
+            result[i] = 0.0f;
+        }
+        if (kv > 127) {
+            result[i] = 1.0f / 0.0f;
+        }
+        // For valid range, use single-element NEON
+        if (kv >= -126) {
+            if (kv <= 127) {
+                int32x4_t kv_vec = vdupq_n_s32(kv);
+                int32x4_t bias = vdupq_n_s32(127);
+                int32x4_t bits = vshlq_n_s32(vaddq_s32(kv_vec, bias), 23);
+                float32x4_t r = vreinterpretq_f32_s32(bits);
+                result[i] = vgetq_lane_f32(r, 0);
+            }
+        }
+    }
+}
+
+// Pow2F64: Compute 2^k for int32 k, result as float64
+// Uses IEEE 754: 2^k = ((k + 1023) << 52) as float64 bits
+void pow2_f64_neon(int *k, double *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    int32x2_t bias32 = vdup_n_s32(1023);
+    int32x2_t min_exp = vdup_n_s32(-1022);
+    int32x2_t max_exp = vdup_n_s32(1023);
+    float64x2_t zero = vdupq_n_f64(0.0);
+    float64x2_t inf = vdupq_n_f64(1.0 / 0.0);
+
+    // Process 8 elements at a time
+    for (; i + 7 < n; i += 8) {
+        // Load 8 int32 values as 4 pairs
+        int32x2_t k0 = vld1_s32(k + i);
+        int32x2_t k1 = vld1_s32(k + i + 2);
+        int32x2_t k2 = vld1_s32(k + i + 4);
+        int32x2_t k3 = vld1_s32(k + i + 6);
+
+        // Add bias and widen to int64
+        int64x2_t biased0 = vmovl_s32(vadd_s32(k0, bias32));
+        int64x2_t biased1 = vmovl_s32(vadd_s32(k1, bias32));
+        int64x2_t biased2 = vmovl_s32(vadd_s32(k2, bias32));
+        int64x2_t biased3 = vmovl_s32(vadd_s32(k3, bias32));
+
+        // Shift left by 52
+        int64x2_t bits0 = vshlq_n_s64(biased0, 52);
+        int64x2_t bits1 = vshlq_n_s64(biased1, 52);
+        int64x2_t bits2 = vshlq_n_s64(biased2, 52);
+        int64x2_t bits3 = vshlq_n_s64(biased3, 52);
+
+        // Reinterpret as float64
+        float64x2_t r0 = vreinterpretq_f64_s64(bits0);
+        float64x2_t r1 = vreinterpretq_f64_s64(bits1);
+        float64x2_t r2 = vreinterpretq_f64_s64(bits2);
+        float64x2_t r3 = vreinterpretq_f64_s64(bits3);
+
+        // Handle underflow: k < -1022 -> 0
+        uint32x2_t under0 = vclt_s32(k0, min_exp);
+        uint32x2_t under1 = vclt_s32(k1, min_exp);
+        uint32x2_t under2 = vclt_s32(k2, min_exp);
+        uint32x2_t under3 = vclt_s32(k3, min_exp);
+
+        // Widen mask to 64-bit
+        uint64x2_t under0_64 = vmovl_u32(under0);
+        uint64x2_t under1_64 = vmovl_u32(under1);
+        uint64x2_t under2_64 = vmovl_u32(under2);
+        uint64x2_t under3_64 = vmovl_u32(under3);
+
+        r0 = vbslq_f64(under0_64, zero, r0);
+        r1 = vbslq_f64(under1_64, zero, r1);
+        r2 = vbslq_f64(under2_64, zero, r2);
+        r3 = vbslq_f64(under3_64, zero, r3);
+
+        // Handle overflow: k > 1023 -> inf
+        uint32x2_t over0 = vcgt_s32(k0, max_exp);
+        uint32x2_t over1 = vcgt_s32(k1, max_exp);
+        uint32x2_t over2 = vcgt_s32(k2, max_exp);
+        uint32x2_t over3 = vcgt_s32(k3, max_exp);
+
+        uint64x2_t over0_64 = vmovl_u32(over0);
+        uint64x2_t over1_64 = vmovl_u32(over1);
+        uint64x2_t over2_64 = vmovl_u32(over2);
+        uint64x2_t over3_64 = vmovl_u32(over3);
+
+        r0 = vbslq_f64(over0_64, inf, r0);
+        r1 = vbslq_f64(over1_64, inf, r1);
+        r2 = vbslq_f64(over2_64, inf, r2);
+        r3 = vbslq_f64(over3_64, inf, r3);
+
+        vst1q_f64(result + i, r0);
+        vst1q_f64(result + i + 2, r1);
+        vst1q_f64(result + i + 4, r2);
+        vst1q_f64(result + i + 6, r3);
+    }
+
+    // Process 2 elements at a time
+    for (; i + 1 < n; i += 2) {
+        int32x2_t kv = vld1_s32(k + i);
+        int64x2_t biased = vmovl_s32(vadd_s32(kv, bias32));
+        int64x2_t bits = vshlq_n_s64(biased, 52);
+        float64x2_t r = vreinterpretq_f64_s64(bits);
+
+        uint32x2_t under = vclt_s32(kv, min_exp);
+        uint64x2_t under_64 = vmovl_u32(under);
+        r = vbslq_f64(under_64, zero, r);
+
+        uint32x2_t over = vcgt_s32(kv, max_exp);
+        uint64x2_t over_64 = vmovl_u32(over);
+        r = vbslq_f64(over_64, inf, r);
+
+        vst1q_f64(result + i, r);
+    }
+
+    // Scalar remainder - simplified, just handle edge cases
+    for (; i < n; i++) {
+        int kv = k[i];
+        if (kv < -1022) {
+            result[i] = 0.0;
+        }
+        if (kv > 1023) {
+            result[i] = 1.0 / 0.0;
+        }
+        // For valid range, use single-element NEON to avoid type punning
+        if (kv >= -1022) {
+            if (kv <= 1023) {
+                int32x2_t kv_vec = vdup_n_s32(kv);
+                int32x2_t bias = vdup_n_s32(1023);
+                int64x2_t biased = vmovl_s32(vadd_s32(kv_vec, bias));
+                int64x2_t bits = vshlq_n_s64(biased, 52);
+                float64x2_t r = vreinterpretq_f64_s64(bits);
+                result[i] = vgetq_lane_f64(r, 0);
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Phase 8: Bitwise Operations
 // ============================================================================
 
