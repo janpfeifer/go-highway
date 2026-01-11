@@ -133,13 +133,13 @@ func BenchmarkBaseGELU(b *testing.B) {
 
 		b.Run(fmt.Sprintf("exact_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				BaseGELU(input, output)
+				GELU(input, output)
 			}
 		})
 
 		b.Run(fmt.Sprintf("approx_%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				BaseGELUApprox(input, output)
+				GELUApprox(input, output)
 			}
 		})
 	}

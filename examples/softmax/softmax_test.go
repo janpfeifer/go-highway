@@ -98,7 +98,7 @@ func BenchmarkBaseSoftmax(b *testing.B) {
 
 		b.Run(fmt.Sprintf("%d", size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				BaseSoftmax(input, output)
+				Softmax(input, output)
 			}
 		})
 	}
