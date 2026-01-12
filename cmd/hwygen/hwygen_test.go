@@ -192,9 +192,10 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Check that expected files were created
-	// Note: dispatch files are now architecture-specific (dispatch_amd64.gen.go for AVX2)
+	// Note: dispatch files are now architecture-specific and prefixed with function name
 	expectedFiles := []string{
-		"dispatch_amd64.gen.go",
+		"dispatch_add_amd64.gen.go",
+		"dispatch_add_other.gen.go",
 		"add_avx2.gen.go",
 		"add_fallback.gen.go",
 	}
@@ -226,7 +227,7 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Check dispatcher file specifically
-	dispatchPath := filepath.Join(tmpDir, "dispatch_amd64.gen.go")
+	dispatchPath := filepath.Join(tmpDir, "dispatch_add_amd64.gen.go")
 	dispatchContent, err := os.ReadFile(dispatchPath)
 	if err != nil {
 		t.Fatalf("Failed to read dispatcher: %v", err)
@@ -245,11 +246,11 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Should have target-specific init functions
-	if !strings.Contains(dispatchStr, "func initAVX2()") {
-		t.Error("Dispatcher missing initAVX2 function")
+	if !strings.Contains(dispatchStr, "func initAddAVX2()") {
+		t.Error("Dispatcher missing initAddAVX2 function")
 	}
-	if !strings.Contains(dispatchStr, "func initFallback()") {
-		t.Error("Dispatcher missing initFallback function")
+	if !strings.Contains(dispatchStr, "func initAddFallback()") {
+		t.Error("Dispatcher missing initAddFallback function")
 	}
 }
 

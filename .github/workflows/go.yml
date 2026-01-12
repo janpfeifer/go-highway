@@ -56,6 +56,8 @@ jobs:
         run: go vet ./...
 
       - name: Run tests (fallback path)
+        env:
+          HWY_NO_SIMD: "1"
         run: go test -v -race ./...
 
       - name: Run tests (amd64 SIMD enabled)
