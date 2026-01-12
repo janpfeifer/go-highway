@@ -12,6 +12,7 @@ type Generator struct {
 	OutputDir  string   // Output directory
 	Targets    []string // Target architectures (e.g., ["avx2", "fallback"])
 	PackageOut string   // Output package name (defaults to input package)
+	BulkMode   bool     // Generate bulk C code for NEON (for GOAT compilation)
 }
 
 // Run executes the code generation pipeline.
@@ -29,6 +30,11 @@ func (g *Generator) Run() error {
 	// Use input package name if output package not specified
 	if g.PackageOut == "" {
 		g.PackageOut = result.PackageName
+	}
+
+	// Handle bulk mode for NEON C code generation
+	if g.BulkMode {
+		return g.runBulkMode(result)
 	}
 
 	// 2. Parse target configurations

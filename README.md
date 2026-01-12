@@ -151,6 +151,37 @@ softmax.Softmax(data64, out64)
 
 See `examples/gelu` and `examples/softmax` for complete examples.
 
+### Bulk Assembly Mode (ARM64 NEON)
+
+For maximum performance on ARM64, hwygen can generate bulk assembly that processes entire arrays in a single call, eliminating per-vector function call overhead.
+
+**Requirements:**
+- [GoAT](https://github.com/gorse-io/goat) - C to Go assembly transpiler
+
+```bash
+# Install GoAT
+go install github.com/gorse-io/goat@latest
+```
+
+**Generate bulk assembly:**
+
+```bash
+./bin/hwygen -bulk -input examples/gelu/gelu.go -output examples/gelu -targets neon -pkg gelu
+```
+
+This generates:
+- Assembly files (`.s`) with bulk NEON implementations
+- Go wrapper functions (`GELUBulkF32`, `GELUBulkF64`, etc.)
+
+**Performance comparison** (1024 elements on Apple M4 Max):
+
+| Function | Per-Vector | Bulk Assembly | Speedup |
+|----------|------------|---------------|---------|
+| GELU F32 | 67,581 ns | 577 ns | **117x** |
+| GELU F64 | 122,690 ns | 1,793 ns | **68x** |
+
+Bulk mode works best for pure element-wise operations like GELU. Functions with reduction operations (like softmax) are not suitable.
+
 ## Building
 
 ```bash

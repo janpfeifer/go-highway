@@ -25,6 +25,7 @@ var (
 	outputDir  = flag.String("output", ".", "Output directory (default: current directory)")
 	targets    = flag.String("targets", "avx2,fallback", "Comma-separated targets: avx2,avx512,fallback")
 	packageOut = flag.String("pkg", "", "Output package name (default: same as input)")
+	bulkMode   = flag.Bool("bulk", false, "Generate bulk C code for NEON (for GOAT compilation)")
 )
 
 func main() {
@@ -49,6 +50,7 @@ func main() {
 		OutputDir:  *outputDir,
 		Targets:    targetList,
 		PackageOut: *packageOut,
+		BulkMode:   *bulkMode,
 	}
 
 	if err := gen.Run(); err != nil {
@@ -56,7 +58,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Successfully generated code for targets: %s\n", strings.Join(targetList, ", "))
+	if *bulkMode {
+		fmt.Printf("Successfully generated bulk C code for targets: %s\n", strings.Join(targetList, ", "))
+	} else {
+		fmt.Printf("Successfully generated code for targets: %s\n", strings.Join(targetList, ", "))
+	}
 }
 
 func parseTargets(s string) []string {
