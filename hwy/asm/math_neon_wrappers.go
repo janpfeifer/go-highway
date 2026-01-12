@@ -246,3 +246,13 @@ func SinCosF64(input, sinResult, cosResult []float64) {
 	n := int64(len(input))
 	sincos_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&sinResult[0]), unsafe.Pointer(&cosResult[0]), unsafe.Pointer(&n))
 }
+
+// ExpBulkF32 computes e^x for entire arrays in a single assembly call.
+// This is significantly faster than per-element processing for large arrays.
+func ExpBulkF32(input, result []float32) {
+	if len(input) == 0 {
+		return
+	}
+	n := int64(len(input))
+	exp_bulk_f32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}

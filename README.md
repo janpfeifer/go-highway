@@ -96,7 +96,6 @@ The contrib package is organized into two subpackages:
 | `Tanh_AVX2_F32x8` | Hyperbolic tangent on SIMD vectors |
 | `Sigmoid_AVX2_F32x8` | Logistic function on SIMD vectors |
 | `Erf_AVX2_F32x8` | Error function on SIMD vectors |
-| `Horner`, `Horner5`, `Horner7`, `Horner13` | Polynomial evaluation utilities |
 
 All functions support `float32` and `float64` with ~4 ULP accuracy.
 
@@ -106,8 +105,84 @@ Generate optimized target-specific code from generic implementations:
 
 ```bash
 go build -o bin/hwygen ./cmd/hwygen
-./bin/hwygen -input mycode.go -target avx2 -output mycode_avx2.go
+./bin/hwygen -input mycode.go -output . -targets avx2,avx512,neon,fallback
 ```
+
+### Generic Dispatch
+
+hwygen generates type-safe generic functions that automatically dispatch to the best implementation:
+
+```go
+// Write once with generics
+func BaseSoftmax[T hwy.Floats](input, output []T) {
+    // ... implementation using hwy.Load, hwy.Store, etc.
+}
+
+// hwygen generates:
+// - BaseSoftmax_avx2, BaseSoftmax_avx2_Float64
+// - BaseSoftmax_avx512, BaseSoftmax_avx512_Float64
+// - BaseSoftmax_neon, BaseSoftmax_neon_Float64
+// - BaseSoftmax_fallback, BaseSoftmax_fallback_Float64
+
+// Plus a generic dispatcher:
+func Softmax[T hwy.Floats](input, output []T)  // dispatches by type
+
+// And type-specific function variables:
+var SoftmaxFloat32 func(input, output []float32)
+var SoftmaxFloat64 func(input, output []float64)
+
+// Tail handling is automatic - remaining elements that don't
+// fit a full SIMD width are processed via the fallback path.
+```
+
+Usage:
+
+```go
+// Generic API - works with any float type
+data32 := []float32{1, 2, 3, 4}
+out32 := make([]float32, 4)
+softmax.Softmax(data32, out32)
+
+data64 := []float64{1, 2, 3, 4}
+out64 := make([]float64, 4)
+softmax.Softmax(data64, out64)
+```
+
+See `examples/gelu` and `examples/softmax` for complete examples.
+
+### Bulk Assembly Mode (ARM64 NEON)
+
+For maximum performance on ARM64, hwygen can generate bulk assembly that processes entire arrays in a single call, eliminating per-vector function call overhead.
+
+**Requirements:**
+- [GoAT](https://github.com/gorse-io/goat) - C to Go assembly transpiler (tracked as a tool dependency in go.mod)
+
+```bash
+# Install tool dependencies (GoAT is declared in go.mod)
+go install tool
+
+# Build hwygen
+go build -o bin/hwygen ./cmd/hwygen
+```
+
+**Generate bulk assembly:**
+
+```bash
+./bin/hwygen -bulk -input examples/gelu/gelu.go -output examples/gelu -targets neon -pkg gelu
+```
+
+This generates:
+- Assembly files (`.s`) with bulk NEON implementations
+- Go wrapper functions (`GELUBulkF32`, `GELUBulkF64`, etc.)
+
+**Performance comparison** (1024 elements on Apple M4 Max):
+
+| Function | Per-Vector | Bulk Assembly | Speedup |
+|----------|------------|---------------|---------|
+| GELU F32 | 67,581 ns | 577 ns | **117x** |
+| GELU F64 | 122,690 ns | 1,793 ns | **68x** |
+
+Bulk mode works best for pure element-wise operations like GELU. Functions with reduction operations (like softmax) are not suitable.
 
 ## Building
 

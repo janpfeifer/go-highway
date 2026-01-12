@@ -102,21 +102,21 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Parse the file
-	funcs, pkgName, err := Parse(testFile)
+	result, err := Parse(testFile)
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
 
 	// Verify results
-	if pkgName != "test" {
-		t.Errorf("Package name = %q, want %q", pkgName, "test")
+	if result.PackageName != "test" {
+		t.Errorf("Package name = %q, want %q", result.PackageName, "test")
 	}
 
-	if len(funcs) != 1 {
-		t.Fatalf("Got %d functions, want 1", len(funcs))
+	if len(result.Funcs) != 1 {
+		t.Fatalf("Got %d functions, want 1", len(result.Funcs))
 	}
 
-	f := funcs[0]
+	f := result.Funcs[0]
 	if f.Name != "BaseAdd" {
 		t.Errorf("Function name = %q, want %q", f.Name, "BaseAdd")
 	}
@@ -192,9 +192,10 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Check that expected files were created
-	// Note: dispatch files are now architecture-specific (dispatch_amd64.gen.go for AVX2)
+	// Note: dispatch files are now architecture-specific and prefixed with function name
 	expectedFiles := []string{
-		"dispatch_amd64.gen.go",
+		"dispatch_add_amd64.gen.go",
+		"dispatch_add_other.gen.go",
 		"add_avx2.gen.go",
 		"add_fallback.gen.go",
 	}
@@ -226,7 +227,7 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Check dispatcher file specifically
-	dispatchPath := filepath.Join(tmpDir, "dispatch_amd64.gen.go")
+	dispatchPath := filepath.Join(tmpDir, "dispatch_add_amd64.gen.go")
 	dispatchContent, err := os.ReadFile(dispatchPath)
 	if err != nil {
 		t.Fatalf("Failed to read dispatcher: %v", err)
@@ -234,9 +235,9 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 
 	dispatchStr := string(dispatchContent)
 
-	// Should have function variables
-	if !strings.Contains(dispatchStr, "var Add func") {
-		t.Error("Dispatcher missing Add function variable")
+	// Should have function variables (now with type suffix)
+	if !strings.Contains(dispatchStr, "var AddFloat32 func") {
+		t.Error("Dispatcher missing AddFloat32 function variable")
 	}
 
 	// Should have init function
@@ -245,11 +246,11 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 
 	// Should have target-specific init functions
-	if !strings.Contains(dispatchStr, "func initAVX2()") {
-		t.Error("Dispatcher missing initAVX2 function")
+	if !strings.Contains(dispatchStr, "func initAddAVX2()") {
+		t.Error("Dispatcher missing initAddAVX2 function")
 	}
-	if !strings.Contains(dispatchStr, "func initFallback()") {
-		t.Error("Dispatcher missing initFallback function")
+	if !strings.Contains(dispatchStr, "func initAddFallback()") {
+		t.Error("Dispatcher missing initAddFallback function")
 	}
 }
 
@@ -285,9 +286,10 @@ func TestBuildDispatchFuncName(t *testing.T) {
 		elemType string
 		want     string
 	}{
-		{"BaseSigmoid", "float32", "Sigmoid"},
+		// All types now get explicit suffixes for consistent generic dispatch
+		{"BaseSigmoid", "float32", "SigmoidFloat32"},
 		{"BaseSigmoid", "float64", "SigmoidFloat64"},
-		{"BaseAdd", "float32", "Add"},
+		{"BaseAdd", "float32", "AddFloat32"},
 		{"BaseAdd", "int32", "AddInt32"},
 	}
 
@@ -429,5 +431,125 @@ func TestDetectContribPackages(t *testing.T) {
 				t.Errorf("Algo = %v, want %v", pkgs.Algo, tt.wantAlgo)
 			}
 		})
+	}
+}
+
+func TestParseCondition(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition string
+		target    string
+		elemType  string
+		want      bool
+	}{
+		// Simple type conditions
+		{"f32 matches float32", "f32", "AVX2", "float32", true},
+		{"f32 doesn't match float64", "f32", "AVX2", "float64", false},
+		{"f64 matches float64", "f64", "AVX2", "float64", true},
+		{"f64 doesn't match float32", "f64", "AVX2", "float32", false},
+
+		// Simple target conditions
+		{"avx2 matches AVX2", "avx2", "AVX2", "float32", true},
+		{"avx2 doesn't match AVX512", "avx2", "AVX512", "float32", false},
+		{"avx512 matches AVX512", "avx512", "AVX512", "float32", true},
+		{"neon matches NEON", "neon", "NEON", "float32", true},
+		{"fallback matches Fallback", "fallback", "Fallback", "float32", true},
+
+		// Compound conditions with AND
+		{"f64 && avx2 matches", "f64 && avx2", "AVX2", "float64", true},
+		{"f64 && avx2 doesn't match f32", "f64 && avx2", "AVX2", "float32", false},
+		{"f64 && avx2 doesn't match avx512", "f64 && avx2", "AVX512", "float64", false},
+		{"f32 && neon matches", "f32 && neon", "NEON", "float32", true},
+
+		// Compound conditions with OR
+		{"f32 || f64 matches f32", "f32 || f64", "AVX2", "float32", true},
+		{"f32 || f64 matches f64", "f32 || f64", "AVX2", "float64", true},
+		{"avx2 || avx512 matches avx2", "avx2 || avx512", "AVX2", "float32", true},
+		{"avx2 || avx512 matches avx512", "avx2 || avx512", "AVX512", "float32", true},
+		{"avx2 || avx512 doesn't match neon", "avx2 || avx512", "NEON", "float32", false},
+
+		// Negation
+		{"!avx2 matches avx512", "!avx2", "AVX512", "float32", true},
+		{"!avx2 doesn't match avx2", "!avx2", "AVX2", "float32", false},
+		{"!f64 matches f32", "!f64", "AVX2", "float32", true},
+		{"!f64 doesn't match f64", "!f64", "AVX2", "float64", false},
+
+		// Complex compound with mixed AND/OR
+		{"(f64 && avx2) matches", "f64 && avx2", "AVX2", "float64", true},
+		{"f64 && !avx512 matches avx2", "f64 && !avx512", "AVX2", "float64", true},
+		{"f64 && !avx512 doesn't match avx512", "f64 && !avx512", "AVX512", "float64", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc := parseCondition(tt.condition)
+			got := pc.Evaluate(tt.target, tt.elemType)
+			if got != tt.want {
+				t.Errorf("parseCondition(%q).Evaluate(%q, %q) = %v, want %v",
+					tt.condition, tt.target, tt.elemType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConditionalBlockFiltering(t *testing.T) {
+	// Create a temporary test file with hwy:if directives
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.go")
+
+	content := `package test
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseTest[T hwy.Floats](a, result []T) {
+	size := len(a)
+	for i := 0; i < size; i++ {
+		x := a[i]
+		//hwy:if f64 && avx2
+		result[i] = x * 2 // scalar fallback for f64 on avx2
+		//hwy:else
+		result[i] = x * 3 // normal simd path
+		//hwy:endif
+	}
+}
+`
+
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Parse the file
+	result, err := Parse(testFile)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	// Verify conditional blocks were parsed
+	if len(result.ConditionalBlocks) != 1 {
+		t.Fatalf("Got %d conditional blocks, want 1", len(result.ConditionalBlocks))
+	}
+
+	block := result.ConditionalBlocks[0]
+	if block.Condition != "f64 && avx2" {
+		t.Errorf("Block condition = %q, want %q", block.Condition, "f64 && avx2")
+	}
+
+	// Verify the parsed condition structure
+	if block.ParsedCondition == nil {
+		t.Fatal("ParsedCondition is nil")
+	}
+	if block.ParsedCondition.Op != "&&" {
+		t.Errorf("ParsedCondition.Op = %q, want %q", block.ParsedCondition.Op, "&&")
+	}
+
+	// Test evaluation
+	if !block.ParsedCondition.Evaluate("AVX2", "float64") {
+		t.Error("Condition should match f64 && avx2")
+	}
+	if block.ParsedCondition.Evaluate("AVX2", "float32") {
+		t.Error("Condition should not match f32 on avx2")
+	}
+	if block.ParsedCondition.Evaluate("AVX512", "float64") {
+		t.Error("Condition should not match f64 on avx512")
 	}
 }

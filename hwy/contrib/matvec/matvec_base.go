@@ -1,6 +1,10 @@
 package matvec
 
-// MatVec computes the matrix-vector product: result = M * v
+//go:generate hwygen -input matvec_base.go -output . -targets avx2,avx512,neon,fallback
+
+import "github.com/ajroetker/go-highway/hwy"
+
+// BaseMatVec computes the matrix-vector product: result = M * v
 //
 // Parameters:
 //   - m: matrix in row-major order with shape [rows, cols]
@@ -10,6 +14,7 @@ package matvec
 //   - result: output vector of length rows (must be pre-allocated)
 //
 // Each element result[i] is the dot product of row i with vector v.
+// Uses SIMD acceleration when available via the hwy package primitives.
 //
 // Panics if:
 //   - len(m) < rows * cols
@@ -25,7 +30,7 @@ package matvec
 //	v := []float32{1, 0, 1}
 //	result := make([]float32, 2)
 //	MatVec(m, 2, 3, v, result)  // result = [4, 10]
-func MatVec(m []float32, rows, cols int, v, result []float32) {
+func BaseMatVec[T hwy.Floats](m []T, rows, cols int, v, result []T) {
 	if len(m) < rows*cols {
 		panic("matrix slice too small")
 	}
@@ -36,22 +41,26 @@ func MatVec(m []float32, rows, cols int, v, result []float32) {
 		panic("result slice too small")
 	}
 
-	matvecImpl32(m, rows, cols, v, result)
-}
+	for i := 0; i < rows; i++ {
+		row := m[i*cols : (i+1)*cols]
 
-// MatVec64 computes the matrix-vector product using float64: result = M * v
-//
-// Parameters are the same as MatVec but using float64 precision.
-func MatVec64(m []float64, rows, cols int, v, result []float64) {
-	if len(m) < rows*cols {
-		panic("matrix slice too small")
-	}
-	if len(v) < cols {
-		panic("vector slice too small")
-	}
-	if len(result) < rows {
-		panic("result slice too small")
-	}
+		// SIMD dot product for this row
+		sum := hwy.Zero[T]()
+		lanes := sum.NumLanes()
 
-	matvecImpl64(m, rows, cols, v, result)
+		var j int
+		for j = 0; j+lanes <= cols; j += lanes {
+			va := hwy.Load(row[j:])
+			vb := hwy.Load(v[j:])
+			prod := hwy.Mul(va, vb)
+			sum = hwy.Add(sum, prod)
+		}
+
+		// Reduce and add scalar tail
+		acc := hwy.ReduceSum(sum)
+		for ; j < cols; j++ {
+			acc += row[j] * v[j]
+		}
+		result[i] = acc
+	}
 }

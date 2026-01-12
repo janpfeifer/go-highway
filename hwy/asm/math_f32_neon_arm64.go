@@ -34,3 +34,6 @@ func exp10_f32_neon(input, result, len unsafe.Pointer)
 
 //go:noescape
 func sincos_f32_neon(input, sin_result, cos_result, len unsafe.Pointer)
+
+//go:noescape
+func exp_bulk_f32_neon(input, result, len unsafe.Pointer)

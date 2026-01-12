@@ -671,3 +671,217 @@ void sincos_f32_neon(float *input, float *sin_result, float *cos_result, long *l
         vst1q_f32(cos_result + i, cos_val);
     }
 }
+
+// ===========================================================================
+// Bulk Exp: exp(x) for entire array
+// ===========================================================================
+// Algorithm:
+// 1. Range reduction: x = k*ln(2) + r, where |r| <= ln(2)/2
+// 2. k = round(x / ln(2))
+// 3. Polynomial: e^r ≈ 1 + r + r²/2! + r³/3! + r⁴/4! + r⁵/5! + r⁶/6!
+// 4. Scale: result = polynomial * 2^k
+
+void exp_bulk_f32_neon(float *input, float *result, long *len) {
+    long n = *len;
+    long i = 0;
+
+    // Constants using bit patterns for precise values
+    // invLn2 = 1.44269504f (bits: 0x3FB8AA3B)
+    // ln2Hi = 0.693359375f (bits: 0x3F317200)
+    // ln2Lo = -2.12194440e-4f (bits: 0xB95E8083)
+    float32x4_t invLn2 = vreinterpretq_f32_s32(vdupq_n_s32(0x3FB8AA3B));
+    float32x4_t ln2Hi = vreinterpretq_f32_s32(vdupq_n_s32(0x3F317200));
+    float32x4_t ln2Lo = vreinterpretq_f32_s32(vdupq_n_s32(0xB95E8083));
+
+    // Overflow threshold = 88.72283905f (bits: 0x42B17218)
+    // Underflow threshold = -87.33654475f (bits: 0xC2AEAC50)
+    float32x4_t overflow = vreinterpretq_f32_s32(vdupq_n_s32(0x42B17218));
+    float32x4_t underflow = vreinterpretq_f32_s32(vdupq_n_s32(0xC2AEAC50));
+
+    // Polynomial coefficients (Taylor series)
+    // c1=1.0, c2=0.5, c3=1/6, c4=1/24, c5=1/120, c6=1/720
+    float32x4_t c1 = vdupq_n_f32(1.0f);
+    float32x4_t c2 = vdupq_n_f32(0.5f);
+    float32x4_t c3 = vdupq_n_f32(0.16666666666666666f);
+    float32x4_t c4 = vdupq_n_f32(0.041666666666666664f);
+    float32x4_t c5 = vdupq_n_f32(0.008333333333333333f);
+    float32x4_t c6 = vdupq_n_f32(0.001388888888888889f);
+
+    float32x4_t zero = vdupq_n_f32(0.0f);
+    float32x4_t inf = vdupq_n_f32(1.0f / 0.0f);
+
+    // Exponent bias and shift for Pow2
+    int32x4_t bias = vdupq_n_s32(127);
+
+    // Process 16 floats at a time (4 vectors)
+    for (; i + 15 < n; i += 16) {
+        float32x4_t x0 = vld1q_f32(input + i);
+        float32x4_t x1 = vld1q_f32(input + i + 4);
+        float32x4_t x2 = vld1q_f32(input + i + 8);
+        float32x4_t x3 = vld1q_f32(input + i + 12);
+
+        // Check overflow/underflow
+        uint32x4_t over0 = vcgtq_f32(x0, overflow);
+        uint32x4_t over1 = vcgtq_f32(x1, overflow);
+        uint32x4_t over2 = vcgtq_f32(x2, overflow);
+        uint32x4_t over3 = vcgtq_f32(x3, overflow);
+
+        uint32x4_t under0 = vcltq_f32(x0, underflow);
+        uint32x4_t under1 = vcltq_f32(x1, underflow);
+        uint32x4_t under2 = vcltq_f32(x2, underflow);
+        uint32x4_t under3 = vcltq_f32(x3, underflow);
+
+        // Range reduction: k = round(x * invLn2)
+        float32x4_t kf0 = vrndnq_f32(vmulq_f32(x0, invLn2));
+        float32x4_t kf1 = vrndnq_f32(vmulq_f32(x1, invLn2));
+        float32x4_t kf2 = vrndnq_f32(vmulq_f32(x2, invLn2));
+        float32x4_t kf3 = vrndnq_f32(vmulq_f32(x3, invLn2));
+
+        // r = x - k*ln2Hi - k*ln2Lo
+        float32x4_t r0 = vfmsq_f32(x0, kf0, ln2Hi);
+        float32x4_t r1 = vfmsq_f32(x1, kf1, ln2Hi);
+        float32x4_t r2 = vfmsq_f32(x2, kf2, ln2Hi);
+        float32x4_t r3 = vfmsq_f32(x3, kf3, ln2Hi);
+
+        r0 = vfmsq_f32(r0, kf0, ln2Lo);
+        r1 = vfmsq_f32(r1, kf1, ln2Lo);
+        r2 = vfmsq_f32(r2, kf2, ln2Lo);
+        r3 = vfmsq_f32(r3, kf3, ln2Lo);
+
+        // Horner's method: p = c6*r + c5
+        float32x4_t p0 = vfmaq_f32(c5, c6, r0);
+        float32x4_t p1 = vfmaq_f32(c5, c6, r1);
+        float32x4_t p2 = vfmaq_f32(c5, c6, r2);
+        float32x4_t p3 = vfmaq_f32(c5, c6, r3);
+
+        // p = p*r + c4
+        p0 = vfmaq_f32(c4, p0, r0);
+        p1 = vfmaq_f32(c4, p1, r1);
+        p2 = vfmaq_f32(c4, p2, r2);
+        p3 = vfmaq_f32(c4, p3, r3);
+
+        // p = p*r + c3
+        p0 = vfmaq_f32(c3, p0, r0);
+        p1 = vfmaq_f32(c3, p1, r1);
+        p2 = vfmaq_f32(c3, p2, r2);
+        p3 = vfmaq_f32(c3, p3, r3);
+
+        // p = p*r + c2
+        p0 = vfmaq_f32(c2, p0, r0);
+        p1 = vfmaq_f32(c2, p1, r1);
+        p2 = vfmaq_f32(c2, p2, r2);
+        p3 = vfmaq_f32(c2, p3, r3);
+
+        // p = p*r + c1
+        p0 = vfmaq_f32(c1, p0, r0);
+        p1 = vfmaq_f32(c1, p1, r1);
+        p2 = vfmaq_f32(c1, p2, r2);
+        p3 = vfmaq_f32(c1, p3, r3);
+
+        // p = p*r + 1 (final step to complete the Taylor series)
+        float32x4_t one = vdupq_n_f32(1.0f);
+        p0 = vfmaq_f32(one, p0, r0);
+        p1 = vfmaq_f32(one, p1, r1);
+        p2 = vfmaq_f32(one, p2, r2);
+        p3 = vfmaq_f32(one, p3, r3);
+
+        // Compute 2^k: convert k to int, add bias, shift to exponent position
+        int32x4_t ki0 = vcvtnq_s32_f32(kf0);
+        int32x4_t ki1 = vcvtnq_s32_f32(kf1);
+        int32x4_t ki2 = vcvtnq_s32_f32(kf2);
+        int32x4_t ki3 = vcvtnq_s32_f32(kf3);
+
+        int32x4_t scale_bits0 = vshlq_n_s32(vaddq_s32(ki0, bias), 23);
+        int32x4_t scale_bits1 = vshlq_n_s32(vaddq_s32(ki1, bias), 23);
+        int32x4_t scale_bits2 = vshlq_n_s32(vaddq_s32(ki2, bias), 23);
+        int32x4_t scale_bits3 = vshlq_n_s32(vaddq_s32(ki3, bias), 23);
+
+        float32x4_t scale0 = vreinterpretq_f32_s32(scale_bits0);
+        float32x4_t scale1 = vreinterpretq_f32_s32(scale_bits1);
+        float32x4_t scale2 = vreinterpretq_f32_s32(scale_bits2);
+        float32x4_t scale3 = vreinterpretq_f32_s32(scale_bits3);
+
+        // result = p * 2^k
+        float32x4_t res0 = vmulq_f32(p0, scale0);
+        float32x4_t res1 = vmulq_f32(p1, scale1);
+        float32x4_t res2 = vmulq_f32(p2, scale2);
+        float32x4_t res3 = vmulq_f32(p3, scale3);
+
+        // Handle overflow -> inf, underflow -> 0
+        res0 = vbslq_f32(over0, inf, res0);
+        res1 = vbslq_f32(over1, inf, res1);
+        res2 = vbslq_f32(over2, inf, res2);
+        res3 = vbslq_f32(over3, inf, res3);
+
+        res0 = vbslq_f32(under0, zero, res0);
+        res1 = vbslq_f32(under1, zero, res1);
+        res2 = vbslq_f32(under2, zero, res2);
+        res3 = vbslq_f32(under3, zero, res3);
+
+        vst1q_f32(result + i, res0);
+        vst1q_f32(result + i + 4, res1);
+        vst1q_f32(result + i + 8, res2);
+        vst1q_f32(result + i + 12, res3);
+    }
+
+    // Process 4 floats at a time
+    for (; i + 3 < n; i += 4) {
+        float32x4_t x = vld1q_f32(input + i);
+
+        uint32x4_t over = vcgtq_f32(x, overflow);
+        uint32x4_t under = vcltq_f32(x, underflow);
+
+        float32x4_t kf = vrndnq_f32(vmulq_f32(x, invLn2));
+        float32x4_t r = vfmsq_f32(x, kf, ln2Hi);
+        r = vfmsq_f32(r, kf, ln2Lo);
+
+        float32x4_t p = vfmaq_f32(c5, c6, r);
+        p = vfmaq_f32(c4, p, r);
+        p = vfmaq_f32(c3, p, r);
+        p = vfmaq_f32(c2, p, r);
+        p = vfmaq_f32(c1, p, r);
+        float32x4_t one4 = vdupq_n_f32(1.0f);
+        p = vfmaq_f32(one4, p, r);
+
+        int32x4_t ki = vcvtnq_s32_f32(kf);
+        int32x4_t scale_bits = vshlq_n_s32(vaddq_s32(ki, bias), 23);
+        float32x4_t scale = vreinterpretq_f32_s32(scale_bits);
+
+        float32x4_t res = vmulq_f32(p, scale);
+        res = vbslq_f32(over, inf, res);
+        res = vbslq_f32(under, zero, res);
+
+        vst1q_f32(result + i, res);
+    }
+
+    // Scalar remainder using NEON for single elements
+    for (; i < n; i++) {
+        float xv = input[i];
+        float32x4_t x = vdupq_n_f32(xv);
+
+        uint32x4_t over = vcgtq_f32(x, overflow);
+        uint32x4_t under = vcltq_f32(x, underflow);
+
+        float32x4_t kf = vrndnq_f32(vmulq_f32(x, invLn2));
+        float32x4_t r = vfmsq_f32(x, kf, ln2Hi);
+        r = vfmsq_f32(r, kf, ln2Lo);
+
+        float32x4_t p = vfmaq_f32(c5, c6, r);
+        p = vfmaq_f32(c4, p, r);
+        p = vfmaq_f32(c3, p, r);
+        p = vfmaq_f32(c2, p, r);
+        p = vfmaq_f32(c1, p, r);
+        float32x4_t one_s = vdupq_n_f32(1.0f);
+        p = vfmaq_f32(one_s, p, r);
+
+        int32x4_t ki = vcvtnq_s32_f32(kf);
+        int32x4_t scale_bits = vshlq_n_s32(vaddq_s32(ki, bias), 23);
+        float32x4_t scale = vreinterpretq_f32_s32(scale_bits);
+
+        float32x4_t res = vmulq_f32(p, scale);
+        res = vbslq_f32(over, inf, res);
+        res = vbslq_f32(under, zero, res);
+
+        result[i] = vgetq_lane_f32(res, 0);
+    }
+}

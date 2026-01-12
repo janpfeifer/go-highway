@@ -9,27 +9,39 @@ import (
 	stdmath "math"
 )
 
+// Hoisted constants - pre-broadcasted at package init time
+var (
+	BaseGELUApprox_NEON_vCoeff_f32 = asm.BroadcastFloat32x4(float32(1.702))
+	BaseGELUApprox_NEON_vCoeff_f64 = asm.BroadcastFloat64x2(float64(1.702))
+	BaseGELU_NEON_vHalf_f32        = asm.BroadcastFloat32x4(float32(0.5))
+	BaseGELU_NEON_vOne_f32         = asm.BroadcastFloat32x4(float32(1.0))
+	BaseGELU_NEON_vInvSqrt2_f32    = asm.BroadcastFloat32x4(float32(0.7071067811865476))
+	BaseGELU_NEON_vHalf_f64        = asm.BroadcastFloat64x2(float64(0.5))
+	BaseGELU_NEON_vOne_f64         = asm.BroadcastFloat64x2(float64(1.0))
+	BaseGELU_NEON_vInvSqrt2_f64    = asm.BroadcastFloat64x2(float64(0.7071067811865476))
+)
+
 func BaseGELU_neon(input []float32, output []float32) {
 	size := min(len(input), len(output))
 	if size == 0 {
 		return
 	}
-	vHalf := asm.BroadcastFloat32x4(float32(0.5))
-	vOne := asm.BroadcastFloat32x4(float32(1.0))
-	vInvSqrt2 := asm.BroadcastFloat32x4(float32(0.7071067811865476))
+	vHalf := BaseGELU_NEON_vHalf_f32
+	vOne := BaseGELU_NEON_vOne_f32
+	vInvSqrt2 := BaseGELU_NEON_vInvSqrt2_f32
 	ii := 0
 	for ; ii+4 <= size; ii += 4 {
 		remaining := size - ii
 		if remaining >= 4 {
 			x := asm.LoadFloat32x4Slice(input[ii:])
 			xScaled := x.Mul(vInvSqrt2)
-			erfX := math.Erf_NEON_F32x4(xScaled)
+			erfX := math.BaseErfVec_neon(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+4 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				output[i] = float32(x * 0.5 * (1.0 + stdmath.Erf(x*0.7071067811865476)))
 			}
@@ -45,22 +57,22 @@ func BaseGELU_neon_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vHalf := asm.BroadcastFloat64x2(float64(0.5))
-	vOne := asm.BroadcastFloat64x2(float64(1.0))
-	vInvSqrt2 := asm.BroadcastFloat64x2(float64(0.7071067811865476))
+	vHalf := BaseGELU_NEON_vHalf_f64
+	vOne := BaseGELU_NEON_vOne_f64
+	vInvSqrt2 := BaseGELU_NEON_vInvSqrt2_f64
 	ii := 0
 	for ; ii+2 <= size; ii += 2 {
 		remaining := size - ii
 		if remaining >= 2 {
 			x := asm.LoadFloat64x2Slice(input[ii:])
 			xScaled := x.Mul(vInvSqrt2)
-			erfX := math.Erf_NEON_F64x2(xScaled)
+			erfX := math.BaseErfVec_neon_Float64(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+2 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				output[i] = float64(x * 0.5 * (1.0 + stdmath.Erf(x*0.7071067811865476)))
 			}
@@ -76,18 +88,18 @@ func BaseGELUApprox_neon(input []float32, output []float32) {
 	if size == 0 {
 		return
 	}
-	vCoeff := asm.BroadcastFloat32x4(float32(1.702))
+	vCoeff := BaseGELUApprox_NEON_vCoeff_f32
 	ii := 0
 	for ; ii+4 <= size; ii += 4 {
 		remaining := size - ii
 		if remaining >= 4 {
 			x := asm.LoadFloat32x4Slice(input[ii:])
 			xScaled := x.Mul(vCoeff)
-			sigmoidX := math.Sigmoid_NEON_F32x4(xScaled)
+			sigmoidX := math.BaseSigmoidVec_neon(xScaled)
 			result := x.Mul(sigmoidX)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+4 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				sigmoid := 1.0 / (1.0 + stdmath.Exp(-1.702*x))
 				output[i] = float32(x * sigmoid)
@@ -104,18 +116,18 @@ func BaseGELUApprox_neon_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vCoeff := asm.BroadcastFloat64x2(float64(1.702))
+	vCoeff := BaseGELUApprox_NEON_vCoeff_f64
 	ii := 0
 	for ; ii+2 <= size; ii += 2 {
 		remaining := size - ii
 		if remaining >= 2 {
 			x := asm.LoadFloat64x2Slice(input[ii:])
 			xScaled := x.Mul(vCoeff)
-			sigmoidX := math.Sigmoid_NEON_F64x2(xScaled)
+			sigmoidX := math.BaseSigmoidVec_neon_Float64(xScaled)
 			result := x.Mul(sigmoidX)
 			result.StoreSlice(output[ii:])
 		} else {
-			for i := ii; i+2 <= size; i++ {
+			for i := ii; i < size; i++ {
 				x := float64(input[i])
 				sigmoid := 1.0 / (1.0 + stdmath.Exp(-1.702*x))
 				output[i] = float64(x * sigmoid)

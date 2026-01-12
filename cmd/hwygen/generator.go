@@ -8,27 +8,34 @@ import (
 
 // Generator orchestrates the code generation process.
 type Generator struct {
-	InputFile  string   // Input Go source file
-	OutputDir  string   // Output directory
-	Targets    []string // Target architectures (e.g., ["avx2", "fallback"])
-	PackageOut string   // Output package name (defaults to input package)
+	InputFile    string   // Input Go source file
+	OutputDir    string   // Output directory
+	Targets      []string // Target architectures (e.g., ["avx2", "fallback"])
+	PackageOut   string   // Output package name (defaults to input package)
+	DispatchName string   // Dispatch file prefix (defaults to function name)
+	BulkMode     bool     // Generate bulk C code for NEON (for GOAT compilation)
 }
 
 // Run executes the code generation pipeline.
 func (g *Generator) Run() error {
 	// 1. Parse the input file
-	funcs, pkgName, err := Parse(g.InputFile)
+	result, err := Parse(g.InputFile)
 	if err != nil {
 		return fmt.Errorf("parse input: %w", err)
 	}
 
-	if len(funcs) == 0 {
+	if len(result.Funcs) == 0 {
 		return fmt.Errorf("no functions with hwy operations found in %s", g.InputFile)
 	}
 
 	// Use input package name if output package not specified
 	if g.PackageOut == "" {
-		g.PackageOut = pkgName
+		g.PackageOut = result.PackageName
+	}
+
+	// Handle bulk mode for NEON C code generation
+	if g.BulkMode {
+		return g.runBulkMode(result)
 	}
 
 	// 2. Parse target configurations
@@ -39,11 +46,21 @@ func (g *Generator) Run() error {
 
 	// 3. Transform functions for each target
 	targetFuncs := make(map[string][]*ast.FuncDecl)
+	targetHoisted := make(map[string][]HoistedConst)
+
+	// Prepare transform options with type-specific constants
+	transformOpts := &TransformOptions{
+		TypeSpecificConsts: result.TypeSpecificConsts,
+		ConditionalBlocks:  result.ConditionalBlocks,
+		FileSet:            result.FileSet,
+		Imports:            result.Imports,
+	}
 
 	for _, target := range targets {
 		var transformed []*ast.FuncDecl
+		hoistedMap := make(map[string]HoistedConst) // Dedupe by var name
 
-		for _, pf := range funcs {
+		for _, pf := range result.Funcs {
 			// Determine concrete types to generate
 			var concreteTypes []string
 			if len(pf.TypeParams) > 0 {
@@ -55,30 +72,39 @@ func (g *Generator) Run() error {
 
 			// Transform for each concrete type
 			for _, elemType := range concreteTypes {
-				funcDecl := Transform(&pf, target, elemType)
+				transformResult := TransformWithOptions(&pf, target, elemType, transformOpts)
 
 				// Add type suffix to function name if not float32
 				if elemType != "float32" && len(pf.TypeParams) > 0 {
-					funcDecl.Name.Name = funcDecl.Name.Name + "_" + strings.Title(elemType)
+					transformResult.FuncDecl.Name.Name = transformResult.FuncDecl.Name.Name + "_" + strings.Title(elemType)
 				}
 
-				transformed = append(transformed, funcDecl)
+				transformed = append(transformed, transformResult.FuncDecl)
+
+				// Collect hoisted constants
+				for _, hc := range transformResult.HoistedConsts {
+					hoistedMap[hc.VarName] = hc
+				}
 			}
 		}
 
 		targetFuncs[target.Name] = transformed
+
+		// Convert map to slice
+		var hoistedSlice []HoistedConst
+		for _, hc := range hoistedMap {
+			hoistedSlice = append(hoistedSlice, hc)
+		}
+		targetHoisted[target.Name] = hoistedSlice
 	}
 
 	// 4. Emit the dispatcher file
-	if err := EmitDispatcher(funcs, targets, g.PackageOut, g.OutputDir); err != nil {
+	if err := EmitDispatcher(result.Funcs, targets, g.PackageOut, g.OutputDir, g.DispatchName); err != nil {
 		return fmt.Errorf("emit dispatcher: %w", err)
 	}
 
 	// 5. Emit target-specific files
 	baseFilename := getBaseFilename(g.InputFile)
-
-	// Detect which contrib subpackages are needed
-	contribPkgs := detectContribPackages(funcs, targets)
 
 	for _, target := range targets {
 		funcDecls := targetFuncs[target.Name]
@@ -86,7 +112,10 @@ func (g *Generator) Run() error {
 			continue
 		}
 
-		if err := EmitTarget(funcDecls, target, g.PackageOut, baseFilename, g.OutputDir, contribPkgs); err != nil {
+		// Detect which contrib subpackages are needed for this specific target
+		contribPkgs := detectContribPackagesForTarget(result.Funcs, target)
+		hoistedConsts := targetHoisted[target.Name]
+		if err := EmitTarget(funcDecls, target, g.PackageOut, baseFilename, g.OutputDir, contribPkgs, hoistedConsts); err != nil {
 			return fmt.Errorf("emit target %s: %w", target.Name, err)
 		}
 	}

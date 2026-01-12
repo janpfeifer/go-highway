@@ -38,7 +38,7 @@ func AVX2Target() Target {
 			"Load":      {Name: "Load", IsMethod: false},      // archsimd.LoadFloat32x8Slice
 			"Store":     {Name: "Store", IsMethod: true},      // v.StoreSlice
 			"Set":       {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8
-			"Zero":      {Name: "Zero", IsMethod: false},      // archsimd.ZeroFloat32x8
+			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
 			"MaskLoad":  {Name: "MaskLoad", IsMethod: false},
 			"MaskStore": {Name: "MaskStore", IsMethod: true},
 
@@ -48,7 +48,7 @@ func AVX2Target() Target {
 			"Mul": {Name: "Mul", IsMethod: true},
 			"Div": {Name: "Div", IsMethod: true},
 			"Neg": {Name: "Neg", IsMethod: true}, // Implemented as 0 - x
-			"Abs": {Name: "Abs", IsMethod: true},
+			"Abs": {Package: "special", Name: "Abs", IsMethod: true}, // Implemented as Max(x, -x)
 			"Min": {Name: "Min", IsMethod: true},
 			"Max": {Name: "Max", IsMethod: true},
 
@@ -59,8 +59,33 @@ func AVX2Target() Target {
 			"AndNot": {Name: "AndNot", IsMethod: true},
 
 			// ===== Core math operations (hardware instructions) =====
-			"Sqrt": {Name: "Sqrt", IsMethod: true}, // VSQRTPS/VSQRTPD
-			"FMA":  {Name: "FMA", IsMethod: true},  // VFMADD*
+			"Sqrt":   {Name: "Sqrt", IsMethod: true},   // VSQRTPS/VSQRTPD
+			"FMA":    {Name: "FMA", IsMethod: true},    // VFMADD*
+			"MulAdd": {Name: "MulAdd", IsMethod: true}, // a.MulAdd(b, c) = a*b + c
+
+			// ===== Rounding operations =====
+			"RoundToEven": {Name: "RoundToEven", IsMethod: true}, // Banker's rounding
+
+			// ===== Type reinterpretation (bit cast, no conversion) =====
+			"AsInt32":   {Name: "AsInt32x8", IsMethod: true},   // Float32x8 -> Int32x8
+			"AsFloat32": {Name: "AsFloat32x8", IsMethod: true}, // Int32x8 -> Float32x8
+			"AsInt64":   {Name: "AsInt64x4", IsMethod: true},   // Float64x4 -> Int64x4
+			"AsFloat64": {Name: "AsFloat64x4", IsMethod: true}, // Int64x4 -> Float64x4
+
+			// ===== Comparison methods (return masks) =====
+			"Greater": {Name: "Greater", IsMethod: true}, // a > b, returns mask
+			"Less":    {Name: "Less", IsMethod: true},    // a < b, returns mask
+
+			// ===== Mask operations =====
+			"MaskAnd": {Name: "And", IsMethod: true}, // MaskAnd(a, b) -> a.And(b)
+			"MaskOr":  {Name: "Or", IsMethod: true},  // MaskOr(a, b) -> a.Or(b)
+
+			// ===== Conditional/Blend operations =====
+			"Merge": {Name: "Merge", IsMethod: true}, // a.Merge(b, mask): a where mask true, b otherwise
+
+			// ===== Integer shift operations =====
+			"ShiftAllLeft":  {Name: "ShiftAllLeft", IsMethod: true},  // Left shift by constant
+			"ShiftAllRight": {Name: "ShiftAllRight", IsMethod: true}, // Right shift by constant
 
 			// ===== Reductions =====
 			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
@@ -109,6 +134,10 @@ func AVX2Target() Target {
 			"Floor":            {Name: "Floor", IsMethod: false},
 			"NearestInt":       {Name: "NearestInt", IsMethod: false},
 
+			// ===== IEEE 754 Exponent/Mantissa operations =====
+			"GetExponent": {Name: "GetExponent", IsMethod: true},
+			"GetMantissa": {Name: "GetMantissa", IsMethod: true},
+
 			// ===== Compress/Expand =====
 			"Compress":      {Name: "Compress", IsMethod: false},
 			"Expand":        {Name: "Expand", IsMethod: false},
@@ -143,6 +172,14 @@ func AVX2Target() Target {
 
 			// ===== contrib/dot: Dot product operations =====
 			"Dot": {Package: "dot", SubPackage: "dot", Name: "Dot", IsMethod: false},
+
+			// ===== IEEE 754 Operations =====
+			// Pow2 computes 2^k via bit manipulation. Transformer adds target and type suffix.
+			"Pow2": {Package: "hwy", Name: "Pow2", IsMethod: false},
+
+			// ===== Special float checks =====
+			"IsInf": {Package: "special", Name: "IsInf", IsMethod: true}, // Implemented inline
+			"IsNaN": {Package: "special", Name: "IsNaN", IsMethod: true}, // Implemented inline
 		},
 	}
 }
@@ -165,7 +202,7 @@ func AVX512Target() Target {
 			"Load":      {Name: "Load", IsMethod: false},
 			"Store":     {Name: "Store", IsMethod: true},
 			"Set":       {Name: "Broadcast", IsMethod: false},
-			"Zero":      {Name: "Zero", IsMethod: false},
+			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
 			"MaskLoad":  {Name: "MaskLoad", IsMethod: false},
 			"MaskStore": {Name: "MaskStore", IsMethod: true},
 
@@ -175,7 +212,7 @@ func AVX512Target() Target {
 			"Mul": {Name: "Mul", IsMethod: true},
 			"Div": {Name: "Div", IsMethod: true},
 			"Neg": {Name: "Neg", IsMethod: true},
-			"Abs": {Name: "Abs", IsMethod: true},
+			"Abs": {Package: "special", Name: "Abs", IsMethod: true}, // Implemented as Max(x, -x)
 			"Min": {Name: "Min", IsMethod: true},
 			"Max": {Name: "Max", IsMethod: true},
 
@@ -186,8 +223,34 @@ func AVX512Target() Target {
 			"AndNot": {Name: "AndNot", IsMethod: true},
 
 			// ===== Core math operations =====
-			"Sqrt": {Name: "Sqrt", IsMethod: true},
-			"FMA":  {Name: "FMA", IsMethod: true},
+			"Sqrt":   {Name: "Sqrt", IsMethod: true},
+			"FMA":    {Name: "FMA", IsMethod: true},
+			"MulAdd": {Name: "MulAdd", IsMethod: true}, // a.MulAdd(b, c) = a*b + c
+
+			// ===== Rounding operations =====
+			// AVX512 archsimd doesn't have plain RoundToEven, use hwy package function
+			"RoundToEven": {Package: "hwy", Name: "RoundToEven", IsMethod: false},
+
+			// ===== Type reinterpretation (bit cast, no conversion) =====
+			"AsInt32":   {Name: "AsInt32x16", IsMethod: true},   // Float32x16 -> Int32x16
+			"AsFloat32": {Name: "AsFloat32x16", IsMethod: true}, // Int32x16 -> Float32x16
+			"AsInt64":   {Name: "AsInt64x8", IsMethod: true},    // Float64x8 -> Int64x8
+			"AsFloat64": {Name: "AsFloat64x8", IsMethod: true},  // Int64x8 -> Float64x8
+
+			// ===== Comparison methods (return masks) =====
+			"Greater": {Name: "Greater", IsMethod: true}, // a > b, returns mask
+			"Less":    {Name: "Less", IsMethod: true},    // a < b, returns mask
+
+			// ===== Mask operations =====
+			"MaskAnd": {Name: "And", IsMethod: true}, // MaskAnd(a, b) -> a.And(b)
+			"MaskOr":  {Name: "Or", IsMethod: true},  // MaskOr(a, b) -> a.Or(b)
+
+			// ===== Conditional/Blend operations =====
+			"Merge": {Name: "Merge", IsMethod: true}, // a.Merge(b, mask): a where mask true, b otherwise
+
+			// ===== Integer shift operations =====
+			"ShiftAllLeft":  {Name: "ShiftAllLeft", IsMethod: true},  // Left shift by constant
+			"ShiftAllRight": {Name: "ShiftAllRight", IsMethod: true}, // Right shift by constant
 
 			// ===== Reductions =====
 			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
@@ -238,6 +301,10 @@ func AVX512Target() Target {
 			"Floor":            {Name: "Floor", IsMethod: false},
 			"NearestInt":       {Name: "NearestInt", IsMethod: false},
 
+			// ===== IEEE 754 Exponent/Mantissa operations =====
+			"GetExponent": {Name: "GetExponent", IsMethod: true},
+			"GetMantissa": {Name: "GetMantissa", IsMethod: true},
+
 			// ===== Compress/Expand =====
 			"Compress":      {Name: "Compress", IsMethod: false},
 			"Expand":        {Name: "Expand", IsMethod: false},
@@ -271,6 +338,13 @@ func AVX512Target() Target {
 
 			// ===== contrib/dot: Dot product operations =====
 			"Dot": {Package: "dot", SubPackage: "dot", Name: "Dot", IsMethod: false},
+
+			// ===== IEEE 754 Operations =====
+			"Pow2": {Package: "hwy", Name: "Pow2", IsMethod: false},
+
+			// ===== Special float checks =====
+			"IsInf": {Package: "special", Name: "IsInf", IsMethod: true}, // Implemented inline
+			"IsNaN": {Package: "special", Name: "IsNaN", IsMethod: true}, // Implemented inline
 		},
 	}
 }
@@ -314,8 +388,33 @@ func FallbackTarget() Target {
 			"AndNot": {Package: "hwy", Name: "AndNot", IsMethod: false},
 
 			// ===== Core math operations =====
-			"Sqrt": {Package: "hwy", Name: "Sqrt", IsMethod: false},
-			"FMA":  {Package: "hwy", Name: "FMA", IsMethod: false},
+			"Sqrt":   {Package: "hwy", Name: "Sqrt", IsMethod: false},
+			"FMA":    {Package: "hwy", Name: "FMA", IsMethod: false},
+			"MulAdd": {Package: "hwy", Name: "MulAdd", IsMethod: false}, // hwy.MulAdd(a, b, c)
+
+			// ===== Rounding operations =====
+			"RoundToEven": {Package: "hwy", Name: "RoundToEven", IsMethod: false},
+
+			// ===== Type reinterpretation (bit cast, no conversion) =====
+			"AsInt32":   {Package: "hwy", Name: "AsInt32", IsMethod: false},
+			"AsFloat32": {Package: "hwy", Name: "AsFloat32", IsMethod: false},
+			"AsInt64":   {Package: "hwy", Name: "AsInt64", IsMethod: false},
+			"AsFloat64": {Package: "hwy", Name: "AsFloat64", IsMethod: false},
+
+			// ===== Comparison methods (return masks) =====
+			"Greater": {Package: "hwy", Name: "Greater", IsMethod: false},
+			"Less":    {Package: "hwy", Name: "Less", IsMethod: false},
+
+			// ===== Mask operations =====
+			"MaskAnd": {Package: "hwy", Name: "MaskAnd", IsMethod: false},
+			"MaskOr":  {Package: "hwy", Name: "MaskOr", IsMethod: false},
+
+			// ===== Conditional/Blend operations =====
+			"Merge": {Package: "hwy", Name: "Merge", IsMethod: false},
+
+			// ===== Integer shift operations =====
+			"ShiftAllLeft":  {Package: "hwy", Name: "ShiftLeft", IsMethod: false},
+			"ShiftAllRight": {Package: "hwy", Name: "ShiftRight", IsMethod: false},
 
 			// ===== Reductions =====
 			"ReduceSum": {Package: "hwy", Name: "ReduceSum", IsMethod: false},
@@ -366,6 +465,10 @@ func FallbackTarget() Target {
 			"Floor":            {Package: "hwy", Name: "Floor", IsMethod: false},
 			"NearestInt":       {Package: "hwy", Name: "NearestInt", IsMethod: false},
 
+			// ===== IEEE 754 Exponent/Mantissa operations =====
+			"GetExponent": {Package: "hwy", Name: "GetExponent", IsMethod: false},
+			"GetMantissa": {Package: "hwy", Name: "GetMantissa", IsMethod: false},
+
 			// ===== Compress/Expand =====
 			"Compress":      {Package: "hwy", Name: "Compress", IsMethod: false},
 			"Expand":        {Package: "hwy", Name: "Expand", IsMethod: false},
@@ -400,6 +503,13 @@ func FallbackTarget() Target {
 
 			// ===== contrib/dot: Dot product =====
 			"Dot": {Package: "hwy", SubPackage: "dot", Name: "Dot", IsMethod: false},
+
+			// ===== IEEE 754 Operations =====
+			"Pow2": {Package: "hwy", Name: "Pow2", IsMethod: false},
+
+			// ===== Special float checks =====
+			"IsInf": {Package: "hwy", Name: "IsInf", IsMethod: false},
+			"IsNaN": {Package: "hwy", Name: "IsNaN", IsMethod: false},
 		},
 	}
 }
@@ -444,8 +554,33 @@ func NEONTarget() Target {
 			"AndNot": {Name: "AndNot", IsMethod: true},
 
 			// ===== Core math operations =====
-			"Sqrt": {Name: "Sqrt", IsMethod: true},
-			"FMA":  {Name: "FMA", IsMethod: true},
+			"Sqrt":   {Name: "Sqrt", IsMethod: true},
+			"FMA":    {Name: "FMA", IsMethod: true},
+			"MulAdd": {Name: "MulAdd", IsMethod: true}, // a.MulAdd(b, c) = a*b + c
+
+			// ===== Rounding operations =====
+			"RoundToEven": {Name: "RoundToEven", IsMethod: true}, // Banker's rounding
+
+			// ===== Type reinterpretation (bit cast, no conversion) =====
+			"AsInt32":   {Name: "AsInt32x4", IsMethod: true},   // Float32x4 -> Int32x4
+			"AsFloat32": {Name: "AsFloat32x4", IsMethod: true}, // Int32x4 -> Float32x4
+			"AsInt64":   {Name: "AsInt64x2", IsMethod: true},   // Float64x2 -> Int64x2
+			"AsFloat64": {Name: "AsFloat64x2", IsMethod: true}, // Int64x2 -> Float64x2
+
+			// ===== Comparison methods (return masks) =====
+			"Greater": {Name: "Greater", IsMethod: true}, // a > b, returns mask
+			"Less":    {Name: "Less", IsMethod: true},    // a < b, returns mask
+
+			// ===== Mask operations =====
+			"MaskAnd": {Name: "And", IsMethod: true}, // MaskAnd(a, b) -> a.And(b)
+			"MaskOr":  {Name: "Or", IsMethod: true},  // MaskOr(a, b) -> a.Or(b)
+
+			// ===== Conditional/Blend operations =====
+			"Merge": {Name: "Merge", IsMethod: true}, // a.Merge(b, mask): a where mask true, b otherwise
+
+			// ===== Integer shift operations =====
+			"ShiftAllLeft":  {Name: "ShiftAllLeft", IsMethod: true},  // Left shift by constant
+			"ShiftAllRight": {Name: "ShiftAllRight", IsMethod: true}, // Right shift by constant
 
 			// ===== Reductions =====
 			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
@@ -505,6 +640,10 @@ func NEONTarget() Target {
 			"FirstN":        {Name: "FirstN", IsMethod: false},
 			"LastN":         {Name: "LastN", IsMethod: false},
 
+			// ===== IEEE 754 Exponent/Mantissa operations =====
+			"GetExponent": {Name: "GetExponent", IsMethod: true},
+			"GetMantissa": {Name: "GetMantissa", IsMethod: true},
+
 			// ===== contrib/math: Transcendental functions =====
 			// NEON-specific implementations matching AVX2/AVX512 pattern
 			"Exp":     {Package: "math", SubPackage: "math", Name: "Exp", IsMethod: false},
@@ -527,6 +666,13 @@ func NEONTarget() Target {
 
 			// ===== contrib/dot: Dot product operations =====
 			"Dot": {Package: "dot", SubPackage: "dot", Name: "Dot", IsMethod: false},
+
+			// ===== IEEE 754 Operations =====
+			"Pow2": {Name: "Pow2", IsMethod: true},
+
+			// ===== Special float checks =====
+			"IsInf": {Package: "special", Name: "IsInf", IsMethod: true}, // Implemented inline
+			"IsNaN": {Package: "special", Name: "IsNaN", IsMethod: true}, // Implemented inline
 		},
 	}
 }

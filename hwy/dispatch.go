@@ -27,6 +27,10 @@ const (
 
 	// DispatchSVE indicates ARM SVE instructions (scalable vector).
 	DispatchSVE
+
+	// DispatchSME indicates ARM SME instructions (scalable matrix).
+	// SME provides dedicated matrix multiplication hardware with ZA tile registers.
+	DispatchSME
 )
 
 // String returns a human-readable name for the dispatch level.
@@ -44,6 +48,8 @@ func (d DispatchLevel) String() string {
 		return "neon"
 	case DispatchSVE:
 		return "sve"
+	case DispatchSME:
+		return "sme"
 	default:
 		return "unknown"
 	}

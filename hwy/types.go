@@ -67,6 +67,16 @@ func (v Vec[T]) Data() []T {
 	return v.data
 }
 
+// Store writes the vector's data to a slice.
+// This is the method form of the hwy.Store function.
+func (v Vec[T]) Store(dst []T) {
+	n := len(v.data)
+	if len(dst) < n {
+		n = len(dst)
+	}
+	copy(dst[:n], v.data[:n])
+}
+
 // Mask represents the result of a comparison operation.
 // It can be used with IfThenElse, MaskLoad, and MaskStore to perform
 // conditional operations.

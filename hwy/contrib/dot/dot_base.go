@@ -1,55 +1,48 @@
 package dot
 
-// Dot computes the dot product of two float32 slices.
+//go:generate hwygen -input dot_base.go -output . -targets avx2,avx512,neon,fallback
+
+import "github.com/ajroetker/go-highway/hwy"
+
+// BaseDot computes the dot product of two slices using hwy primitives.
 // The result is the sum of element-wise products: Σ(a[i] * b[i]).
 //
 // If the slices have different lengths, the computation uses the minimum length.
 // Returns 0 if either slice is empty.
+//
+// Uses SIMD acceleration when available via the hwy package primitives.
+// Works with float32 and float64 slices.
 //
 // Example:
 //
 //	a := []float32{1, 2, 3}
 //	b := []float32{4, 5, 6}
 //	result := Dot(a, b)  // 1*4 + 2*5 + 3*6 = 32
-func Dot(a, b []float32) float32 {
+func BaseDot[T hwy.Floats](a, b []T) T {
 	if len(a) == 0 || len(b) == 0 {
 		return 0
 	}
 
-	return dotImpl32(a, b)
-}
+	n := min(len(a), len(b))
+	sum := hwy.Zero[T]()
+	lanes := sum.NumLanes()
 
-// Dot64 computes the dot product of two float64 slices.
-// The result is the sum of element-wise products: Σ(a[i] * b[i]).
-//
-// If the slices have different lengths, the computation uses the minimum length.
-// Returns 0 if either slice is empty.
-func Dot64(a, b []float64) float64 {
-	if len(a) == 0 || len(b) == 0 {
-		return 0
+	// Process full vectors
+	var i int
+	for i = 0; i+lanes <= n; i += lanes {
+		va := hwy.Load(a[i:])
+		vb := hwy.Load(b[i:])
+		prod := hwy.Mul(va, vb)
+		sum = hwy.Add(sum, prod)
 	}
 
-	return dotImpl64(a, b)
-}
+	// Reduce vector sum to scalar
+	result := hwy.ReduceSum(sum)
 
-// DotBatch computes multiple dot products efficiently.
-// For each i, computes the dot product of queries[i] and keys[i].
-//
-// This is useful for batch operations in ML applications (e.g., attention mechanisms).
-// Returns a slice of results with length min(len(queries), len(keys)).
-//
-// Example:
-//
-//	queries := [][]float32{{1, 2}, {3, 4}}
-//	keys := [][]float32{{5, 6}, {7, 8}}
-//	results := DotBatch(queries, keys)  // [17, 53]
-func DotBatch(queries, keys [][]float32) []float32 {
-	n := min(len(queries), len(keys))
-	results := make([]float32, n)
-
-	for i := 0; i < n; i++ {
-		results[i] = Dot(queries[i], keys[i])
+	// Handle tail elements with scalar code
+	for ; i < n; i++ {
+		result += a[i] * b[i]
 	}
 
-	return results
+	return result
 }

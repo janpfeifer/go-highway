@@ -684,6 +684,73 @@ func GeI32(a, b, result []int32) {
 	ge_i32_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
 }
 
+// Float64 comparison operations
+
+// EqF64 compares for equality: result[i] = (a[i] == b[i]) ? -1 : 0
+func EqF64(a, b []float64, result []int64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	eq_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// GtF64 compares for greater than: result[i] = (a[i] > b[i]) ? -1 : 0
+func GtF64(a, b []float64, result []int64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	gt_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// GeF64 compares for greater or equal: result[i] = (a[i] >= b[i]) ? -1 : 0
+func GeF64(a, b []float64, result []int64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	ge_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// LtF64 compares for less than: result[i] = (a[i] < b[i]) ? -1 : 0
+func LtF64(a, b []float64, result []int64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	lt_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// LeF64 compares for less or equal: result[i] = (a[i] <= b[i]) ? -1 : 0
+func LeF64(a, b []float64, result []int64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	le_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// Power of 2 operations (for exp/log implementations)
+
+// Pow2F32 computes 2^k for each int32 k, result as float32
+func Pow2F32(k []int32, result []float32) {
+	if len(k) == 0 {
+		return
+	}
+	n := int64(len(k))
+	pow2_f32_neon(unsafe.Pointer(&k[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// Pow2F64 computes 2^k for each int32 k, result as float64
+func Pow2F64(k []int32, result []float64) {
+	if len(k) == 0 {
+		return
+	}
+	n := int64(len(k))
+	pow2_f64_neon(unsafe.Pointer(&k[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
 // Bitwise operations (Phase 8)
 
 // AndI32 performs bitwise AND: result[i] = a[i] & b[i]

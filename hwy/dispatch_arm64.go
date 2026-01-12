@@ -2,7 +2,11 @@
 
 package hwy
 
-import "golang.org/x/sys/cpu"
+import (
+	"os"
+
+	"golang.org/x/sys/cpu"
+)
 
 func init() {
 	// Check for HWY_NO_SIMD environment variable first
@@ -30,7 +34,15 @@ func init() {
 		currentName = "scalar"
 	}
 
-	// Future: SVE support
+	// SME support (Apple M4+)
+	// Check for HWY_NO_SME environment variable to disable SME
+	if hasSME && os.Getenv("HWY_NO_SME") == "" {
+		currentLevel = DispatchSME
+		currentWidth = 64 // SME streaming vector length is 512-bit (64 bytes) on M4
+		currentName = "sme"
+	}
+
+	// Future: SVE support (without SME streaming mode)
 	// if cpu.ARM64.HasSVE {
 	//     currentLevel = DispatchSVE
 	//     currentWidth = ... // SVE width is variable

@@ -100,7 +100,7 @@ func TestMatVec(t *testing.T) {
 	}
 }
 
-func TestMatVec64(t *testing.T) {
+func TestMatVecFloat64(t *testing.T) {
 	tests := []struct {
 		name   string
 		m      []float64
@@ -136,11 +136,11 @@ func TestMatVec64(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := make([]float64, tt.rows)
-			MatVec64(tt.m, tt.rows, tt.cols, tt.v, result)
+			MatVecFloat64(tt.m, tt.rows, tt.cols, tt.v, result)
 
 			for i := range result {
 				if math.Abs(result[i]-tt.want[i]) > 1e-10 {
-					t.Errorf("MatVec64()[%d] = %v, want %v", i, result[i], tt.want[i])
+					t.Errorf("MatVecFloat64()[%d] = %v, want %v", i, result[i], tt.want[i])
 				}
 			}
 		})
@@ -236,7 +236,7 @@ func BenchmarkMatVec(b *testing.B) {
 	}
 }
 
-func BenchmarkMatVec64(b *testing.B) {
+func BenchmarkMatVecFloat64(b *testing.B) {
 	rows, cols := 256, 256
 	m := make([]float64, rows*cols)
 	for i := range m {
@@ -251,6 +251,6 @@ func BenchmarkMatVec64(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		MatVec64(m, rows, cols, v, result)
+		MatVecFloat64(m, rows, cols, v, result)
 	}
 }

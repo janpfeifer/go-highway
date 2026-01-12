@@ -176,10 +176,6 @@ import "github.com/ajroetker/go-highway/hwy/contrib/math"
 expX := math.Exp_AVX2_F32x8(x)
 logX := math.Log_AVX2_F32x8(x)
 sinX, cosX := math.SinCos_AVX2_F32x8(x)
-
-// Polynomial evaluation
-coeffs := []float32{1.0, 2.0, 3.0}
-result := math.Horner(x, coeffs)
 ```
 
 See package documentation for complete API details.
