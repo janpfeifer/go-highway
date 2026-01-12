@@ -156,11 +156,14 @@ See `examples/gelu` and `examples/softmax` for complete examples.
 For maximum performance on ARM64, hwygen can generate bulk assembly that processes entire arrays in a single call, eliminating per-vector function call overhead.
 
 **Requirements:**
-- [GoAT](https://github.com/gorse-io/goat) - C to Go assembly transpiler
+- [GoAT](https://github.com/gorse-io/goat) - C to Go assembly transpiler (tracked as a tool dependency in go.mod)
 
 ```bash
-# Install GoAT
-go install github.com/gorse-io/goat@latest
+# Install tool dependencies (GoAT is declared in go.mod)
+go install tool
+
+# Build hwygen
+go build -o bin/hwygen ./cmd/hwygen
 ```
 
 **Generate bulk assembly:**

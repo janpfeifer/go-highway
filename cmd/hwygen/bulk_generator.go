@@ -132,30 +132,15 @@ func IsSliceFunction(pf *ParsedFunc) bool {
 }
 
 // runGOAT invokes the GOAT tool to compile a C file to Go assembly.
+// It uses `go tool github.com/gorse-io/goat` which requires goat to be
+// declared as a tool dependency in go.mod (via `go get -tool`).
 func runGOAT(cFile string) error {
-	// Find goat binary
-	goatPath, err := exec.LookPath("goat")
-	if err != nil {
-		// Try go tool goat
-		goatPath = "go"
-	}
-
-	var cmd *exec.Cmd
-	if goatPath == "go" {
-		cmd = exec.Command("go", "tool", "goat", cFile,
-			"-O3",
-			"-e=--target=arm64",
-			"-e=-march=armv8-a+simd+fp",
-			"-e=-fno-builtin-memset",
-		)
-	} else {
-		cmd = exec.Command(goatPath, cFile,
-			"-O3",
-			"-e=--target=arm64",
-			"-e=-march=armv8-a+simd+fp",
-			"-e=-fno-builtin-memset",
-		)
-	}
+	cmd := exec.Command("go", "tool", "github.com/gorse-io/goat", cFile,
+		"-O3",
+		"-e=--target=arm64",
+		"-e=-march=armv8-a+simd+fp",
+		"-e=-fno-builtin-memset",
+	)
 
 	cmd.Dir = filepath.Dir(cFile)
 	output, err := cmd.CombinedOutput()
