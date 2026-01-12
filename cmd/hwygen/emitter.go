@@ -541,6 +541,10 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 				imports = append(imports, `"github.com/ajroetker/go-highway/hwy/asm"`)
 			}
 		}
+		// Add sync import for AVX-512 lazy initialization of hoisted constants
+		if target.Name == "AVX512" && len(hoistedConsts) > 0 {
+			imports = append(imports, `"sync"`)
+		}
 		// Add hwy package import if hwy functions are used (e.g., Pow2)
 		if contribPkgs.HwyPkg {
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy"`)
@@ -598,12 +602,16 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 
 	// Emit hoisted constants as package-level pre-broadcasted vectors
 	if len(hoistedConsts) > 0 && target.Name != "Fallback" {
-		emitHoistedConstants(&buf, hoistedConsts)
+		emitHoistedConstants(&buf, hoistedConsts, target)
 	}
 
 	// Print each function
 	fset := token.NewFileSet()
 	for _, funcDecl := range funcs {
+		// For AVX-512 with hoisted constants, inject lazy init call at function start
+		if target.Name == "AVX512" && len(hoistedConsts) > 0 && funcDecl.Body != nil {
+			injectHoistedConstInit(funcDecl)
+		}
 		if err := printer.Fprint(&buf, fset, funcDecl); err != nil {
 			return fmt.Errorf("print function: %w", err)
 		}
@@ -629,14 +637,58 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 }
 
 // emitHoistedConstants writes package-level var declarations for hoisted vector constants.
-func emitHoistedConstants(buf *bytes.Buffer, consts []HoistedConst) {
-	fmt.Fprintf(buf, "// Hoisted constants - pre-broadcasted at package init time\n")
-	fmt.Fprintf(buf, "var (\n")
-	for _, c := range consts {
-		// e.g., var BaseSigmoid_one_f32 = archsimd.BroadcastFloat32x8(1.0)
-		fmt.Fprintf(buf, "\t%s = %s(%s)\n", c.VarName, c.Broadcast, c.Value)
+// For AVX-512, uses lazy initialization with sync.Once to avoid executing AVX-512 instructions
+// at package init time (which would crash on machines without AVX-512 support).
+func emitHoistedConstants(buf *bytes.Buffer, consts []HoistedConst, target Target) {
+	if target.Name == "AVX512" {
+		// AVX-512: Use lazy initialization to avoid init-time crashes on non-AVX512 machines
+		fmt.Fprintf(buf, "// Hoisted constants - lazily initialized on first use to avoid init-time crashes\n")
+		fmt.Fprintf(buf, "var (\n")
+		for _, c := range consts {
+			// Extract the vector type from the broadcast function (e.g., "archsimd.BroadcastFloat32x16" -> "archsimd.Float32x16")
+			vecType := strings.Replace(c.Broadcast, "Broadcast", "", 1)
+			fmt.Fprintf(buf, "\t%s %s\n", c.VarName, vecType)
+		}
+		fmt.Fprintf(buf, "\t_hoistOnce sync.Once\n")
+		fmt.Fprintf(buf, ")\n\n")
+
+		// Generate the lazy init function
+		fmt.Fprintf(buf, "func _initHoistedConstants() {\n")
+		fmt.Fprintf(buf, "\t_hoistOnce.Do(func() {\n")
+		for _, c := range consts {
+			fmt.Fprintf(buf, "\t\t%s = %s(%s)\n", c.VarName, c.Broadcast, c.Value)
+		}
+		fmt.Fprintf(buf, "\t})\n")
+		fmt.Fprintf(buf, "}\n\n")
+	} else {
+		// Other targets: Initialize at package init time (safe for widely-supported instruction sets)
+		fmt.Fprintf(buf, "// Hoisted constants - pre-broadcasted at package init time\n")
+		fmt.Fprintf(buf, "var (\n")
+		for _, c := range consts {
+			// e.g., var BaseSigmoid_one_f32 = archsimd.BroadcastFloat32x8(1.0)
+			fmt.Fprintf(buf, "\t%s = %s(%s)\n", c.VarName, c.Broadcast, c.Value)
+		}
+		fmt.Fprintf(buf, ")\n\n")
 	}
-	fmt.Fprintf(buf, ")\n\n")
+}
+
+// injectHoistedConstInit prepends a call to _initHoistedConstants() at the start of a function.
+// This is used for AVX-512 to ensure lazy initialization of hoisted constants.
+func injectHoistedConstInit(funcDecl *ast.FuncDecl) {
+	if funcDecl.Body == nil {
+		return
+	}
+
+	// Create the call expression: _initHoistedConstants()
+	initCall := &ast.ExprStmt{
+		X: &ast.CallExpr{
+			Fun:  &ast.Ident{Name: "_initHoistedConstants"},
+			Args: nil,
+		},
+	}
+
+	// Prepend to function body
+	funcDecl.Body.List = append([]ast.Stmt{initCall}, funcDecl.Body.List...)
 }
 
 // emitGenericDispatcher generates a generic function that dispatches based on type.
