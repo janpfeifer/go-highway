@@ -329,6 +329,7 @@ func findHwyCalls(node ast.Node) []HwyCall {
 
 // detectLoop attempts to find the main vectorized loop pattern.
 // Looks for: for ii := 0; ii < size; ii += stride
+// Skips auxiliary loops that only contain Store operations (like zeroing loops).
 func detectLoop(body *ast.BlockStmt) *LoopInfo {
 	if body == nil {
 		return nil
@@ -382,12 +383,75 @@ func detectLoop(body *ast.BlockStmt) *LoopInfo {
 			strings.Contains(info.Stride, "NumLanes") ||
 			strings.Contains(info.Stride, "NumElements")
 
+		// Skip auxiliary loops that only contain Store operations (like zeroing loops).
+		// These don't need tail handling added - they handle their own tails.
+		if isAuxiliaryLoop(forStmt.Body) {
+			continue
+		}
+
 		if info.Iterator != "" && info.End != "" && isSimdLoop {
 			return info
 		}
 	}
 
 	return nil
+}
+
+// isAuxiliaryLoop checks if a loop body only contains Store operations without Load or arithmetic.
+// Such loops (like zeroing loops) are auxiliary and shouldn't trigger tail handling.
+func isAuxiliaryLoop(body *ast.BlockStmt) bool {
+	if body == nil {
+		return false
+	}
+
+	hasStore := false
+	hasLoad := false
+	hasArithmetic := false
+
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		// Check for hwy.Store, .Store, .StoreSlice
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			name := sel.Sel.Name
+			if name == "Store" || name == "StoreSlice" {
+				hasStore = true
+			}
+			if name == "Load" || name == "LoadSlice" {
+				hasLoad = true
+			}
+			// Arithmetic operations
+			if name == "Add" || name == "Sub" || name == "Mul" || name == "Div" ||
+				name == "MulAdd" || name == "MulSub" {
+				hasArithmetic = true
+			}
+		}
+
+		// Check for hwy.Store(v, dst), hwy.Load(src)
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "hwy" {
+				name := sel.Sel.Name
+				if name == "Store" || name == "MaskStore" {
+					hasStore = true
+				}
+				if name == "Load" || name == "MaskLoad" {
+					hasLoad = true
+				}
+				if name == "Add" || name == "Sub" || name == "Mul" || name == "Div" ||
+					name == "MulAdd" || name == "MulSub" {
+					hasArithmetic = true
+				}
+			}
+		}
+
+		return true
+	})
+
+	// A loop is auxiliary if it only has Store (no Load or arithmetic)
+	return hasStore && !hasLoad && !hasArithmetic
 }
 
 // exprToString converts an AST expression to a string representation.

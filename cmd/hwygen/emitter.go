@@ -119,12 +119,33 @@ func detectContribPackagesForTarget(funcs []ParsedFunc, target Target) ContribPa
 	return pkgs
 }
 
+// deriveDispatchPrefix extracts a unique prefix from function names for dispatch file naming.
+// E.g., "BaseBlockedMatMul" → "blockedmatmul", "BaseMatMul" → "matmul"
+func deriveDispatchPrefix(funcs []ParsedFunc) string {
+	if len(funcs) == 0 {
+		return ""
+	}
+	// Use the first function's name (without "Base" prefix)
+	name := funcs[0].Name
+	if strings.HasPrefix(name, "Base") {
+		name = name[4:]
+	}
+	return strings.ToLower(name)
+}
+
 // EmitDispatcher generates the runtime dispatch file(s).
 // This generates architecture-specific dispatch files:
-// - dispatch_amd64.gen.go for AVX2/AVX512
-// - dispatch_arm64.gen.go for NEON
-// - dispatch.gen.go for fallback-only (no build tags)
-func EmitDispatcher(funcs []ParsedFunc, targets []Target, pkgName, outPath string) error {
+// - dispatch_{prefix}_amd64.gen.go for AVX2/AVX512
+// - dispatch_{prefix}_arm64.gen.go for NEON
+// - dispatch_{prefix}.gen.go for fallback-only (no build tags)
+// If dispatchName is empty, derives prefix from function names.
+func EmitDispatcher(funcs []ParsedFunc, targets []Target, pkgName, outPath, dispatchName string) error {
+	// Use provided dispatch name or derive from function names
+	prefix := dispatchName
+	if prefix == "" {
+		prefix = deriveDispatchPrefix(funcs)
+	}
+
 	// Group targets by architecture
 	amd64Targets := []Target{}
 	arm64Targets := []Target{}
@@ -145,21 +166,21 @@ func EmitDispatcher(funcs []ParsedFunc, targets []Target, pkgName, outPath strin
 
 	// Generate amd64 dispatch if we have amd64 targets
 	if len(amd64Targets) > 0 {
-		if err := emitArchDispatcher(funcs, amd64Targets, hasFallback, pkgName, outPath, "amd64"); err != nil {
+		if err := emitArchDispatcher(funcs, amd64Targets, hasFallback, pkgName, outPath, "amd64", prefix); err != nil {
 			return err
 		}
 	}
 
 	// Generate arm64 dispatch if we have arm64 targets
 	if len(arm64Targets) > 0 {
-		if err := emitArchDispatcher(funcs, arm64Targets, hasFallback, pkgName, outPath, "arm64"); err != nil {
+		if err := emitArchDispatcher(funcs, arm64Targets, hasFallback, pkgName, outPath, "arm64", prefix); err != nil {
 			return err
 		}
 	}
 
 	// Generate fallback-only dispatch if only fallback is requested
 	if len(amd64Targets) == 0 && len(arm64Targets) == 0 && hasFallback {
-		if err := emitFallbackOnlyDispatcher(funcs, pkgName, outPath); err != nil {
+		if err := emitFallbackOnlyDispatcher(funcs, pkgName, outPath, prefix); err != nil {
 			return err
 		}
 	}
@@ -206,7 +227,7 @@ func filterDispatchableFuncs(funcs []ParsedFunc) []ParsedFunc {
 }
 
 // emitArchDispatcher generates an architecture-specific dispatch file.
-func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bool, pkgName, outPath, arch string) error {
+func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bool, pkgName, outPath, arch, prefix string) error {
 	// Filter out Vec→Vec functions - they don't need dispatch
 	dispatchableFuncs := filterDispatchableFuncs(funcs)
 	if len(dispatchableFuncs) == 0 {
@@ -276,10 +297,13 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 		}
 	}
 
+	// Capitalize prefix for function names (e.g., "matmul" -> "Matmul")
+	capPrefix := strings.Title(prefix)
+
 	// Generate init() function
 	fmt.Fprintf(&buf, "func init() {\n")
 	fmt.Fprintf(&buf, "\tif os.Getenv(\"HWY_NO_SIMD\") != \"\" {\n")
-	fmt.Fprintf(&buf, "\t\tinitFallback()\n")
+	fmt.Fprintf(&buf, "\t\tinit%sFallback()\n", capPrefix)
 	fmt.Fprintf(&buf, "\t\treturn\n")
 	fmt.Fprintf(&buf, "\t}\n")
 
@@ -288,30 +312,30 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 		switch target.Name {
 		case "AVX512":
 			fmt.Fprintf(&buf, "\tif archsimd.X86.AVX512() {\n")
-			fmt.Fprintf(&buf, "\t\tinitAVX512()\n")
+			fmt.Fprintf(&buf, "\t\tinit%sAVX512()\n", capPrefix)
 			fmt.Fprintf(&buf, "\t\treturn\n")
 			fmt.Fprintf(&buf, "\t}\n")
 		case "AVX2":
 			fmt.Fprintf(&buf, "\tif archsimd.X86.AVX2() {\n")
-			fmt.Fprintf(&buf, "\t\tinitAVX2()\n")
+			fmt.Fprintf(&buf, "\t\tinit%sAVX2()\n", capPrefix)
 			fmt.Fprintf(&buf, "\t\treturn\n")
 			fmt.Fprintf(&buf, "\t}\n")
 		case "NEON":
 			// NEON is always available on arm64, so just init directly
-			fmt.Fprintf(&buf, "\tinitNEON()\n")
+			fmt.Fprintf(&buf, "\tinit%sNEON()\n", capPrefix)
 			fmt.Fprintf(&buf, "\treturn\n")
 		}
 	}
 
 	// Fallback to scalar (only if not NEON which always succeeds)
 	if arch != "arm64" {
-		fmt.Fprintf(&buf, "\tinitFallback()\n")
+		fmt.Fprintf(&buf, "\tinit%sFallback()\n", capPrefix)
 	}
 	fmt.Fprintf(&buf, "}\n\n")
 
 	// Generate init functions for each target
 	for _, target := range archTargets {
-		initFuncName := "init" + target.Name
+		initFuncName := "init" + capPrefix + target.Name
 		fmt.Fprintf(&buf, "func %s() {\n", initFuncName)
 
 		for _, pf := range dispatchableFuncs {
@@ -337,7 +361,7 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 
 	// Generate fallback init function if needed
 	if hasFallback {
-		fmt.Fprintf(&buf, "func initFallback() {\n")
+		fmt.Fprintf(&buf, "func init%sFallback() {\n", capPrefix)
 		for _, pf := range dispatchableFuncs {
 			var concreteTypes []string
 			if len(pf.TypeParams) > 0 {
@@ -365,8 +389,8 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 		formatted = buf.Bytes()
 	}
 
-	// Write to file with architecture suffix
-	filename := filepath.Join(outPath, fmt.Sprintf("dispatch_%s.gen.go", arch))
+	// Write to file with prefix and architecture suffix
+	filename := filepath.Join(outPath, fmt.Sprintf("dispatch_%s_%s.gen.go", prefix, arch))
 	if err := os.WriteFile(filename, formatted, 0644); err != nil {
 		return fmt.Errorf("write dispatcher: %w", err)
 	}
@@ -375,7 +399,7 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 }
 
 // emitFallbackOnlyDispatcher generates a dispatch file with no build tags for fallback-only builds.
-func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) error {
+func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath, prefix string) error {
 	// Filter out Vec→Vec functions - they don't need dispatch
 	dispatchableFuncs := filterDispatchableFuncs(funcs)
 	if len(dispatchableFuncs) == 0 {
@@ -428,13 +452,16 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) err
 		}
 	}
 
+	// Capitalize prefix for function names
+	capPrefix := strings.Title(prefix)
+
 	// Simple init that just uses fallback
 	fmt.Fprintf(&buf, "func init() {\n")
 	fmt.Fprintf(&buf, "\t_ = os.Getenv // silence unused import\n")
-	fmt.Fprintf(&buf, "\tinitFallback()\n")
+	fmt.Fprintf(&buf, "\tinit%sFallback()\n", capPrefix)
 	fmt.Fprintf(&buf, "}\n\n")
 
-	fmt.Fprintf(&buf, "func initFallback() {\n")
+	fmt.Fprintf(&buf, "func init%sFallback() {\n", capPrefix)
 	for _, pf := range dispatchableFuncs {
 		var concreteTypes []string
 		if len(pf.TypeParams) > 0 {
@@ -460,7 +487,7 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath string) err
 		formatted = buf.Bytes()
 	}
 
-	filename := filepath.Join(outPath, "dispatch.gen.go")
+	filename := filepath.Join(outPath, fmt.Sprintf("dispatch_%s.gen.go", prefix))
 	if err := os.WriteFile(filename, formatted, 0644); err != nil {
 		return fmt.Errorf("write dispatcher: %w", err)
 	}

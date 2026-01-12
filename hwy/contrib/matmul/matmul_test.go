@@ -361,3 +361,146 @@ func TestMatMulDispatch(t *testing.T) {
 		}
 	})
 }
+
+// BenchmarkBlockedMatMul benchmarks the cache-tiled blocked matmul.
+func BenchmarkBlockedMatMul(b *testing.B) {
+	b.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	sizes := []int{64, 128, 256, 512}
+
+	for _, size := range sizes {
+		m, n, k := size, size, size
+
+		a := make([]float32, m*k)
+		bMat := make([]float32, k*n)
+		c := make([]float32, m*n)
+
+		for i := range a {
+			a[i] = rand.Float32()
+		}
+		for i := range bMat {
+			bMat[i] = rand.Float32()
+		}
+
+		flops := float64(2*m*n*k) / 1e9
+
+		b.Run(sizeStr(size), func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				BlockedMatMul(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+	}
+}
+
+// BenchmarkStreamingVsBlocked compares streaming and blocked matmul side-by-side.
+func BenchmarkStreamingVsBlocked(b *testing.B) {
+	b.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	sizes := []int{32, 64, 128, 256, 512, 1024}
+
+	for _, size := range sizes {
+		m, n, k := size, size, size
+
+		a := make([]float32, m*k)
+		bMat := make([]float32, k*n)
+		c := make([]float32, m*n)
+
+		for i := range a {
+			a[i] = rand.Float32()
+		}
+		for i := range bMat {
+			bMat[i] = rand.Float32()
+		}
+
+		flops := float64(2*m*n*k) / 1e9
+
+		b.Run(sizeStr(size)+"/Streaming", func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				MatMul(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+
+		b.Run(sizeStr(size)+"/Blocked", func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				BlockedMatMul(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+
+		b.Run(sizeStr(size)+"/Auto", func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				MatMulAuto(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+	}
+}
+
+// TestBlockedMatMul verifies the blocked matmul produces correct results.
+func TestBlockedMatMul(t *testing.T) {
+	sizes := []int{16, 32, 48, 64, 96, 128}
+
+	for _, size := range sizes {
+		t.Run(sizeStr(size), func(t *testing.T) {
+			m, n, k := size, size, size
+
+			a := make([]float32, m*k)
+			b := make([]float32, k*n)
+			c := make([]float32, m*n)
+			expected := make([]float32, m*n)
+
+			for i := range a {
+				a[i] = rand.Float32()
+			}
+			for i := range b {
+				b[i] = rand.Float32()
+			}
+
+			matmulReference(a, b, expected, m, n, k)
+			BlockedMatMul(a, b, c, m, n, k)
+
+			var maxErr float32
+			for i := range c {
+				err := float32(math.Abs(float64(c[i] - expected[i])))
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			t.Logf("size %dx%d: max error %e", size, size, maxErr)
+			if maxErr > 1e-4 {
+				t.Errorf("max error %e exceeds threshold 1e-4", maxErr)
+			}
+		})
+	}
+}

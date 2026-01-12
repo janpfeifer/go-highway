@@ -65,14 +65,6 @@
 //
 // AVX-512 variants are also available (e.g., Exp_AVX512_F32x16).
 //
-// # Polynomial Utilities
-//
-// Horner's method for efficient polynomial evaluation:
-//   - Horner[T](x Vec[T], coeffs []T) Vec[T]
-//   - Horner5[T](x Vec[T], c0, c1, c2, c3, c4, c5 T) Vec[T]
-//   - Horner7[T](x Vec[T], c0, ..., c7 T) Vec[T]
-//   - Horner13[T](x Vec[T], coeffs [14]T) Vec[T]
-//
 // # Accuracy
 //
 // All functions are designed to provide reasonable accuracy for typical
@@ -91,12 +83,6 @@
 //	func ProcessVectors(x archsimd.Float32x8) archsimd.Float32x8 {
 //	    expX := math.Exp_AVX2_F32x8(x)
 //	    return expX.Mul(x)  // x * exp(x)
-//	}
-//
-//	// Using polynomial utilities
-//	func EvaluatePolynomial(x hwy.Vec[float32]) hwy.Vec[float32] {
-//	    coeffs := []float32{1.0, 2.0, 3.0}  // 1 + 2x + 3x²
-//	    return math.Horner(x, coeffs)
 //	}
 //
 // # Build Requirements

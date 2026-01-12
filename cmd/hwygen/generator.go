@@ -8,11 +8,12 @@ import (
 
 // Generator orchestrates the code generation process.
 type Generator struct {
-	InputFile  string   // Input Go source file
-	OutputDir  string   // Output directory
-	Targets    []string // Target architectures (e.g., ["avx2", "fallback"])
-	PackageOut string   // Output package name (defaults to input package)
-	BulkMode   bool     // Generate bulk C code for NEON (for GOAT compilation)
+	InputFile    string   // Input Go source file
+	OutputDir    string   // Output directory
+	Targets      []string // Target architectures (e.g., ["avx2", "fallback"])
+	PackageOut   string   // Output package name (defaults to input package)
+	DispatchName string   // Dispatch file prefix (defaults to function name)
+	BulkMode     bool     // Generate bulk C code for NEON (for GOAT compilation)
 }
 
 // Run executes the code generation pipeline.
@@ -98,7 +99,7 @@ func (g *Generator) Run() error {
 	}
 
 	// 4. Emit the dispatcher file
-	if err := EmitDispatcher(result.Funcs, targets, g.PackageOut, g.OutputDir); err != nil {
+	if err := EmitDispatcher(result.Funcs, targets, g.PackageOut, g.OutputDir, g.DispatchName); err != nil {
 		return fmt.Errorf("emit dispatcher: %w", err)
 	}
 

@@ -6,7 +6,7 @@
 // The contrib package is organized into subdirectories:
 //
 //   - algo: Transform utilities for applying operations to slices
-//   - math: Transcendental math functions (exp, log, sin, cos, sqrt, sinh, cosh, etc.) and polynomial utilities
+//   - math: Transcendental math functions (exp, log, sin, cos, sqrt, sinh, cosh, etc.)
 //   - dot: Dot product operations for ML applications
 //   - matvec: Matrix-vector multiplication
 //
@@ -39,10 +39,6 @@
 //	expX := math.Exp_AVX2_F32x8(x)
 //	logX := math.Log_AVX2_F32x8(x)
 //	sinX, cosX := math.SinCos_AVX2_F32x8(x)
-//
-//	// Polynomial evaluation
-//	coeffs := []float32{1.0, 2.0, 3.0}
-//	result := math.Horner(x, coeffs)  // Evaluate 1 + 2x + 3x²
 //
 // # Migration Guide
 //

@@ -96,7 +96,6 @@ The contrib package is organized into two subpackages:
 | `Tanh_AVX2_F32x8` | Hyperbolic tangent on SIMD vectors |
 | `Sigmoid_AVX2_F32x8` | Logistic function on SIMD vectors |
 | `Erf_AVX2_F32x8` | Error function on SIMD vectors |
-| `Horner`, `Horner5`, `Horner7`, `Horner13` | Polynomial evaluation utilities |
 
 All functions support `float32` and `float64` with ~4 ULP accuracy.
 
