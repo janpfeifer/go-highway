@@ -197,6 +197,15 @@ func (v Float32x4) ConvertToInt32() Int32x4 {
 	return result
 }
 
+// AsInt32x4 reinterprets bits as int32.
+func (v Float32x4) AsInt32x4() Int32x4 {
+	var result Int32x4
+	for i := 0; i < 4; i++ {
+		result[i] = int32(math.Float32bits(v[i]))
+	}
+	return result
+}
+
 // GetExponent extracts the unbiased exponent from IEEE 754 floats.
 func (v Float32x4) GetExponent() Int32x4 {
 	var result Int32x4
@@ -410,6 +419,15 @@ func (v Float64x2) ConvertToInt64() Int64x2 {
 	return result
 }
 
+// AsInt64x2 reinterprets bits as int64.
+func (v Float64x2) AsInt64x2() Int64x2 {
+	var result Int64x2
+	for i := 0; i < 2; i++ {
+		result[i] = int64(math.Float64bits(v[i]))
+	}
+	return result
+}
+
 // Equal returns a mask where v == other.
 func (v Float64x2) Equal(other Float64x2) Int64x2 {
 	var result Int64x2
@@ -456,6 +474,16 @@ func (v Int32x2) Add(other Int32x2) Int32x2 {
 	return Int32x2{v[0] + other[0], v[1] + other[1]}
 }
 
+// Sub performs element-wise subtraction.
+func (v Int32x2) Sub(other Int32x2) Int32x2 {
+	return Int32x2{v[0] - other[0], v[1] - other[1]}
+}
+
+// Mul performs element-wise multiplication.
+func (v Int32x2) Mul(other Int32x2) Int32x2 {
+	return Int32x2{v[0] * other[0], v[1] * other[1]}
+}
+
 // ShiftAllLeft shifts all elements left by the given count.
 func (v Int32x2) ShiftAllLeft(count int) Int32x2 {
 	return Int32x2{v[0] << count, v[1] << count}
@@ -485,11 +513,38 @@ func (v Int32x4) Add(other Int32x4) Int32x4 {
 	return result
 }
 
+// Sub performs element-wise subtraction.
+func (v Int32x4) Sub(other Int32x4) Int32x4 {
+	var result Int32x4
+	for i := 0; i < 4; i++ {
+		result[i] = v[i] - other[i]
+	}
+	return result
+}
+
+// Mul performs element-wise multiplication.
+func (v Int32x4) Mul(other Int32x4) Int32x4 {
+	var result Int32x4
+	for i := 0; i < 4; i++ {
+		result[i] = v[i] * other[i]
+	}
+	return result
+}
+
 // ShiftAllLeft shifts all elements left by the given count.
 func (v Int32x4) ShiftAllLeft(count int) Int32x4 {
 	var result Int32x4
 	for i := 0; i < 4; i++ {
 		result[i] = v[i] << count
+	}
+	return result
+}
+
+// ShiftAllRight shifts all elements right by the given count.
+func (v Int32x4) ShiftAllRight(count int) Int32x4 {
+	var result Int32x4
+	for i := 0; i < 4; i++ {
+		result[i] = v[i] >> count
 	}
 	return result
 }
@@ -500,6 +555,13 @@ func (v Int32x4) AsFloat32x4() Float32x4 {
 	for i := 0; i < 4; i++ {
 		result[i] = float32FromBits(uint32(v[i]))
 	}
+	return result
+}
+
+// ConvertToFloat32 converts int32 to float32.
+func (v Int32x4) ConvertToFloat32() Float32x4 {
+	var result Float32x4
+	ConvertI32ToF32(v[:], result[:])
 	return result
 }
 
@@ -539,6 +601,24 @@ func (v Int32x4) Equal(other Int32x4) BoolMask32x4 {
 		result[i] = v[i] == other[i]
 	}
 	return result
+}
+
+// Merge selects elements: mask ? v : other
+func (v Int32x4) Merge(other Int32x4, mask BoolMask32x4) Int32x4 {
+	var result Int32x4
+	for i := 0; i < 4; i++ {
+		if mask[i] {
+			result[i] = v[i]
+		} else {
+			result[i] = other[i]
+		}
+	}
+	return result
+}
+
+// StoreSlice stores the vector to a slice.
+func (v Int32x4) StoreSlice(s []int32) {
+	copy(s[:4], v[:])
 }
 
 // Data returns the underlying array as a slice.
@@ -584,6 +664,24 @@ func (v Int32x2) Equal(other Int32x2) BoolMask32x2 {
 	return result
 }
 
+// Merge selects elements: mask ? v : other
+func (v Int32x2) Merge(other Int32x2, mask BoolMask32x2) Int32x2 {
+	var result Int32x2
+	for i := 0; i < 2; i++ {
+		if mask[i] {
+			result[i] = v[i]
+		} else {
+			result[i] = other[i]
+		}
+	}
+	return result
+}
+
+// StoreSlice stores the vector to a slice.
+func (v Int32x2) StoreSlice(s []int32) {
+	copy(s[:2], v[:])
+}
+
 // Data returns the underlying array as a slice.
 func (v Int32x2) Data() []int32 {
 	return v[:]
@@ -626,6 +724,31 @@ func BroadcastInt64x2(v int64) Int64x2 {
 	return Int64x2{v, v}
 }
 
+// ShiftAllRight shifts all elements right by the given count.
+func (v Int64x2) ShiftAllRight(count int) Int64x2 {
+	return Int64x2{v[0] >> count, v[1] >> count}
+}
+
+// StoreSlice stores the vector to a slice.
+func (v Int64x2) StoreSlice(s []int64) {
+	copy(s[:2], v[:])
+}
+
+// Add performs element-wise addition.
+func (v Int64x2) Add(other Int64x2) Int64x2 {
+	return Int64x2{v[0] + other[0], v[1] + other[1]}
+}
+
+// Sub performs element-wise subtraction.
+func (v Int64x2) Sub(other Int64x2) Int64x2 {
+	return Int64x2{v[0] - other[0], v[1] - other[1]}
+}
+
+// Mul performs element-wise multiplication.
+func (v Int64x2) Mul(other Int64x2) Int64x2 {
+	return Int64x2{v[0] * other[0], v[1] * other[1]}
+}
+
 // And performs element-wise bitwise AND.
 func (v Int64x2) And(other Int64x2) Int64x2 {
 	return Int64x2{v[0] & other[0], v[1] & other[1]}
@@ -639,6 +762,24 @@ func (v Int64x2) Or(other Int64x2) Int64x2 {
 // Xor performs element-wise bitwise XOR.
 func (v Int64x2) Xor(other Int64x2) Int64x2 {
 	return Int64x2{v[0] ^ other[0], v[1] ^ other[1]}
+}
+
+// AsFloat64x2 reinterprets bits as float64.
+func (v Int64x2) AsFloat64x2() Float64x2 {
+	var result Float64x2
+	for i := 0; i < 2; i++ {
+		result[i] = math.Float64frombits(uint64(v[i]))
+	}
+	return result
+}
+
+// ConvertToFloat64 converts int64 to float64.
+func (v Int64x2) ConvertToFloat64() Float64x2 {
+	var result Float64x2
+	for i := 0; i < 2; i++ {
+		result[i] = float64(v[i])
+	}
+	return result
 }
 
 // ===== Helper functions =====
