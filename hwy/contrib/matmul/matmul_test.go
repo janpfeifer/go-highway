@@ -504,3 +504,133 @@ func TestBlockedMatMul(t *testing.T) {
 		})
 	}
 }
+
+// TestParallelMatMul verifies the parallel matmul produces correct results.
+func TestParallelMatMul(t *testing.T) {
+	sizes := []int{128, 256, 512}
+
+	for _, size := range sizes {
+		t.Run(sizeStr(size), func(t *testing.T) {
+			m, n, k := size, size, size
+
+			a := make([]float32, m*k)
+			b := make([]float32, k*n)
+			c := make([]float32, m*n)
+			expected := make([]float32, m*n)
+
+			for i := range a {
+				a[i] = rand.Float32()
+			}
+			for i := range b {
+				b[i] = rand.Float32()
+			}
+
+			matmulReference(a, b, expected, m, n, k)
+			ParallelMatMul(a, b, c, m, n, k)
+
+			var maxErr float32
+			for i := range c {
+				err := float32(math.Abs(float64(c[i] - expected[i])))
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			t.Logf("size %dx%d: max error %e", size, size, maxErr)
+			tolerance := float32(1e-4) * float32(k)
+			if maxErr > tolerance {
+				t.Errorf("max error %e exceeds threshold %e", maxErr, tolerance)
+			}
+		})
+	}
+}
+
+// BenchmarkParallelMatMul benchmarks the parallel matmul.
+func BenchmarkParallelMatMul(b *testing.B) {
+	b.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	sizes := []int{256, 512, 1024}
+
+	for _, size := range sizes {
+		m, n, k := size, size, size
+
+		a := make([]float32, m*k)
+		bMat := make([]float32, k*n)
+		c := make([]float32, m*n)
+
+		for i := range a {
+			a[i] = rand.Float32()
+		}
+		for i := range bMat {
+			bMat[i] = rand.Float32()
+		}
+
+		flops := float64(2*m*n*k) / 1e9
+
+		b.Run(sizeStr(size), func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				ParallelMatMul(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+	}
+}
+
+// BenchmarkParallelVsBlocked compares parallel and blocked (single-threaded) matmul.
+func BenchmarkParallelVsBlocked(b *testing.B) {
+	b.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	sizes := []int{256, 512, 1024}
+
+	for _, size := range sizes {
+		m, n, k := size, size, size
+
+		a := make([]float32, m*k)
+		bMat := make([]float32, k*n)
+		c := make([]float32, m*n)
+
+		for i := range a {
+			a[i] = rand.Float32()
+		}
+		for i := range bMat {
+			bMat[i] = rand.Float32()
+		}
+
+		flops := float64(2*m*n*k) / 1e9
+
+		b.Run(sizeStr(size)+"/Blocked", func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				BlockedMatMul(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+
+		b.Run(sizeStr(size)+"/Parallel", func(b *testing.B) {
+			b.SetBytes(int64((m*k + k*n + m*n) * 4))
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				ParallelMatMul(a, bMat, c, m, n, k)
+			}
+
+			b.StopTimer()
+			elapsed := b.Elapsed().Seconds()
+			gflops := flops * float64(b.N) / elapsed
+			b.ReportMetric(gflops, "GFLOPS")
+		})
+	}
+}
