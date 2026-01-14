@@ -757,18 +757,22 @@ func emitGenericDispatcher(buf *bytes.Buffer, pf ParsedFunc) {
 
 	fmt.Fprintf(buf, " {\n")
 
-	// Find the first slice parameter to use for type switch
+	// Find the first parameter with a generic type to use for type switch
 	var switchParam string
+	var switchParamType string
 	for _, param := range pf.Params {
-		if strings.HasPrefix(param.Type, "[]T") || param.Type == "[]T" {
+		// Check if this parameter contains a type parameter
+		if containsTypeParam(param.Type, pf.TypeParams) {
 			switchParam = param.Name
+			switchParamType = param.Type
 			break
 		}
 	}
 
 	if switchParam == "" {
-		// No slice parameter found, use first parameter
+		// No generic parameter found, use first parameter
 		switchParam = pf.Params[0].Name
+		switchParamType = pf.Params[0].Type
 	}
 
 	// Generate type switch
@@ -776,9 +780,10 @@ func emitGenericDispatcher(buf *bytes.Buffer, pf ParsedFunc) {
 
 	for _, elemType := range concreteTypes {
 		dispatchName := buildDispatchFuncName(pf.Name, elemType)
-		sliceType := "[]" + elemType
+		// Use specializeType to get the concrete type for the case statement
+		caseType := specializeType(switchParamType, pf.TypeParams, elemType)
 
-		fmt.Fprintf(buf, "\tcase %s:\n", sliceType)
+		fmt.Fprintf(buf, "\tcase %s:\n", caseType)
 
 		// Build the call with type assertions
 		// Check if return type is a type parameter that needs wrapping
@@ -799,8 +804,10 @@ func emitGenericDispatcher(buf *bytes.Buffer, pf ParsedFunc) {
 				fmt.Fprintf(buf, ", ")
 			}
 			// Check if this parameter needs type assertion
-			if strings.HasPrefix(param.Type, "[]T") || param.Type == "[]T" {
-				fmt.Fprintf(buf, "any(%s).(%s)", param.Name, sliceType)
+			if containsTypeParam(param.Type, pf.TypeParams) {
+				// Use specializeType to get the correct concrete type
+				concreteParamType := specializeType(param.Type, pf.TypeParams, elemType)
+				fmt.Fprintf(buf, "any(%s).(%s)", param.Name, concreteParamType)
 			} else if param.Type == "T" {
 				fmt.Fprintf(buf, "any(%s).(%s)", param.Name, elemType)
 			} else if isInterfaceTypeParam(param.Type, pf.TypeParams) {
@@ -931,4 +938,50 @@ func getConstraintForParam(paramType string, typeParams []TypeParam) string {
 		}
 	}
 	return paramType
+}
+
+// containsTypeParam checks if a type string contains any of the element type parameters.
+// This includes patterns like:
+// - "T" (standalone type param)
+// - "[]T" (slice of type param)
+// - "*Image[T]" (pointer to generic type)
+// - "func(T) T" (function with type params)
+func containsTypeParam(typeStr string, typeParams []TypeParam) bool {
+	for _, tp := range typeParams {
+		// Check if this is an element type parameter (not an interface constraint)
+		if !strings.Contains(tp.Constraint, "Lanes") &&
+			!strings.Contains(tp.Constraint, "Floats") &&
+			!strings.Contains(tp.Constraint, "Integers") &&
+			!strings.Contains(tp.Constraint, "SignedInts") &&
+			!strings.Contains(tp.Constraint, "UnsignedInts") {
+			continue // Skip interface type params
+		}
+
+		// Check various patterns where the type param might appear
+		paramName := tp.Name
+
+		// Exact match (just "T")
+		if typeStr == paramName {
+			return true
+		}
+
+		// In brackets [T] (generic type argument)
+		if strings.Contains(typeStr, "["+paramName+"]") {
+			return true
+		}
+
+		// Slice type []T
+		if strings.Contains(typeStr, "[]"+paramName) {
+			return true
+		}
+
+		// Function parameter/return (T, or (T or ,T or T))
+		if strings.Contains(typeStr, "("+paramName) ||
+			strings.Contains(typeStr, ","+paramName) ||
+			strings.Contains(typeStr, " "+paramName) ||
+			strings.HasSuffix(typeStr, paramName) {
+			return true
+		}
+	}
+	return false
 }

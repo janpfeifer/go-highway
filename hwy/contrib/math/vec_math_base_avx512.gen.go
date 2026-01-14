@@ -6,373 +6,189 @@ package math
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
-	"sync"
 )
 
-// Hoisted constants - lazily initialized on first use to avoid init-time crashes
+// Hoisted constants - pre-broadcasted at package init time
 var (
-	BaseAtanhVec_AVX512_one_f64        archsimd.Float64x8
-	BaseExpVec_AVX512_ln2Hi_f32        archsimd.Float32x16
-	BaseExpVec_AVX512_zero_f64         archsimd.Float64x8
-	BaseLogVec_AVX512_ln2Lo_f32        archsimd.Float32x16
-	BaseLog10Vec_AVX512_log10E_f64     archsimd.Float64x8
-	BaseSinhVec_AVX512_c3_f32          archsimd.Float32x16
-	BaseCoshVec_AVX512_c6_f64          archsimd.Float64x8
-	BaseExpVec_AVX512_overflow_f32     archsimd.Float32x16
-	BaseExpVec_AVX512_underflow_f32    archsimd.Float32x16
-	BaseSinVec_AVX512_intOne_i32_f32   archsimd.Int32x16
-	BaseAtanhVec_AVX512_half_f32       archsimd.Float32x16
-	BaseExpVec_AVX512_underflow_f64    archsimd.Float64x8
-	BaseTanhVec_AVX512_negOne_f32      archsimd.Float32x16
-	BaseSinVec_AVX512_twoOverPi_f32    archsimd.Float32x16
-	BaseSinVec_AVX512_c4_f64           archsimd.Float64x8
-	BaseCosVec_AVX512_s4_f64           archsimd.Float64x8
-	BaseSigmoidVec_AVX512_zero_f64     archsimd.Float64x8
-	BaseErfVec_AVX512_p_f64            archsimd.Float64x8
-	BaseSinVec_AVX512_one_f32          archsimd.Float32x16
-	BaseCosVec_AVX512_piOver2Lo_f64    archsimd.Float64x8
-	BaseExpVec_AVX512_invLn2_f32       archsimd.Float32x16
-	BaseLogVec_AVX512_c4_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_s4_f64           archsimd.Float64x8
-	BaseCosVec_AVX512_intTwo_i32_f32   archsimd.Int32x16
-	BaseCosVec_AVX512_twoOverPi_f64    archsimd.Float64x8
-	BaseCosVec_AVX512_piOver2Hi_f64    archsimd.Float64x8
-	BaseCosVec_AVX512_c4_f64           archsimd.Float64x8
-	BaseCoshVec_AVX512_c6_f32          archsimd.Float32x16
-	BaseLogVec_AVX512_ln2Hi_f32        archsimd.Float32x16
-	BaseExpVec_AVX512_ln2Lo_f32        archsimd.Float32x16
-	BaseExpVec_AVX512_c4_f64           archsimd.Float64x8
-	BaseTanhVec_AVX512_two_f32         archsimd.Float32x16
-	BaseCoshVec_AVX512_one_f64         archsimd.Float64x8
-	BaseLog2Vec_AVX512_log2E_f64       archsimd.Float64x8
-	BaseAsinhVec_AVX512_one_f64        archsimd.Float64x8
-	BaseExpVec_AVX512_c6_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_piOver2Lo_f32    archsimd.Float32x16
-	BaseAcoshVec_AVX512_zero_f32       archsimd.Float32x16
-	BaseAtanhVec_AVX512_zero_f64       archsimd.Float64x8
-	BaseTanhVec_AVX512_one_f32         archsimd.Float32x16
-	BaseSinVec_AVX512_intOne_i32_f64   archsimd.Int32x8
-	BaseSinVec_AVX512_intThree_i32_f64 archsimd.Int32x8
-	BaseErfVec_AVX512_zero_f64         archsimd.Float64x8
-	BaseSinhVec_AVX512_c5_f32          archsimd.Float32x16
-	BaseCoshVec_AVX512_c4_f64          archsimd.Float64x8
-	BaseSigmoidVec_AVX512_satHi_f32    archsimd.Float32x16
-	BaseSinVec_AVX512_s4_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_c1_f64           archsimd.Float64x8
-	BaseCosVec_AVX512_s1_f32           archsimd.Float32x16
-	BaseErfVec_AVX512_a1_f32           archsimd.Float32x16
-	BaseAcoshVec_AVX512_one_f64        archsimd.Float64x8
-	BaseCosVec_AVX512_piOver2Hi_f32    archsimd.Float32x16
-	BaseExpVec_AVX512_ln2Hi_f64        archsimd.Float64x8
-	BaseLogVec_AVX512_zero_f64         archsimd.Float64x8
-	BaseSinVec_AVX512_intTwo_i32_f64   archsimd.Int32x8
-	BaseExp2Vec_AVX512_ln2_f32         archsimd.Float32x16
-	BaseAcoshVec_AVX512_zero_f64       archsimd.Float64x8
-	BaseAtanhVec_AVX512_zero_f32       archsimd.Float32x16
-	BaseCosVec_AVX512_s2_f32           archsimd.Float32x16
-	BaseExpVec_AVX512_one_f64          archsimd.Float64x8
-	BaseSigmoidVec_AVX512_one_f64      archsimd.Float64x8
-	BaseSigmoidVec_AVX512_satLo_f64    archsimd.Float64x8
-	BaseLogVec_AVX512_c3_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_c2_f64           archsimd.Float64x8
-	BaseCosVec_AVX512_piOver2Lo_f32    archsimd.Float32x16
-	BaseCosVec_AVX512_c3_f64           archsimd.Float64x8
-	BaseExpVec_AVX512_c2_f32           archsimd.Float32x16
-	BaseExpVec_AVX512_c5_f64           archsimd.Float64x8
-	BaseLogVec_AVX512_ln2Lo_f64        archsimd.Float64x8
-	BaseCosVec_AVX512_s3_f64           archsimd.Float64x8
-	BaseErfVec_AVX512_one_f64          archsimd.Float64x8
-	BaseSinhVec_AVX512_c7_f64          archsimd.Float64x8
-	BaseAtanhVec_AVX512_half_f64       archsimd.Float64x8
-	BaseCosVec_AVX512_c2_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_intOne_i32_f32   archsimd.Int32x16
-	BaseSigmoidVec_AVX512_one_f32      archsimd.Float32x16
-	BaseTanhVec_AVX512_two_f64         archsimd.Float64x8
-	BaseLogVec_AVX512_c2_f32           archsimd.Float32x16
-	BaseLogVec_AVX512_c5_f64           archsimd.Float64x8
-	BaseLogVec_AVX512_one_f64          archsimd.Float64x8
-	BaseCosVec_AVX512_s2_f64           archsimd.Float64x8
-	BaseExpVec_AVX512_c6_f32           archsimd.Float32x16
-	BaseExpVec_AVX512_c3_f64           archsimd.Float64x8
-	BaseExpVec_AVX512_overflow_f64     archsimd.Float64x8
-	BaseLogVec_AVX512_nan_f32          archsimd.Float32x16
-	BaseSinVec_AVX512_piOver2Hi_f32    archsimd.Float32x16
-	BaseCosVec_AVX512_s3_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_one_f64          archsimd.Float64x8
-	BaseSinhVec_AVX512_c7_f32          archsimd.Float32x16
-	BaseExpVec_AVX512_zero_f32         archsimd.Float32x16
-	BaseLogVec_AVX512_negInf_f32       archsimd.Float32x16
-	BaseSinVec_AVX512_c3_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_piOver2Lo_f64    archsimd.Float64x8
-	BaseCosVec_AVX512_intThree_i32_f32 archsimd.Int32x16
-	BaseLog10Vec_AVX512_log10E_f32     archsimd.Float32x16
-	BaseCoshVec_AVX512_one_f32         archsimd.Float32x16
-	BaseCosVec_AVX512_s1_f64           archsimd.Float64x8
-	BaseLogVec_AVX512_c1_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_piOver2Hi_f64    archsimd.Float64x8
-	BaseSinVec_AVX512_twoOverPi_f64    archsimd.Float64x8
-	BaseCosVec_AVX512_c1_f32           archsimd.Float32x16
-	BaseAtanhVec_AVX512_one_f32        archsimd.Float32x16
-	BaseExpVec_AVX512_c1_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_c4_f32           archsimd.Float32x16
-	BaseErfVec_AVX512_a2_f64           archsimd.Float64x8
-	BaseErfVec_AVX512_a3_f64           archsimd.Float64x8
-	BaseTanhVec_AVX512_one_f64         archsimd.Float64x8
-	BaseErfVec_AVX512_a5_f64           archsimd.Float64x8
-	BaseErfVec_AVX512_a1_f64           archsimd.Float64x8
-	BaseCoshVec_AVX512_c2_f32          archsimd.Float32x16
-	BaseExpVec_AVX512_one_f32          archsimd.Float32x16
-	BaseExpVec_AVX512_c3_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_intTwo_i32_f64   archsimd.Int32x8
-	BaseExp2Vec_AVX512_ln2_f64         archsimd.Float64x8
-	BaseCoshVec_AVX512_c2_f64          archsimd.Float64x8
-	BaseLogVec_AVX512_c4_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_c4_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_intThree_i32_f64 archsimd.Int32x8
-	BaseErfVec_AVX512_one_f32          archsimd.Float32x16
-	BaseLog2Vec_AVX512_log2E_f32       archsimd.Float32x16
-	BaseExpVec_AVX512_c4_f32           archsimd.Float32x16
-	BaseLogVec_AVX512_one_f32          archsimd.Float32x16
-	BaseSinVec_AVX512_c1_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_s1_f64           archsimd.Float64x8
-	BaseCosVec_AVX512_twoOverPi_f32    archsimd.Float32x16
-	BaseCosVec_AVX512_intOne_i32_f64   archsimd.Int32x8
-	BaseSinhVec_AVX512_one_f32         archsimd.Float32x16
-	BaseSinhVec_AVX512_c5_f64          archsimd.Float64x8
-	BaseLogVec_AVX512_c3_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_one_f32          archsimd.Float32x16
-	BaseCosVec_AVX512_c3_f32           archsimd.Float32x16
-	BaseAsinhVec_AVX512_one_f32        archsimd.Float32x16
-	BaseExpVec_AVX512_c2_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_s3_f32           archsimd.Float32x16
-	BaseErfVec_AVX512_p_f32            archsimd.Float32x16
-	BaseExpVec_AVX512_invLn2_f64       archsimd.Float64x8
-	BaseSigmoidVec_AVX512_zero_f32     archsimd.Float32x16
-	BaseSigmoidVec_AVX512_satLo_f32    archsimd.Float32x16
-	BaseSinVec_AVX512_c2_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_s2_f64           archsimd.Float64x8
-	BaseErfVec_AVX512_a4_f32           archsimd.Float32x16
-	BaseErfVec_AVX512_zero_f32         archsimd.Float32x16
-	BaseTanhVec_AVX512_negOne_f64      archsimd.Float64x8
-	BaseSinVec_AVX512_intTwo_i32_f32   archsimd.Int32x16
-	BaseAcoshVec_AVX512_one_f32        archsimd.Float32x16
-	BaseExpVec_AVX512_ln2Lo_f64        archsimd.Float64x8
-	BaseLogVec_AVX512_zero_f32         archsimd.Float32x16
-	BaseLogVec_AVX512_c2_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_s2_f32           archsimd.Float32x16
-	BaseSinVec_AVX512_c3_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_s3_f64           archsimd.Float64x8
-	BaseCosVec_AVX512_c2_f64           archsimd.Float64x8
-	BaseErfVec_AVX512_a5_f32           archsimd.Float32x16
-	BaseLogVec_AVX512_two_f64          archsimd.Float64x8
-	BaseSinVec_AVX512_intThree_i32_f32 archsimd.Int32x16
-	BaseSinVec_AVX512_one_f64          archsimd.Float64x8
-	BaseErfVec_AVX512_a2_f32           archsimd.Float32x16
-	BaseSinhVec_AVX512_one_f64         archsimd.Float64x8
-	BaseExpVec_AVX512_c5_f32           archsimd.Float32x16
-	BaseTanhVec_AVX512_threshold_f32   archsimd.Float32x16
-	BaseTanhVec_AVX512_threshold_f64   archsimd.Float64x8
-	BaseLogVec_AVX512_ln2Hi_f64        archsimd.Float64x8
-	BaseLogVec_AVX512_c1_f64           archsimd.Float64x8
-	BaseSinVec_AVX512_s1_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_s4_f32           archsimd.Float32x16
-	BaseCosVec_AVX512_c1_f64           archsimd.Float64x8
-	BaseLogVec_AVX512_nan_f64          archsimd.Float64x8
-	BaseExpVec_AVX512_c1_f64           archsimd.Float64x8
-	BaseSigmoidVec_AVX512_satHi_f64    archsimd.Float64x8
-	BaseLogVec_AVX512_c5_f32           archsimd.Float32x16
-	BaseLogVec_AVX512_two_f32          archsimd.Float32x16
-	BaseLogVec_AVX512_negInf_f64       archsimd.Float64x8
-	BaseErfVec_AVX512_a3_f32           archsimd.Float32x16
-	BaseErfVec_AVX512_a4_f64           archsimd.Float64x8
-	BaseSinhVec_AVX512_c3_f64          archsimd.Float64x8
-	BaseCoshVec_AVX512_c4_f32          archsimd.Float32x16
-	_hoistOnce                         sync.Once
+	BaseSinVec_AVX512_c1_f32           = archsimd.BroadcastFloat32x16(float32(trigC1_f32))
+	BaseCosVec_AVX512_c2_f32           = archsimd.BroadcastFloat32x16(float32(trigC2_f32))
+	BaseCosVec_AVX512_s1_f32           = archsimd.BroadcastFloat32x16(float32(trigS1_f32))
+	BaseExpVec_AVX512_c4_f64           = archsimd.BroadcastFloat64x8(float64(expC4_f64))
+	BaseLogVec_AVX512_two_f32          = archsimd.BroadcastFloat32x16(float32(logTwo_f32))
+	BaseSinVec_AVX512_piOver2Hi_f32    = archsimd.BroadcastFloat32x16(float32(trigPiOver2Hi_f32))
+	BaseSinVec_AVX512_s4_f32           = archsimd.BroadcastFloat32x16(float32(trigS4_f32))
+	BaseSinVec_AVX512_s1_f64           = archsimd.BroadcastFloat64x8(float64(trigS1_f64))
+	BaseErfVec_AVX512_zero_f32         = archsimd.BroadcastFloat32x16(float32(erfZero_f32))
+	BaseErfVec_AVX512_a5_f64           = archsimd.BroadcastFloat64x8(float64(erfA5_f64))
+	BaseLogVec_AVX512_negInf_f64       = archsimd.BroadcastFloat64x8(float64(-1e38))
+	BaseExpVec_AVX512_ln2Hi_f32        = archsimd.BroadcastFloat32x16(float32(expLn2Hi_f32))
+	BaseTanhVec_AVX512_two_f32         = archsimd.BroadcastFloat32x16(float32(2.0))
+	BaseLogVec_AVX512_ln2Hi_f32        = archsimd.BroadcastFloat32x16(float32(logLn2Hi_f32))
+	BaseLogVec_AVX512_c2_f32           = archsimd.BroadcastFloat32x16(float32(logC2_f32))
+	BaseLogVec_AVX512_zero_f64         = archsimd.BroadcastFloat64x8(float64(0.0))
+	BaseSinhVec_AVX512_one_f32         = archsimd.BroadcastFloat32x16(float32(sinhOne_f32))
+	BaseCoshVec_AVX512_c6_f64          = archsimd.BroadcastFloat64x8(float64(0.001388888888888889))
+	BaseLogVec_AVX512_c5_f32           = archsimd.BroadcastFloat32x16(float32(logC5_f32))
+	BaseSinVec_AVX512_piOver2Lo_f32    = archsimd.BroadcastFloat32x16(float32(trigPiOver2Lo_f32))
+	BaseSinVec_AVX512_s3_f64           = archsimd.BroadcastFloat64x8(float64(trigS3_f64))
+	BaseCosVec_AVX512_piOver2Hi_f64    = archsimd.BroadcastFloat64x8(float64(trigPiOver2Hi_f64))
+	BaseLog10Vec_AVX512_log10E_f32     = archsimd.BroadcastFloat32x16(float32(log10E_f32))
+	BaseAcoshVec_AVX512_one_f64        = archsimd.BroadcastFloat64x8(float64(1.0))
+	BaseAtanhVec_AVX512_zero_f64       = archsimd.BroadcastFloat64x8(float64(0.0))
+	BaseExpVec_AVX512_c3_f32           = archsimd.BroadcastFloat32x16(float32(expC3_f32))
+	BaseExpVec_AVX512_overflow_f32     = archsimd.BroadcastFloat32x16(float32(expOverflow_f32))
+	BaseLogVec_AVX512_c1_f64           = archsimd.BroadcastFloat64x8(float64(logC1_f64))
+	BaseSinVec_AVX512_c4_f32           = archsimd.BroadcastFloat32x16(float32(trigC4_f32))
+	BaseSinVec_AVX512_intTwo_i32_f32   = archsimd.BroadcastInt32x16(2)
+	BaseSinVec_AVX512_one_f64          = archsimd.BroadcastFloat64x8(float64(trigOne_f64))
+	BaseCosVec_AVX512_twoOverPi_f32    = archsimd.BroadcastFloat32x16(float32(trig2OverPi_f32))
+	BaseCoshVec_AVX512_one_f64         = archsimd.BroadcastFloat64x8(float64(1.0))
+	BaseTanhVec_AVX512_one_f32         = archsimd.BroadcastFloat32x16(float32(tanhOne_f32))
+	BaseLog2Vec_AVX512_log2E_f64       = archsimd.BroadcastFloat64x8(float64(log2E_f64))
+	BaseAtanhVec_AVX512_one_f64        = archsimd.BroadcastFloat64x8(float64(1.0))
+	BaseExpVec_AVX512_ln2Lo_f64        = archsimd.BroadcastFloat64x8(float64(expLn2Lo_f64))
+	BaseTanhVec_AVX512_two_f64         = archsimd.BroadcastFloat64x8(float64(2.0))
+	BaseLogVec_AVX512_ln2Lo_f64        = archsimd.BroadcastFloat64x8(float64(logLn2Lo_f64))
+	BaseCosVec_AVX512_intThree_i32_f32 = archsimd.BroadcastInt32x16(3)
+	BaseCosVec_AVX512_piOver2Lo_f64    = archsimd.BroadcastFloat64x8(float64(trigPiOver2Lo_f64))
+	BaseCosVec_AVX512_s2_f64           = archsimd.BroadcastFloat64x8(float64(trigS2_f64))
+	BaseCosVec_AVX512_c1_f64           = archsimd.BroadcastFloat64x8(float64(trigC1_f64))
+	BaseCosVec_AVX512_intTwo_i32_f64   = archsimd.BroadcastInt32x8(2)
+	BaseExpVec_AVX512_underflow_f32    = archsimd.BroadcastFloat32x16(float32(expUnderflow_f32))
+	BaseSigmoidVec_AVX512_one_f32      = archsimd.BroadcastFloat32x16(float32(sigmoidOne_f32))
+	BaseCosVec_AVX512_piOver2Hi_f32    = archsimd.BroadcastFloat32x16(float32(trigPiOver2Hi_f32))
+	BaseErfVec_AVX512_a2_f32           = archsimd.BroadcastFloat32x16(float32(erfA2_f32))
+	BaseLog2Vec_AVX512_log2E_f32       = archsimd.BroadcastFloat32x16(float32(log2E_f32))
+	BaseCoshVec_AVX512_c4_f32          = archsimd.BroadcastFloat32x16(float32(0.041666666666666664))
+	BaseAcoshVec_AVX512_one_f32        = archsimd.BroadcastFloat32x16(float32(1.0))
+	BaseExpVec_AVX512_invLn2_f32       = archsimd.BroadcastFloat32x16(float32(expInvLn2_f32))
+	BaseExpVec_AVX512_zero_f32         = archsimd.BroadcastFloat32x16(float32(expZero_f32))
+	BaseSigmoidVec_AVX512_satLo_f64    = archsimd.BroadcastFloat64x8(float64(-20.0))
+	BaseCosVec_AVX512_c3_f64           = archsimd.BroadcastFloat64x8(float64(trigC3_f64))
+	BaseExpVec_AVX512_invLn2_f64       = archsimd.BroadcastFloat64x8(float64(expInvLn2_f64))
+	BaseSinVec_AVX512_intThree_i32_f64 = archsimd.BroadcastInt32x8(3)
+	BaseSinVec_AVX512_intOne_i32_f64   = archsimd.BroadcastInt32x8(1)
+	BaseCosVec_AVX512_intOne_i32_f32   = archsimd.BroadcastInt32x16(1)
+	BaseCosVec_AVX512_s4_f64           = archsimd.BroadcastFloat64x8(float64(trigS4_f64))
+	BaseSinhVec_AVX512_c3_f32          = archsimd.BroadcastFloat32x16(float32(sinhC3_f32))
+	BaseExpVec_AVX512_c4_f32           = archsimd.BroadcastFloat32x16(float32(expC4_f32))
+	BaseLogVec_AVX512_c3_f64           = archsimd.BroadcastFloat64x8(float64(logC3_f64))
+	BaseSinVec_AVX512_c3_f32           = archsimd.BroadcastFloat32x16(float32(trigC3_f32))
+	BaseCosVec_AVX512_s2_f32           = archsimd.BroadcastFloat32x16(float32(trigS2_f32))
+	BaseAtanhVec_AVX512_half_f64       = archsimd.BroadcastFloat64x8(float64(0.5))
+	BaseLogVec_AVX512_one_f32          = archsimd.BroadcastFloat32x16(float32(logOne_f32))
+	BaseSinVec_AVX512_s2_f32           = archsimd.BroadcastFloat32x16(float32(trigS2_f32))
+	BaseCosVec_AVX512_intTwo_i32_f32   = archsimd.BroadcastInt32x16(2)
+	BaseCosVec_AVX512_c3_f32           = archsimd.BroadcastFloat32x16(float32(trigC3_f32))
+	BaseSinhVec_AVX512_c7_f64          = archsimd.BroadcastFloat64x8(float64(sinhC7_f64))
+	BaseCoshVec_AVX512_c4_f64          = archsimd.BroadcastFloat64x8(float64(0.041666666666666664))
+	BaseTanhVec_AVX512_threshold_f32   = archsimd.BroadcastFloat32x16(float32(tanhClamp_f32))
+	BaseSinVec_AVX512_s4_f64           = archsimd.BroadcastFloat64x8(float64(trigS4_f64))
+	BaseErfVec_AVX512_p_f32            = archsimd.BroadcastFloat32x16(float32(erfP_f32))
+	BaseSinhVec_AVX512_c5_f64          = archsimd.BroadcastFloat64x8(float64(sinhC5_f64))
+	BaseAcoshVec_AVX512_zero_f32       = archsimd.BroadcastFloat32x16(float32(0.0))
+	BaseExpVec_AVX512_c1_f64           = archsimd.BroadcastFloat64x8(float64(expC1_f64))
+	BaseExpVec_AVX512_c6_f64           = archsimd.BroadcastFloat64x8(float64(expC6_f64))
+	BaseLogVec_AVX512_c3_f32           = archsimd.BroadcastFloat32x16(float32(logC3_f32))
+	BaseSinVec_AVX512_c3_f64           = archsimd.BroadcastFloat64x8(float64(trigC3_f64))
+	BaseSinVec_AVX512_intTwo_i32_f64   = archsimd.BroadcastInt32x8(2)
+	BaseCosVec_AVX512_twoOverPi_f64    = archsimd.BroadcastFloat64x8(float64(trig2OverPi_f64))
+	BaseCosVec_AVX512_intThree_i32_f64 = archsimd.BroadcastInt32x8(3)
+	BaseExpVec_AVX512_c5_f32           = archsimd.BroadcastFloat32x16(float32(expC5_f32))
+	BaseAsinhVec_AVX512_one_f64        = archsimd.BroadcastFloat64x8(float64(1.0))
+	BaseExpVec_AVX512_c3_f64           = archsimd.BroadcastFloat64x8(float64(expC3_f64))
+	BaseSigmoidVec_AVX512_satHi_f32    = archsimd.BroadcastFloat32x16(float32(20.0))
+	BaseTanhVec_AVX512_one_f64         = archsimd.BroadcastFloat64x8(float64(tanhOne_f64))
+	BaseLogVec_AVX512_c4_f32           = archsimd.BroadcastFloat32x16(float32(logC4_f32))
+	BaseSinVec_AVX512_s2_f64           = archsimd.BroadcastFloat64x8(float64(trigS2_f64))
+	BaseSinVec_AVX512_c1_f64           = archsimd.BroadcastFloat64x8(float64(trigC1_f64))
+	BaseCosVec_AVX512_one_f32          = archsimd.BroadcastFloat32x16(float32(trigOne_f32))
+	BaseSigmoidVec_AVX512_satLo_f32    = archsimd.BroadcastFloat32x16(float32(-20.0))
+	BaseTanhVec_AVX512_negOne_f32      = archsimd.BroadcastFloat32x16(float32(tanhNegOne_f32))
+	BaseErfVec_AVX512_a3_f64           = archsimd.BroadcastFloat64x8(float64(erfA3_f64))
+	BaseExp2Vec_AVX512_ln2_f64         = archsimd.BroadcastFloat64x8(float64(ln2_f64))
+	BaseCosVec_AVX512_c4_f32           = archsimd.BroadcastFloat32x16(float32(trigC4_f32))
+	BaseLogVec_AVX512_two_f64          = archsimd.BroadcastFloat64x8(float64(logTwo_f64))
+	BaseErfVec_AVX512_one_f32          = archsimd.BroadcastFloat32x16(float32(erfOne_f32))
+	BaseSinhVec_AVX512_c5_f32          = archsimd.BroadcastFloat32x16(float32(sinhC5_f32))
+	BaseSinVec_AVX512_intOne_i32_f32   = archsimd.BroadcastInt32x16(1)
+	BaseSinVec_AVX512_intThree_i32_f32 = archsimd.BroadcastInt32x16(3)
+	BaseExpVec_AVX512_one_f32          = archsimd.BroadcastFloat32x16(float32(expOne_f32))
+	BaseExpVec_AVX512_zero_f64         = archsimd.BroadcastFloat64x8(float64(expZero_f64))
+	BaseCosVec_AVX512_s3_f64           = archsimd.BroadcastFloat64x8(float64(trigS3_f64))
+	BaseCosVec_AVX512_intOne_i32_f64   = archsimd.BroadcastInt32x8(1)
+	BaseErfVec_AVX512_a1_f32           = archsimd.BroadcastFloat32x16(float32(erfA1_f32))
+	BaseCoshVec_AVX512_one_f32         = archsimd.BroadcastFloat32x16(float32(1.0))
+	BaseSigmoidVec_AVX512_zero_f32     = archsimd.BroadcastFloat32x16(float32(0.0))
+	BaseSigmoidVec_AVX512_zero_f64     = archsimd.BroadcastFloat64x8(float64(0.0))
+	BaseLogVec_AVX512_nan_f32          = archsimd.BroadcastFloat32x16(float32(0.0))
+	BaseLogVec_AVX512_c1_f32           = archsimd.BroadcastFloat32x16(float32(logC1_f32))
+	BaseSinVec_AVX512_twoOverPi_f64    = archsimd.BroadcastFloat64x8(float64(trig2OverPi_f64))
+	BaseCosVec_AVX512_one_f64          = archsimd.BroadcastFloat64x8(float64(trigOne_f64))
+	BaseErfVec_AVX512_a5_f32           = archsimd.BroadcastFloat32x16(float32(erfA5_f32))
+	BaseAtanhVec_AVX512_half_f32       = archsimd.BroadcastFloat32x16(float32(0.5))
+	BaseExpVec_AVX512_underflow_f64    = archsimd.BroadcastFloat64x8(float64(expUnderflow_f64))
+	BaseExpVec_AVX512_c2_f64           = archsimd.BroadcastFloat64x8(float64(expC2_f64))
+	BaseLogVec_AVX512_negInf_f32       = archsimd.BroadcastFloat32x16(float32(-1e38))
+	BaseLogVec_AVX512_nan_f64          = archsimd.BroadcastFloat64x8(float64(0.0))
+	BaseSinVec_AVX512_s1_f32           = archsimd.BroadcastFloat32x16(float32(trigS1_f32))
+	BaseCosVec_AVX512_s4_f32           = archsimd.BroadcastFloat32x16(float32(trigS4_f32))
+	BaseCosVec_AVX512_s1_f64           = archsimd.BroadcastFloat64x8(float64(trigS1_f64))
+	BaseErfVec_AVX512_a1_f64           = archsimd.BroadcastFloat64x8(float64(erfA1_f64))
+	BaseSinVec_AVX512_c2_f32           = archsimd.BroadcastFloat32x16(float32(trigC2_f32))
+	BaseCosVec_AVX512_c1_f32           = archsimd.BroadcastFloat32x16(float32(trigC1_f32))
+	BaseErfVec_AVX512_one_f64          = archsimd.BroadcastFloat64x8(float64(erfOne_f64))
+	BaseSinhVec_AVX512_one_f64         = archsimd.BroadcastFloat64x8(float64(sinhOne_f64))
+	BaseSinhVec_AVX512_c3_f64          = archsimd.BroadcastFloat64x8(float64(sinhC3_f64))
+	BaseCoshVec_AVX512_c2_f32          = archsimd.BroadcastFloat32x16(float32(0.5))
+	BaseAcoshVec_AVX512_zero_f64       = archsimd.BroadcastFloat64x8(float64(0.0))
+	BaseExpVec_AVX512_one_f64          = archsimd.BroadcastFloat64x8(float64(expOne_f64))
+	BaseErfVec_AVX512_a4_f64           = archsimd.BroadcastFloat64x8(float64(erfA4_f64))
+	BaseExpVec_AVX512_c6_f32           = archsimd.BroadcastFloat32x16(float32(expC6_f32))
+	BaseExpVec_AVX512_c2_f32           = archsimd.BroadcastFloat32x16(float32(expC2_f32))
+	BaseExpVec_AVX512_ln2Hi_f64        = archsimd.BroadcastFloat64x8(float64(expLn2Hi_f64))
+	BaseLogVec_AVX512_one_f64          = archsimd.BroadcastFloat64x8(float64(logOne_f64))
+	BaseLogVec_AVX512_ln2Hi_f64        = archsimd.BroadcastFloat64x8(float64(logLn2Hi_f64))
+	BaseCosVec_AVX512_s3_f32           = archsimd.BroadcastFloat32x16(float32(trigS3_f32))
+	BaseErfVec_AVX512_zero_f64         = archsimd.BroadcastFloat64x8(float64(erfZero_f64))
+	BaseErfVec_AVX512_a2_f64           = archsimd.BroadcastFloat64x8(float64(erfA2_f64))
+	BaseLogVec_AVX512_zero_f32         = archsimd.BroadcastFloat32x16(float32(0.0))
+	BaseLogVec_AVX512_c4_f64           = archsimd.BroadcastFloat64x8(float64(logC4_f64))
+	BaseExp2Vec_AVX512_ln2_f32         = archsimd.BroadcastFloat32x16(float32(ln2_f32))
+	BaseCoshVec_AVX512_c6_f32          = archsimd.BroadcastFloat32x16(float32(0.001388888888888889))
+	BaseAsinhVec_AVX512_one_f32        = archsimd.BroadcastFloat32x16(float32(1.0))
+	BaseLogVec_AVX512_c5_f64           = archsimd.BroadcastFloat64x8(float64(logC5_f64))
+	BaseErfVec_AVX512_a4_f32           = archsimd.BroadcastFloat32x16(float32(erfA4_f32))
+	BaseSinVec_AVX512_c2_f64           = archsimd.BroadcastFloat64x8(float64(trigC2_f64))
+	BaseCosVec_AVX512_c4_f64           = archsimd.BroadcastFloat64x8(float64(trigC4_f64))
+	BaseErfVec_AVX512_p_f64            = archsimd.BroadcastFloat64x8(float64(erfP_f64))
+	BaseSinVec_AVX512_c4_f64           = archsimd.BroadcastFloat64x8(float64(trigC4_f64))
+	BaseCosVec_AVX512_c2_f64           = archsimd.BroadcastFloat64x8(float64(trigC2_f64))
+	BaseExpVec_AVX512_overflow_f64     = archsimd.BroadcastFloat64x8(float64(expOverflow_f64))
+	BaseTanhVec_AVX512_negOne_f64      = archsimd.BroadcastFloat64x8(float64(tanhNegOne_f64))
+	BaseSinVec_AVX512_piOver2Lo_f64    = archsimd.BroadcastFloat64x8(float64(trigPiOver2Lo_f64))
+	BaseLog10Vec_AVX512_log10E_f64     = archsimd.BroadcastFloat64x8(float64(log10E_f64))
+	BaseSinhVec_AVX512_c7_f32          = archsimd.BroadcastFloat32x16(float32(sinhC7_f32))
+	BaseSigmoidVec_AVX512_satHi_f64    = archsimd.BroadcastFloat64x8(float64(20.0))
+	BaseLogVec_AVX512_c2_f64           = archsimd.BroadcastFloat64x8(float64(logC2_f64))
+	BaseSinVec_AVX512_piOver2Hi_f64    = archsimd.BroadcastFloat64x8(float64(trigPiOver2Hi_f64))
+	BaseCosVec_AVX512_piOver2Lo_f32    = archsimd.BroadcastFloat32x16(float32(trigPiOver2Lo_f32))
+	BaseExpVec_AVX512_c1_f32           = archsimd.BroadcastFloat32x16(float32(expC1_f32))
+	BaseSinVec_AVX512_twoOverPi_f32    = archsimd.BroadcastFloat32x16(float32(trig2OverPi_f32))
+	BaseSinVec_AVX512_s3_f32           = archsimd.BroadcastFloat32x16(float32(trigS3_f32))
+	BaseErfVec_AVX512_a3_f32           = archsimd.BroadcastFloat32x16(float32(erfA3_f32))
+	BaseAtanhVec_AVX512_zero_f32       = archsimd.BroadcastFloat32x16(float32(0.0))
+	BaseCoshVec_AVX512_c2_f64          = archsimd.BroadcastFloat64x8(float64(0.5))
+	BaseAtanhVec_AVX512_one_f32        = archsimd.BroadcastFloat32x16(float32(1.0))
+	BaseExpVec_AVX512_ln2Lo_f32        = archsimd.BroadcastFloat32x16(float32(expLn2Lo_f32))
+	BaseExpVec_AVX512_c5_f64           = archsimd.BroadcastFloat64x8(float64(expC5_f64))
+	BaseSigmoidVec_AVX512_one_f64      = archsimd.BroadcastFloat64x8(float64(sigmoidOne_f64))
+	BaseTanhVec_AVX512_threshold_f64   = archsimd.BroadcastFloat64x8(float64(tanhClamp_f64))
+	BaseLogVec_AVX512_ln2Lo_f32        = archsimd.BroadcastFloat32x16(float32(logLn2Lo_f32))
+	BaseSinVec_AVX512_one_f32          = archsimd.BroadcastFloat32x16(float32(trigOne_f32))
 )
-
-func _initHoistedConstants() {
-	_hoistOnce.Do(func() {
-		BaseAtanhVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(1.0))
-		BaseExpVec_AVX512_ln2Hi_f32 = archsimd.BroadcastFloat32x16(float32(expLn2Hi_f32))
-		BaseExpVec_AVX512_zero_f64 = archsimd.BroadcastFloat64x8(float64(expZero_f64))
-		BaseLogVec_AVX512_ln2Lo_f32 = archsimd.BroadcastFloat32x16(float32(logLn2Lo_f32))
-		BaseLog10Vec_AVX512_log10E_f64 = archsimd.BroadcastFloat64x8(float64(log10E_f64))
-		BaseSinhVec_AVX512_c3_f32 = archsimd.BroadcastFloat32x16(float32(sinhC3_f32))
-		BaseCoshVec_AVX512_c6_f64 = archsimd.BroadcastFloat64x8(float64(0.001388888888888889))
-		BaseExpVec_AVX512_overflow_f32 = archsimd.BroadcastFloat32x16(float32(expOverflow_f32))
-		BaseExpVec_AVX512_underflow_f32 = archsimd.BroadcastFloat32x16(float32(expUnderflow_f32))
-		BaseSinVec_AVX512_intOne_i32_f32 = archsimd.BroadcastInt32x16(1)
-		BaseAtanhVec_AVX512_half_f32 = archsimd.BroadcastFloat32x16(float32(0.5))
-		BaseExpVec_AVX512_underflow_f64 = archsimd.BroadcastFloat64x8(float64(expUnderflow_f64))
-		BaseTanhVec_AVX512_negOne_f32 = archsimd.BroadcastFloat32x16(float32(tanhNegOne_f32))
-		BaseSinVec_AVX512_twoOverPi_f32 = archsimd.BroadcastFloat32x16(float32(trig2OverPi_f32))
-		BaseSinVec_AVX512_c4_f64 = archsimd.BroadcastFloat64x8(float64(trigC4_f64))
-		BaseCosVec_AVX512_s4_f64 = archsimd.BroadcastFloat64x8(float64(trigS4_f64))
-		BaseSigmoidVec_AVX512_zero_f64 = archsimd.BroadcastFloat64x8(float64(0.0))
-		BaseErfVec_AVX512_p_f64 = archsimd.BroadcastFloat64x8(float64(erfP_f64))
-		BaseSinVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(trigOne_f32))
-		BaseCosVec_AVX512_piOver2Lo_f64 = archsimd.BroadcastFloat64x8(float64(trigPiOver2Lo_f64))
-		BaseExpVec_AVX512_invLn2_f32 = archsimd.BroadcastFloat32x16(float32(expInvLn2_f32))
-		BaseLogVec_AVX512_c4_f64 = archsimd.BroadcastFloat64x8(float64(logC4_f64))
-		BaseSinVec_AVX512_s4_f64 = archsimd.BroadcastFloat64x8(float64(trigS4_f64))
-		BaseCosVec_AVX512_intTwo_i32_f32 = archsimd.BroadcastInt32x16(2)
-		BaseCosVec_AVX512_twoOverPi_f64 = archsimd.BroadcastFloat64x8(float64(trig2OverPi_f64))
-		BaseCosVec_AVX512_piOver2Hi_f64 = archsimd.BroadcastFloat64x8(float64(trigPiOver2Hi_f64))
-		BaseCosVec_AVX512_c4_f64 = archsimd.BroadcastFloat64x8(float64(trigC4_f64))
-		BaseCoshVec_AVX512_c6_f32 = archsimd.BroadcastFloat32x16(float32(0.001388888888888889))
-		BaseLogVec_AVX512_ln2Hi_f32 = archsimd.BroadcastFloat32x16(float32(logLn2Hi_f32))
-		BaseExpVec_AVX512_ln2Lo_f32 = archsimd.BroadcastFloat32x16(float32(expLn2Lo_f32))
-		BaseExpVec_AVX512_c4_f64 = archsimd.BroadcastFloat64x8(float64(expC4_f64))
-		BaseTanhVec_AVX512_two_f32 = archsimd.BroadcastFloat32x16(float32(2.0))
-		BaseCoshVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(1.0))
-		BaseLog2Vec_AVX512_log2E_f64 = archsimd.BroadcastFloat64x8(float64(log2E_f64))
-		BaseAsinhVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(1.0))
-		BaseExpVec_AVX512_c6_f64 = archsimd.BroadcastFloat64x8(float64(expC6_f64))
-		BaseSinVec_AVX512_piOver2Lo_f32 = archsimd.BroadcastFloat32x16(float32(trigPiOver2Lo_f32))
-		BaseAcoshVec_AVX512_zero_f32 = archsimd.BroadcastFloat32x16(float32(0.0))
-		BaseAtanhVec_AVX512_zero_f64 = archsimd.BroadcastFloat64x8(float64(0.0))
-		BaseTanhVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(tanhOne_f32))
-		BaseSinVec_AVX512_intOne_i32_f64 = archsimd.BroadcastInt32x8(1)
-		BaseSinVec_AVX512_intThree_i32_f64 = archsimd.BroadcastInt32x8(3)
-		BaseErfVec_AVX512_zero_f64 = archsimd.BroadcastFloat64x8(float64(erfZero_f64))
-		BaseSinhVec_AVX512_c5_f32 = archsimd.BroadcastFloat32x16(float32(sinhC5_f32))
-		BaseCoshVec_AVX512_c4_f64 = archsimd.BroadcastFloat64x8(float64(0.041666666666666664))
-		BaseSigmoidVec_AVX512_satHi_f32 = archsimd.BroadcastFloat32x16(float32(20.0))
-		BaseSinVec_AVX512_s4_f32 = archsimd.BroadcastFloat32x16(float32(trigS4_f32))
-		BaseSinVec_AVX512_c1_f64 = archsimd.BroadcastFloat64x8(float64(trigC1_f64))
-		BaseCosVec_AVX512_s1_f32 = archsimd.BroadcastFloat32x16(float32(trigS1_f32))
-		BaseErfVec_AVX512_a1_f32 = archsimd.BroadcastFloat32x16(float32(erfA1_f32))
-		BaseAcoshVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(1.0))
-		BaseCosVec_AVX512_piOver2Hi_f32 = archsimd.BroadcastFloat32x16(float32(trigPiOver2Hi_f32))
-		BaseExpVec_AVX512_ln2Hi_f64 = archsimd.BroadcastFloat64x8(float64(expLn2Hi_f64))
-		BaseLogVec_AVX512_zero_f64 = archsimd.BroadcastFloat64x8(float64(0.0))
-		BaseSinVec_AVX512_intTwo_i32_f64 = archsimd.BroadcastInt32x8(2)
-		BaseExp2Vec_AVX512_ln2_f32 = archsimd.BroadcastFloat32x16(float32(ln2_f32))
-		BaseAcoshVec_AVX512_zero_f64 = archsimd.BroadcastFloat64x8(float64(0.0))
-		BaseAtanhVec_AVX512_zero_f32 = archsimd.BroadcastFloat32x16(float32(0.0))
-		BaseCosVec_AVX512_s2_f32 = archsimd.BroadcastFloat32x16(float32(trigS2_f32))
-		BaseExpVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(expOne_f64))
-		BaseSigmoidVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(sigmoidOne_f64))
-		BaseSigmoidVec_AVX512_satLo_f64 = archsimd.BroadcastFloat64x8(float64(-20.0))
-		BaseLogVec_AVX512_c3_f64 = archsimd.BroadcastFloat64x8(float64(logC3_f64))
-		BaseSinVec_AVX512_c2_f64 = archsimd.BroadcastFloat64x8(float64(trigC2_f64))
-		BaseCosVec_AVX512_piOver2Lo_f32 = archsimd.BroadcastFloat32x16(float32(trigPiOver2Lo_f32))
-		BaseCosVec_AVX512_c3_f64 = archsimd.BroadcastFloat64x8(float64(trigC3_f64))
-		BaseExpVec_AVX512_c2_f32 = archsimd.BroadcastFloat32x16(float32(expC2_f32))
-		BaseExpVec_AVX512_c5_f64 = archsimd.BroadcastFloat64x8(float64(expC5_f64))
-		BaseLogVec_AVX512_ln2Lo_f64 = archsimd.BroadcastFloat64x8(float64(logLn2Lo_f64))
-		BaseCosVec_AVX512_s3_f64 = archsimd.BroadcastFloat64x8(float64(trigS3_f64))
-		BaseErfVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(erfOne_f64))
-		BaseSinhVec_AVX512_c7_f64 = archsimd.BroadcastFloat64x8(float64(sinhC7_f64))
-		BaseAtanhVec_AVX512_half_f64 = archsimd.BroadcastFloat64x8(float64(0.5))
-		BaseCosVec_AVX512_c2_f32 = archsimd.BroadcastFloat32x16(float32(trigC2_f32))
-		BaseCosVec_AVX512_intOne_i32_f32 = archsimd.BroadcastInt32x16(1)
-		BaseSigmoidVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(sigmoidOne_f32))
-		BaseTanhVec_AVX512_two_f64 = archsimd.BroadcastFloat64x8(float64(2.0))
-		BaseLogVec_AVX512_c2_f32 = archsimd.BroadcastFloat32x16(float32(logC2_f32))
-		BaseLogVec_AVX512_c5_f64 = archsimd.BroadcastFloat64x8(float64(logC5_f64))
-		BaseLogVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(logOne_f64))
-		BaseCosVec_AVX512_s2_f64 = archsimd.BroadcastFloat64x8(float64(trigS2_f64))
-		BaseExpVec_AVX512_c6_f32 = archsimd.BroadcastFloat32x16(float32(expC6_f32))
-		BaseExpVec_AVX512_c3_f64 = archsimd.BroadcastFloat64x8(float64(expC3_f64))
-		BaseExpVec_AVX512_overflow_f64 = archsimd.BroadcastFloat64x8(float64(expOverflow_f64))
-		BaseLogVec_AVX512_nan_f32 = archsimd.BroadcastFloat32x16(float32(0.0))
-		BaseSinVec_AVX512_piOver2Hi_f32 = archsimd.BroadcastFloat32x16(float32(trigPiOver2Hi_f32))
-		BaseCosVec_AVX512_s3_f32 = archsimd.BroadcastFloat32x16(float32(trigS3_f32))
-		BaseCosVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(trigOne_f64))
-		BaseSinhVec_AVX512_c7_f32 = archsimd.BroadcastFloat32x16(float32(sinhC7_f32))
-		BaseExpVec_AVX512_zero_f32 = archsimd.BroadcastFloat32x16(float32(expZero_f32))
-		BaseLogVec_AVX512_negInf_f32 = archsimd.BroadcastFloat32x16(float32(-1e38))
-		BaseSinVec_AVX512_c3_f32 = archsimd.BroadcastFloat32x16(float32(trigC3_f32))
-		BaseSinVec_AVX512_piOver2Lo_f64 = archsimd.BroadcastFloat64x8(float64(trigPiOver2Lo_f64))
-		BaseCosVec_AVX512_intThree_i32_f32 = archsimd.BroadcastInt32x16(3)
-		BaseLog10Vec_AVX512_log10E_f32 = archsimd.BroadcastFloat32x16(float32(log10E_f32))
-		BaseCoshVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(1.0))
-		BaseCosVec_AVX512_s1_f64 = archsimd.BroadcastFloat64x8(float64(trigS1_f64))
-		BaseLogVec_AVX512_c1_f32 = archsimd.BroadcastFloat32x16(float32(logC1_f32))
-		BaseSinVec_AVX512_piOver2Hi_f64 = archsimd.BroadcastFloat64x8(float64(trigPiOver2Hi_f64))
-		BaseSinVec_AVX512_twoOverPi_f64 = archsimd.BroadcastFloat64x8(float64(trig2OverPi_f64))
-		BaseCosVec_AVX512_c1_f32 = archsimd.BroadcastFloat32x16(float32(trigC1_f32))
-		BaseAtanhVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(1.0))
-		BaseExpVec_AVX512_c1_f32 = archsimd.BroadcastFloat32x16(float32(expC1_f32))
-		BaseSinVec_AVX512_c4_f32 = archsimd.BroadcastFloat32x16(float32(trigC4_f32))
-		BaseErfVec_AVX512_a2_f64 = archsimd.BroadcastFloat64x8(float64(erfA2_f64))
-		BaseErfVec_AVX512_a3_f64 = archsimd.BroadcastFloat64x8(float64(erfA3_f64))
-		BaseTanhVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(tanhOne_f64))
-		BaseErfVec_AVX512_a5_f64 = archsimd.BroadcastFloat64x8(float64(erfA5_f64))
-		BaseErfVec_AVX512_a1_f64 = archsimd.BroadcastFloat64x8(float64(erfA1_f64))
-		BaseCoshVec_AVX512_c2_f32 = archsimd.BroadcastFloat32x16(float32(0.5))
-		BaseExpVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(expOne_f32))
-		BaseExpVec_AVX512_c3_f32 = archsimd.BroadcastFloat32x16(float32(expC3_f32))
-		BaseCosVec_AVX512_intTwo_i32_f64 = archsimd.BroadcastInt32x8(2)
-		BaseExp2Vec_AVX512_ln2_f64 = archsimd.BroadcastFloat64x8(float64(ln2_f64))
-		BaseCoshVec_AVX512_c2_f64 = archsimd.BroadcastFloat64x8(float64(0.5))
-		BaseLogVec_AVX512_c4_f32 = archsimd.BroadcastFloat32x16(float32(logC4_f32))
-		BaseCosVec_AVX512_c4_f32 = archsimd.BroadcastFloat32x16(float32(trigC4_f32))
-		BaseCosVec_AVX512_intThree_i32_f64 = archsimd.BroadcastInt32x8(3)
-		BaseErfVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(erfOne_f32))
-		BaseLog2Vec_AVX512_log2E_f32 = archsimd.BroadcastFloat32x16(float32(log2E_f32))
-		BaseExpVec_AVX512_c4_f32 = archsimd.BroadcastFloat32x16(float32(expC4_f32))
-		BaseLogVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(logOne_f32))
-		BaseSinVec_AVX512_c1_f32 = archsimd.BroadcastFloat32x16(float32(trigC1_f32))
-		BaseSinVec_AVX512_s1_f64 = archsimd.BroadcastFloat64x8(float64(trigS1_f64))
-		BaseCosVec_AVX512_twoOverPi_f32 = archsimd.BroadcastFloat32x16(float32(trig2OverPi_f32))
-		BaseCosVec_AVX512_intOne_i32_f64 = archsimd.BroadcastInt32x8(1)
-		BaseSinhVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(sinhOne_f32))
-		BaseSinhVec_AVX512_c5_f64 = archsimd.BroadcastFloat64x8(float64(sinhC5_f64))
-		BaseLogVec_AVX512_c3_f32 = archsimd.BroadcastFloat32x16(float32(logC3_f32))
-		BaseCosVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(trigOne_f32))
-		BaseCosVec_AVX512_c3_f32 = archsimd.BroadcastFloat32x16(float32(trigC3_f32))
-		BaseAsinhVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(1.0))
-		BaseExpVec_AVX512_c2_f64 = archsimd.BroadcastFloat64x8(float64(expC2_f64))
-		BaseSinVec_AVX512_s3_f32 = archsimd.BroadcastFloat32x16(float32(trigS3_f32))
-		BaseErfVec_AVX512_p_f32 = archsimd.BroadcastFloat32x16(float32(erfP_f32))
-		BaseExpVec_AVX512_invLn2_f64 = archsimd.BroadcastFloat64x8(float64(expInvLn2_f64))
-		BaseSigmoidVec_AVX512_zero_f32 = archsimd.BroadcastFloat32x16(float32(0.0))
-		BaseSigmoidVec_AVX512_satLo_f32 = archsimd.BroadcastFloat32x16(float32(-20.0))
-		BaseSinVec_AVX512_c2_f32 = archsimd.BroadcastFloat32x16(float32(trigC2_f32))
-		BaseSinVec_AVX512_s2_f64 = archsimd.BroadcastFloat64x8(float64(trigS2_f64))
-		BaseErfVec_AVX512_a4_f32 = archsimd.BroadcastFloat32x16(float32(erfA4_f32))
-		BaseErfVec_AVX512_zero_f32 = archsimd.BroadcastFloat32x16(float32(erfZero_f32))
-		BaseTanhVec_AVX512_negOne_f64 = archsimd.BroadcastFloat64x8(float64(tanhNegOne_f64))
-		BaseSinVec_AVX512_intTwo_i32_f32 = archsimd.BroadcastInt32x16(2)
-		BaseAcoshVec_AVX512_one_f32 = archsimd.BroadcastFloat32x16(float32(1.0))
-		BaseExpVec_AVX512_ln2Lo_f64 = archsimd.BroadcastFloat64x8(float64(expLn2Lo_f64))
-		BaseLogVec_AVX512_zero_f32 = archsimd.BroadcastFloat32x16(float32(0.0))
-		BaseLogVec_AVX512_c2_f64 = archsimd.BroadcastFloat64x8(float64(logC2_f64))
-		BaseSinVec_AVX512_s2_f32 = archsimd.BroadcastFloat32x16(float32(trigS2_f32))
-		BaseSinVec_AVX512_c3_f64 = archsimd.BroadcastFloat64x8(float64(trigC3_f64))
-		BaseSinVec_AVX512_s3_f64 = archsimd.BroadcastFloat64x8(float64(trigS3_f64))
-		BaseCosVec_AVX512_c2_f64 = archsimd.BroadcastFloat64x8(float64(trigC2_f64))
-		BaseErfVec_AVX512_a5_f32 = archsimd.BroadcastFloat32x16(float32(erfA5_f32))
-		BaseLogVec_AVX512_two_f64 = archsimd.BroadcastFloat64x8(float64(logTwo_f64))
-		BaseSinVec_AVX512_intThree_i32_f32 = archsimd.BroadcastInt32x16(3)
-		BaseSinVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(trigOne_f64))
-		BaseErfVec_AVX512_a2_f32 = archsimd.BroadcastFloat32x16(float32(erfA2_f32))
-		BaseSinhVec_AVX512_one_f64 = archsimd.BroadcastFloat64x8(float64(sinhOne_f64))
-		BaseExpVec_AVX512_c5_f32 = archsimd.BroadcastFloat32x16(float32(expC5_f32))
-		BaseTanhVec_AVX512_threshold_f32 = archsimd.BroadcastFloat32x16(float32(tanhClamp_f32))
-		BaseTanhVec_AVX512_threshold_f64 = archsimd.BroadcastFloat64x8(float64(tanhClamp_f64))
-		BaseLogVec_AVX512_ln2Hi_f64 = archsimd.BroadcastFloat64x8(float64(logLn2Hi_f64))
-		BaseLogVec_AVX512_c1_f64 = archsimd.BroadcastFloat64x8(float64(logC1_f64))
-		BaseSinVec_AVX512_s1_f32 = archsimd.BroadcastFloat32x16(float32(trigS1_f32))
-		BaseCosVec_AVX512_s4_f32 = archsimd.BroadcastFloat32x16(float32(trigS4_f32))
-		BaseCosVec_AVX512_c1_f64 = archsimd.BroadcastFloat64x8(float64(trigC1_f64))
-		BaseLogVec_AVX512_nan_f64 = archsimd.BroadcastFloat64x8(float64(0.0))
-		BaseExpVec_AVX512_c1_f64 = archsimd.BroadcastFloat64x8(float64(expC1_f64))
-		BaseSigmoidVec_AVX512_satHi_f64 = archsimd.BroadcastFloat64x8(float64(20.0))
-		BaseLogVec_AVX512_c5_f32 = archsimd.BroadcastFloat32x16(float32(logC5_f32))
-		BaseLogVec_AVX512_two_f32 = archsimd.BroadcastFloat32x16(float32(logTwo_f32))
-		BaseLogVec_AVX512_negInf_f64 = archsimd.BroadcastFloat64x8(float64(-1e38))
-		BaseErfVec_AVX512_a3_f32 = archsimd.BroadcastFloat32x16(float32(erfA3_f32))
-		BaseErfVec_AVX512_a4_f64 = archsimd.BroadcastFloat64x8(float64(erfA4_f64))
-		BaseSinhVec_AVX512_c3_f64 = archsimd.BroadcastFloat64x8(float64(sinhC3_f64))
-		BaseCoshVec_AVX512_c4_f32 = archsimd.BroadcastFloat32x16(float32(0.041666666666666664))
-	})
-}
 
 func BaseExpVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	overflow := BaseExpVec_AVX512_overflow_f32
 	underflow := BaseExpVec_AVX512_underflow_f32
 	one := BaseExpVec_AVX512_one_f32
@@ -407,7 +223,6 @@ func BaseExpVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseExpVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	overflow := BaseExpVec_AVX512_overflow_f64
 	underflow := BaseExpVec_AVX512_underflow_f64
 	one := BaseExpVec_AVX512_one_f64
@@ -442,7 +257,6 @@ func BaseExpVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseSigmoidVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseSigmoidVec_AVX512_one_f32
 	zero := BaseSigmoidVec_AVX512_zero_f32
 	satHi := BaseSigmoidVec_AVX512_satHi_f32
@@ -457,7 +271,6 @@ func BaseSigmoidVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseSigmoidVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseSigmoidVec_AVX512_one_f64
 	zero := BaseSigmoidVec_AVX512_zero_f64
 	satHi := BaseSigmoidVec_AVX512_satHi_f64
@@ -472,7 +285,6 @@ func BaseSigmoidVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseTanhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	two := BaseTanhVec_AVX512_two_f32
 	one := BaseTanhVec_AVX512_one_f32
 	negOne := BaseTanhVec_AVX512_negOne_f32
@@ -487,7 +299,6 @@ func BaseTanhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseTanhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	two := BaseTanhVec_AVX512_two_f64
 	one := BaseTanhVec_AVX512_one_f64
 	negOne := BaseTanhVec_AVX512_negOne_f64
@@ -502,7 +313,6 @@ func BaseTanhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseLogVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseLogVec_AVX512_one_f32
 	two := BaseLogVec_AVX512_two_f32
 	zero := BaseLogVec_AVX512_zero_f32
@@ -518,15 +328,11 @@ func BaseLogVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 	zeroMask := x.Equal(zero)
 	negMask := x.Less(zero)
 	oneMask := x.Equal(one)
-	e := x.AsInt32x16().ShiftAllRight(23).And(archsimd.BroadcastInt32x16(255)).Sub(archsimd.BroadcastInt32x16(127)).ConvertToFloat32()
-	m := x.AsInt32x16().And(archsimd.BroadcastInt32x16(8388607)).Or(archsimd.BroadcastInt32x16(1065353216)).AsFloat32x16()
+	e := x.GetExponent()
+	m := x.GetMantissa()
 	mLarge := m.Greater(archsimd.BroadcastFloat32x16(float32(1.414)))
 	mAdjusted := m.Mul(archsimd.BroadcastFloat32x16(float32(0.5))).Merge(m, mLarge)
-	eData := func() []float32 {
-		var _simd_tmp [16]float32
-		e.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	eData := e.Data()
 	eFloatData := make([]float32, len(eData))
 	for i, v := range eData {
 		eFloatData[i] = float32(v)
@@ -550,7 +356,6 @@ func BaseLogVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseLogVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseLogVec_AVX512_one_f64
 	two := BaseLogVec_AVX512_two_f64
 	zero := BaseLogVec_AVX512_zero_f64
@@ -566,15 +371,11 @@ func BaseLogVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 	zeroMask := x.Equal(zero)
 	negMask := x.Less(zero)
 	oneMask := x.Equal(one)
-	e := x.AsInt64x8().ShiftAllRight(52).And(archsimd.BroadcastInt64x8(2047)).Sub(archsimd.BroadcastInt64x8(1023)).ConvertToFloat64()
-	m := x.AsInt64x8().And(archsimd.BroadcastInt64x8(4503599627370495)).Or(archsimd.BroadcastInt64x8(4607182418800017408)).AsFloat64x8()
+	e := x.GetExponent()
+	m := x.GetMantissa()
 	mLarge := m.Greater(archsimd.BroadcastFloat64x8(float64(1.414)))
 	mAdjusted := m.Mul(archsimd.BroadcastFloat64x8(float64(0.5))).Merge(m, mLarge)
-	eData := func() []float64 {
-		var _simd_tmp [8]float64
-		e.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	eData := e.Data()
 	eFloatData := make([]float64, len(eData))
 	for i, v := range eData {
 		eFloatData[i] = float64(v)
@@ -598,7 +399,6 @@ func BaseLogVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseSinVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	twoOverPi := BaseSinVec_AVX512_twoOverPi_f32
 	piOver2Hi := BaseSinVec_AVX512_piOver2Hi_f32
 	piOver2Lo := BaseSinVec_AVX512_piOver2Lo_f32
@@ -631,26 +431,11 @@ func BaseSinVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 	octant := kInt.And(intThree)
 	useCosMask := octant.And(intOne).Equal(intOne)
 	negateMask := octant.And(intTwo).Equal(intTwo)
-	sinRData := func() []float32 {
-		var _simd_tmp [16]float32
-		sinR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
-	cosRData := func() []float32 {
-		var _simd_tmp [16]float32
-		cosR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	sinRData := sinR.Data()
+	cosRData := cosR.Data()
 	resultData := make([]float32, len(sinRData))
 	for i := range sinRData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x16(1)
-			_vZero := archsimd.BroadcastInt32x16(0)
-			_vMasked := _vOne.Merge(_vZero, useCosMask)
-			var _simd_mask_tmp [16]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if useCosMask.GetBit(i) {
 			resultData[i] = cosRData[i]
 		} else {
 			resultData[i] = sinRData[i]
@@ -658,20 +443,9 @@ func BaseSinVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 	}
 	result := archsimd.LoadFloat32x16Slice(resultData)
 	negResult := archsimd.BroadcastFloat32x16(0).Sub(result)
-	negResultData := func() []float32 {
-		var _simd_tmp [16]float32
-		negResult.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	negResultData := negResult.Data()
 	for i := range resultData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x16(1)
-			_vZero := archsimd.BroadcastInt32x16(0)
-			_vMasked := _vOne.Merge(_vZero, negateMask)
-			var _simd_mask_tmp [16]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if negateMask.GetBit(i) {
 			resultData[i] = negResultData[i]
 		}
 	}
@@ -679,7 +453,6 @@ func BaseSinVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseSinVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	twoOverPi := BaseSinVec_AVX512_twoOverPi_f64
 	piOver2Hi := BaseSinVec_AVX512_piOver2Hi_f64
 	piOver2Lo := BaseSinVec_AVX512_piOver2Lo_f64
@@ -712,26 +485,11 @@ func BaseSinVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 	octant := kInt.And(intThree)
 	useCosMask := octant.And(intOne).Equal(intOne)
 	negateMask := octant.And(intTwo).Equal(intTwo)
-	sinRData := func() []float64 {
-		var _simd_tmp [8]float64
-		sinR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
-	cosRData := func() []float64 {
-		var _simd_tmp [8]float64
-		cosR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	sinRData := sinR.Data()
+	cosRData := cosR.Data()
 	resultData := make([]float64, len(sinRData))
 	for i := range sinRData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x8(1)
-			_vZero := archsimd.BroadcastInt32x8(0)
-			_vMasked := _vOne.Merge(_vZero, useCosMask)
-			var _simd_mask_tmp [8]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if useCosMask.GetBit(i) {
 			resultData[i] = cosRData[i]
 		} else {
 			resultData[i] = sinRData[i]
@@ -739,20 +497,9 @@ func BaseSinVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 	}
 	result := archsimd.LoadFloat64x8Slice(resultData)
 	negResult := archsimd.BroadcastFloat64x8(0).Sub(result)
-	negResultData := func() []float64 {
-		var _simd_tmp [8]float64
-		negResult.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	negResultData := negResult.Data()
 	for i := range resultData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x8(1)
-			_vZero := archsimd.BroadcastInt32x8(0)
-			_vMasked := _vOne.Merge(_vZero, negateMask)
-			var _simd_mask_tmp [8]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if negateMask.GetBit(i) {
 			resultData[i] = negResultData[i]
 		}
 	}
@@ -760,7 +507,6 @@ func BaseSinVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseCosVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	twoOverPi := BaseCosVec_AVX512_twoOverPi_f32
 	piOver2Hi := BaseCosVec_AVX512_piOver2Hi_f32
 	piOver2Lo := BaseCosVec_AVX512_piOver2Lo_f32
@@ -793,26 +539,11 @@ func BaseCosVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 	cosOctant := kInt.Add(intOne).And(intThree)
 	useCosMask := cosOctant.And(intOne).Equal(intOne)
 	negateMask := cosOctant.And(intTwo).Equal(intTwo)
-	sinRData := func() []float32 {
-		var _simd_tmp [16]float32
-		sinR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
-	cosRData := func() []float32 {
-		var _simd_tmp [16]float32
-		cosR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	sinRData := sinR.Data()
+	cosRData := cosR.Data()
 	resultData := make([]float32, len(sinRData))
 	for i := range sinRData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x16(1)
-			_vZero := archsimd.BroadcastInt32x16(0)
-			_vMasked := _vOne.Merge(_vZero, useCosMask)
-			var _simd_mask_tmp [16]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if useCosMask.GetBit(i) {
 			resultData[i] = cosRData[i]
 		} else {
 			resultData[i] = sinRData[i]
@@ -820,20 +551,9 @@ func BaseCosVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 	}
 	result := archsimd.LoadFloat32x16Slice(resultData)
 	negResult := archsimd.BroadcastFloat32x16(0).Sub(result)
-	negResultData := func() []float32 {
-		var _simd_tmp [16]float32
-		negResult.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	negResultData := negResult.Data()
 	for i := range resultData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x16(1)
-			_vZero := archsimd.BroadcastInt32x16(0)
-			_vMasked := _vOne.Merge(_vZero, negateMask)
-			var _simd_mask_tmp [16]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if negateMask.GetBit(i) {
 			resultData[i] = negResultData[i]
 		}
 	}
@@ -841,7 +561,6 @@ func BaseCosVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseCosVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	twoOverPi := BaseCosVec_AVX512_twoOverPi_f64
 	piOver2Hi := BaseCosVec_AVX512_piOver2Hi_f64
 	piOver2Lo := BaseCosVec_AVX512_piOver2Lo_f64
@@ -874,26 +593,11 @@ func BaseCosVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 	cosOctant := kInt.Add(intOne).And(intThree)
 	useCosMask := cosOctant.And(intOne).Equal(intOne)
 	negateMask := cosOctant.And(intTwo).Equal(intTwo)
-	sinRData := func() []float64 {
-		var _simd_tmp [8]float64
-		sinR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
-	cosRData := func() []float64 {
-		var _simd_tmp [8]float64
-		cosR.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	sinRData := sinR.Data()
+	cosRData := cosR.Data()
 	resultData := make([]float64, len(sinRData))
 	for i := range sinRData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x8(1)
-			_vZero := archsimd.BroadcastInt32x8(0)
-			_vMasked := _vOne.Merge(_vZero, useCosMask)
-			var _simd_mask_tmp [8]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if useCosMask.GetBit(i) {
 			resultData[i] = cosRData[i]
 		} else {
 			resultData[i] = sinRData[i]
@@ -901,20 +605,9 @@ func BaseCosVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 	}
 	result := archsimd.LoadFloat64x8Slice(resultData)
 	negResult := archsimd.BroadcastFloat64x8(0).Sub(result)
-	negResultData := func() []float64 {
-		var _simd_tmp [8]float64
-		negResult.StoreSlice(_simd_tmp[:])
-		return _simd_tmp[:]
-	}()
+	negResultData := negResult.Data()
 	for i := range resultData {
-		if func() bool {
-			_vOne := archsimd.BroadcastInt32x8(1)
-			_vZero := archsimd.BroadcastInt32x8(0)
-			_vMasked := _vOne.Merge(_vZero, negateMask)
-			var _simd_mask_tmp [8]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
+		if negateMask.GetBit(i) {
 			resultData[i] = negResultData[i]
 		}
 	}
@@ -922,7 +615,6 @@ func BaseCosVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseErfVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	a1 := BaseErfVec_AVX512_a1_f32
 	a2 := BaseErfVec_AVX512_a2_f32
 	a3 := BaseErfVec_AVX512_a3_f32
@@ -950,7 +642,6 @@ func BaseErfVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseErfVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	a1 := BaseErfVec_AVX512_a1_f64
 	a2 := BaseErfVec_AVX512_a2_f64
 	a3 := BaseErfVec_AVX512_a3_f64
@@ -978,49 +669,42 @@ func BaseErfVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseLog2Vec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	log2E := BaseLog2Vec_AVX512_log2E_f32
 	lnX := BaseLogVec_avx512(x)
 	return lnX.Mul(log2E)
 }
 
 func BaseLog2Vec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	log2E := BaseLog2Vec_AVX512_log2E_f64
 	lnX := BaseLogVec_avx512_Float64(x)
 	return lnX.Mul(log2E)
 }
 
 func BaseLog10Vec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	log10E := BaseLog10Vec_AVX512_log10E_f32
 	lnX := BaseLogVec_avx512(x)
 	return lnX.Mul(log10E)
 }
 
 func BaseLog10Vec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	log10E := BaseLog10Vec_AVX512_log10E_f64
 	lnX := BaseLogVec_avx512_Float64(x)
 	return lnX.Mul(log10E)
 }
 
 func BaseExp2Vec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	ln2 := BaseExp2Vec_AVX512_ln2_f32
 	xLn2 := x.Mul(ln2)
 	return BaseExpVec_avx512(xLn2)
 }
 
 func BaseExp2Vec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	ln2 := BaseExp2Vec_AVX512_ln2_f64
 	xLn2 := x.Mul(ln2)
 	return BaseExpVec_avx512_Float64(xLn2)
 }
 
 func BaseSinhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseSinhVec_AVX512_one_f32
 	c3 := BaseSinhVec_AVX512_c3_f32
 	c5 := BaseSinhVec_AVX512_c5_f32
@@ -1033,7 +717,6 @@ func BaseSinhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseSinhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseSinhVec_AVX512_one_f64
 	c3 := BaseSinhVec_AVX512_c3_f64
 	c5 := BaseSinhVec_AVX512_c5_f64
@@ -1046,7 +729,6 @@ func BaseSinhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseCoshVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseCoshVec_AVX512_one_f32
 	c2 := BaseCoshVec_AVX512_c2_f32
 	c4 := BaseCoshVec_AVX512_c4_f32
@@ -1058,7 +740,6 @@ func BaseCoshVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseCoshVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseCoshVec_AVX512_one_f64
 	c2 := BaseCoshVec_AVX512_c2_f64
 	c4 := BaseCoshVec_AVX512_c4_f64
@@ -1070,7 +751,6 @@ func BaseCoshVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseAsinhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseAsinhVec_AVX512_one_f32
 	x2 := x.Mul(x)
 	x2Plus1 := x2.Add(one)
@@ -1080,7 +760,6 @@ func BaseAsinhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseAsinhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseAsinhVec_AVX512_one_f64
 	x2 := x.Mul(x)
 	x2Plus1 := x2.Add(one)
@@ -1090,7 +769,6 @@ func BaseAsinhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseAcoshVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseAcoshVec_AVX512_one_f32
 	zero := BaseAcoshVec_AVX512_zero_f32
 	x2 := x.Mul(x)
@@ -1104,7 +782,6 @@ func BaseAcoshVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseAcoshVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseAcoshVec_AVX512_one_f64
 	zero := BaseAcoshVec_AVX512_zero_f64
 	x2 := x.Mul(x)
@@ -1118,7 +795,6 @@ func BaseAcoshVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
 }
 
 func BaseAtanhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
-	_initHoistedConstants()
 	one := BaseAtanhVec_AVX512_one_f32
 	half := BaseAtanhVec_AVX512_half_f32
 	zero := BaseAtanhVec_AVX512_zero_f32
@@ -1133,7 +809,6 @@ func BaseAtanhVec_avx512(x archsimd.Float32x16) archsimd.Float32x16 {
 }
 
 func BaseAtanhVec_avx512_Float64(x archsimd.Float64x8) archsimd.Float64x8 {
-	_initHoistedConstants()
 	one := BaseAtanhVec_AVX512_one_f64
 	half := BaseAtanhVec_AVX512_half_f64
 	zero := BaseAtanhVec_AVX512_zero_f64

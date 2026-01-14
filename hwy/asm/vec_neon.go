@@ -125,6 +125,80 @@ func (v Float32x4) MulAdd(a, b Float32x4) Float32x4 {
 	return result
 }
 
+// Pow computes v^exp element-wise using exp(exp * log(v)).
+// Uses atanh-based log for improved accuracy (~0.1% relative error).
+func (v Float32x4) Pow(exponent Float32x4) Float32x4 {
+	one := BroadcastFloat32x4(1.0)
+	two := BroadcastFloat32x4(2.0)
+	ln2 := BroadcastFloat32x4(0.6931471805599453)
+	invLn2 := BroadcastFloat32x4(1.4426950408889634)
+	tiny := BroadcastFloat32x4(1e-30)
+
+	// Clamp input to avoid log(0)
+	x := v.Max(tiny)
+
+	// Extract exponent k and mantissa m where x = m * 2^k, m in [1, 2)
+	k := x.GetExponent()
+	m := x.GetMantissa()
+
+	// log(m) = 2*atanh((m-1)/(m+1)), where s = (m-1)/(m+1) is in [0, 1/3]
+	s := m.Sub(one).Div(m.Add(one))
+	s2 := s.Mul(s)
+
+	// atanh series: s * (1 + s²/3 + s⁴/5 + s⁶/7 + s⁸/9 + s¹⁰/11 + s¹²/13)
+	// Using Horner: poly = 1/13 + s²*(1/11 + s²*(1/9 + s²*(1/7 + s²*(1/5 + s²*(1/3 + s²)))))
+	c13 := BroadcastFloat32x4(0.076923077) // 1/13
+	c11 := BroadcastFloat32x4(0.090909091) // 1/11
+	c9 := BroadcastFloat32x4(0.111111111)  // 1/9
+	c7 := BroadcastFloat32x4(0.142857143)  // 1/7
+	c5 := BroadcastFloat32x4(0.2)          // 1/5
+	c3 := BroadcastFloat32x4(0.333333333)  // 1/3
+
+	poly := c13.MulAdd(s2, c11)
+	poly = poly.MulAdd(s2, c9)
+	poly = poly.MulAdd(s2, c7)
+	poly = poly.MulAdd(s2, c5)
+	poly = poly.MulAdd(s2, c3)
+	poly = poly.MulAdd(s2, one)
+	logM := two.Mul(s).Mul(poly)
+
+	// log(x) = log(m) + k * ln(2)
+	kf := k.ConvertToFloat32()
+	logX := kf.Mul(ln2).Add(logM)
+
+	// z = exponent * log(x), clamp to [-88, 88] for exp range
+	z := exponent.Mul(logX)
+	z = z.Max(BroadcastFloat32x4(-88.0))
+	z = z.Min(BroadcastFloat32x4(88.0))
+
+	// exp(z) = 2^k * exp(r) where k = round(z/ln2), r = z - k*ln2
+	expK := z.Mul(invLn2).RoundToEven()
+	r := z.Sub(expK.Mul(ln2))
+
+	// exp(r) Taylor: 1 + r + r²/2 + r³/6 + r⁴/24 + r⁵/120 + r⁶/720 + r⁷/5040
+	e7 := BroadcastFloat32x4(1.984126984e-4) // 1/5040
+	e6 := BroadcastFloat32x4(1.388888889e-3) // 1/720
+	e5 := BroadcastFloat32x4(8.333333333e-3) // 1/120
+	e4 := BroadcastFloat32x4(4.166666667e-2) // 1/24
+	e3 := BroadcastFloat32x4(1.666666667e-1) // 1/6
+	e2 := BroadcastFloat32x4(0.5)            // 1/2
+
+	expR := e7.MulAdd(r, e6)
+	expR = expR.MulAdd(r, e5)
+	expR = expR.MulAdd(r, e4)
+	expR = expR.MulAdd(r, e3)
+	expR = expR.MulAdd(r, e2)
+	expR = expR.MulAdd(r, one)
+	expR = expR.MulAdd(r, one)
+
+	// Scale by 2^k: construct float with exponent k+127
+	ki := expK.ConvertToInt32()
+	scaleBits := ki.Add(Int32x4{127, 127, 127, 127}).ShiftAllLeft(23)
+	scale := scaleBits.AsFloat32x4()
+
+	return expR.Mul(scale)
+}
+
 // ReduceSum returns the sum of all elements.
 func (v Float32x4) ReduceSum() float32 {
 	return ReduceSumF32(v[:])
@@ -177,9 +251,18 @@ func (v Float32x4) Equal(other Float32x4) Int32x4 {
 
 // Merge selects elements: mask ? v : other
 // Note: mask values should be all-ones (-1) for true, all-zeros (0) for false.
+// Uses direct bit manipulation for efficiency on small vectors.
 func (v Float32x4) Merge(other Float32x4, mask Int32x4) Float32x4 {
+	// Direct implementation using bit select: (mask & v) | (~mask & other)
+	// This avoids the overhead of calling the bulk slice-based assembly function.
 	var result Float32x4
-	IfThenElseF32(mask[:], v[:], other[:], result[:])
+	for i := 0; i < 4; i++ {
+		if mask[i] != 0 {
+			result[i] = v[i]
+		} else {
+			result[i] = other[i]
+		}
+	}
 	return result
 }
 
@@ -331,6 +414,13 @@ func (v Float64x2) Neg() Float64x2 {
 func (v Float64x2) MulAdd(a, b Float64x2) Float64x2 {
 	var result Float64x2
 	FmaF64(v[:], a[:], b[:], result[:])
+	return result
+}
+
+// Pow computes v^exp element-wise using SIMD math.
+func (v Float64x2) Pow(exp Float64x2) Float64x2 {
+	var result Float64x2
+	PowF64(v[:], exp[:], result[:])
 	return result
 }
 
@@ -622,6 +712,11 @@ func (v Int32x4) Data() []int32 {
 	return v[:]
 }
 
+// GetBit returns true if the element at index i is non-zero (used for mask operations).
+func (v Int32x4) GetBit(i int) bool {
+	return v[i] != 0
+}
+
 // ===== Int32x2 additional methods =====
 
 // And performs element-wise bitwise AND.
@@ -687,6 +782,11 @@ func (v Int32x2) StoreSlice(s []int32) {
 // Data returns the underlying array as a slice.
 func (v Int32x2) Data() []int32 {
 	return v[:]
+}
+
+// GetBit returns true if the element at index i is non-zero (used for mask operations).
+func (v Int32x2) GetBit(i int) bool {
+	return v[i] != 0
 }
 
 // ===== Bool mask types for conditional operations =====
@@ -1015,6 +1115,42 @@ func FirstNInt32(n int) Int32x4 {
 // FirstNInt64 returns a mask with the first n lanes set to true (for int64).
 func FirstNInt64(n int) Int64x2 {
 	return FirstNI64x2(n)
+}
+
+// IfThenElse selects elements based on mask: result = mask ? yes : no (for float32).
+func IfThenElse(mask Int32x4, yes, no Float32x4) Float32x4 {
+	return yes.Merge(no, mask)
+}
+
+// IfThenElseFloat64 selects elements based on mask: result = mask ? yes : no (for float64).
+func IfThenElseFloat64(mask Int64x2, yes, no Float64x2) Float64x2 {
+	return yes.Merge(no, mask)
+}
+
+// IfThenElseInt32 selects elements based on mask: result = mask ? yes : no (for int32).
+func IfThenElseInt32(mask Int32x4, yes, no Int32x4) Int32x4 {
+	var result Int32x4
+	for i := 0; i < 4; i++ {
+		if mask[i] != 0 {
+			result[i] = yes[i]
+		} else {
+			result[i] = no[i]
+		}
+	}
+	return result
+}
+
+// IfThenElseInt64 selects elements based on mask: result = mask ? yes : no (for int64).
+func IfThenElseInt64(mask Int64x2, yes, no Int64x2) Int64x2 {
+	var result Int64x2
+	for i := 0; i < 2; i++ {
+		if mask[i] != 0 {
+			result[i] = yes[i]
+		} else {
+			result[i] = no[i]
+		}
+	}
+	return result
 }
 
 // MaskAnd performs bitwise AND on two masks (for float32).

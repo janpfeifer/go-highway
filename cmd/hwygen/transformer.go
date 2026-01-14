@@ -1291,6 +1291,21 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			fullName = "FirstN"
 		}
 		selExpr.X = ast.NewIdent(pkgName)
+	case "IfThenElse":
+		// IfThenElse has type-specific versions for NEON
+		switch ctx.elemType {
+		case "float32":
+			fullName = "IfThenElse"
+		case "float64":
+			fullName = "IfThenElseFloat64"
+		case "int32":
+			fullName = "IfThenElseInt32"
+		case "int64":
+			fullName = "IfThenElseInt64"
+		default:
+			fullName = "IfThenElse"
+		}
+		selExpr.X = ast.NewIdent(pkgName)
 	default:
 		// For contrib functions, add target and type suffix (e.g., math.Exp_AVX2_F32x8)
 		if opInfo.SubPackage != "" {

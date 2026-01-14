@@ -168,6 +168,19 @@ func Sqrt[T Floats](v Vec[T]) Vec[T] {
 	return Vec[T]{data: result}
 }
 
+// Pow computes base^exp element-wise.
+func Pow[T Floats](base, exp Vec[T]) Vec[T] {
+	n := len(base.data)
+	if len(exp.data) < n {
+		n = len(exp.data)
+	}
+	result := make([]T, n)
+	for i := 0; i < n; i++ {
+		result[i] = T(math.Pow(float64(base.data[i]), float64(exp.data[i])))
+	}
+	return Vec[T]{data: result}
+}
+
 // FMA performs fused multiply-add.
 func FMA[T Floats](a, b, c Vec[T]) Vec[T] {
 	n := len(a.data)

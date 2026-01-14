@@ -391,6 +391,7 @@ func FallbackTarget() Target {
 			"Sqrt":   {Package: "hwy", Name: "Sqrt", IsMethod: false},
 			"FMA":    {Package: "hwy", Name: "FMA", IsMethod: false},
 			"MulAdd": {Package: "hwy", Name: "MulAdd", IsMethod: false}, // hwy.MulAdd(a, b, c)
+			"Pow":    {Package: "hwy", Name: "Pow", IsMethod: false},    // hwy.Pow(base, exp)
 
 			// ===== Rounding operations =====
 			"RoundToEven": {Package: "hwy", Name: "RoundToEven", IsMethod: false},
@@ -555,8 +556,9 @@ func NEONTarget() Target {
 
 			// ===== Core math operations =====
 			"Sqrt":   {Name: "Sqrt", IsMethod: true},
-			"FMA":    {Name: "FMA", IsMethod: true},
+			"FMA":    {Name: "MulAdd", IsMethod: true}, // FMA maps to MulAdd in NEON asm
 			"MulAdd": {Name: "MulAdd", IsMethod: true}, // a.MulAdd(b, c) = a*b + c
+			"Pow":    {Name: "Pow", IsMethod: true},    // v.Pow(exp) = v^exp element-wise
 
 			// ===== Rounding operations =====
 			"RoundToEven": {Name: "RoundToEven", IsMethod: true}, // Banker's rounding
