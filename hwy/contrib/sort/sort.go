@@ -11,14 +11,38 @@ const (
 	sortInsertionThreshold = 64
 )
 
-// Sort sorts data in-place using vectorized quicksort (VQSort).
+// Sort sorts data in-place using the best algorithm for the type:
+//   - Signed integers (int32, int64): SIMD radix sort for large arrays, stdlib for small
+//   - Floats (float32, float64): VQSort (vectorized quicksort)
+//
+// For explicit algorithm selection, use VQSort or RadixSort directly.
+func Sort[T hwy.Lanes](data []T) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+
+	// Dispatch to best algorithm based on type
+	var zero T
+	switch any(zero).(type) {
+	case int32:
+		RadixSort(any(data).([]int32))
+	case int64:
+		RadixSort(any(data).([]int64))
+	default:
+		// Floats use VQSort
+		VQSort(data)
+	}
+}
+
+// VQSort sorts data in-place using vectorized quicksort.
 // This is an introsort variant that combines:
 //   - Sorting networks for very small arrays
 //   - Vectorized quicksort partitioning for larger arrays
 //   - Heapsort fallback for worst-case guarantee
 //
 // Supported types: float32, float64, int32, int64
-func Sort[T hwy.Lanes](data []T) {
+func VQSort[T hwy.Lanes](data []T) {
 	n := len(data)
 	if n <= 1 {
 		return
@@ -155,7 +179,7 @@ func nthElementImpl[T hwy.Lanes](data []T, k, depthLimit int) {
 	}
 
 	if depthLimit == 0 || n <= sortInsertionThreshold {
-		Sort(data)
+		VQSort(data)
 		return
 	}
 

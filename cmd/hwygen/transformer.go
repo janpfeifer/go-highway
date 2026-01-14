@@ -1269,7 +1269,12 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			// Core ops use hwy package
 			selExpr.X = ast.NewIdent("hwy")
 		}
-		selExpr.Sel.Name = funcName
+		// Use opInfo.Name if it differs from the source funcName (e.g., ShiftAllRight -> ShiftRight)
+		if opInfo.Name != "" {
+			selExpr.Sel.Name = opInfo.Name
+		} else {
+			selExpr.Sel.Name = funcName
+		}
 		return
 	}
 
@@ -1298,6 +1303,21 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		}
 	case "MaskLoad":
 		fullName = fmt.Sprintf("MaskLoad%sSlice", vecTypeName)
+		selExpr.X = ast.NewIdent(pkgName)
+	case "Compress":
+		// Compress returns (Vec, int). Maps to CompressKeysF32x4, etc.
+		switch ctx.elemType {
+		case "float32":
+			fullName = "CompressKeysF32x4"
+		case "float64":
+			fullName = "CompressKeysF64x2"
+		case "int32":
+			fullName = "CompressKeysI32x4"
+		case "int64":
+			fullName = "CompressKeysI64x2"
+		default:
+			fullName = "CompressKeysF32x4"
+		}
 		selExpr.X = ast.NewIdent(pkgName)
 	case "CompressStore":
 		// CompressStore has type-specific versions: CompressStore (float32), CompressStoreFloat64, etc.
@@ -2012,10 +2032,10 @@ func replaceTypeParam(typeStr, paramName, elemType string) string {
 	// Replace T in slice types []T
 	result = strings.ReplaceAll(result, "[]"+paramName, "[]"+elemType)
 
-	// Replace T in function types - look for patterns like "T)" or "T," or "(T"
+	// Replace T in function types and map value types - look for patterns like "T)" or "T," or "(T" or "]T"
 	// This is a simple heuristic that works for most cases
 	for _, suffix := range []string{")", ",", " ", ""} {
-		for _, prefix := range []string{"(", ",", " "} {
+		for _, prefix := range []string{"(", ",", " ", "]"} {
 			old := prefix + paramName + suffix
 			new := prefix + elemType + suffix
 			result = strings.ReplaceAll(result, old, new)
@@ -2341,8 +2361,9 @@ func cloneExpr(expr ast.Expr) ast.Expr {
 			args[i] = cloneExpr(arg)
 		}
 		return &ast.CallExpr{
-			Fun:  cloneExpr(e.Fun),
-			Args: args,
+			Fun:      cloneExpr(e.Fun),
+			Args:     args,
+			Ellipsis: e.Ellipsis,
 		}
 	case *ast.BinaryExpr:
 		return &ast.BinaryExpr{

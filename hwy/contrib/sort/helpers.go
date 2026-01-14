@@ -1,6 +1,10 @@
 package sort
 
-import "github.com/ajroetker/go-highway/hwy"
+import (
+	"slices"
+
+	"github.com/ajroetker/go-highway/hwy"
+)
 
 // Helper functions for sorting that are shared across all implementations.
 // These are not processed by hwygen - they remain generic.
@@ -213,4 +217,48 @@ func SortTwoVectors[T hwy.Lanes](data []T) {
 
 	// Copy back
 	copy(data, merged[:n])
+}
+
+// radixSortThreshold is the minimum size where radix sort beats stdlib.
+// Below this, we use slices.Sort which has zero allocations.
+const radixSortThreshold = 10000
+
+// RadixSort sorts signed integer data using LSD radix sort.
+// This is an O(n) stable sort that's faster than comparison sorts for large arrays.
+// For arrays smaller than 10K elements, uses stdlib which is faster due to zero allocations.
+func RadixSort[T hwy.SignedInts](data []T) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+
+	// For small arrays, stdlib is faster (no allocation overhead)
+	if n < radixSortThreshold {
+		slices.Sort(data)
+		return
+	}
+
+	// Allocate temp buffer
+	temp := make([]T, n)
+
+	// Determine number of passes based on type size
+	var zero T
+	switch any(zero).(type) {
+	case int32:
+		// LSD radix sort: 4 passes of 8 bits each
+		RadixPass(data, temp, 0)
+		RadixPass(temp, data, 8)
+		RadixPass(data, temp, 16)
+		RadixPassSigned(temp, data, 24)
+	case int64:
+		// LSD radix sort: 8 passes of 8 bits each
+		RadixPass(data, temp, 0)
+		RadixPass(temp, data, 8)
+		RadixPass(data, temp, 16)
+		RadixPass(temp, data, 24)
+		RadixPass(data, temp, 32)
+		RadixPass(temp, data, 40)
+		RadixPass(data, temp, 48)
+		RadixPassSigned(temp, data, 56)
+	}
 }

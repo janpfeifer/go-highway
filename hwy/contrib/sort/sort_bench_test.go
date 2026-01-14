@@ -124,6 +124,34 @@ func benchmarkSortInt32(b *testing.B, n int) {
 	}
 }
 
+// VQSort Int32 benchmarks (to compare with RadixSort for integers)
+func BenchmarkVQSort_Int32_100(b *testing.B) {
+	benchmarkVQSortInt32(b, 100)
+}
+
+func BenchmarkVQSort_Int32_1000(b *testing.B) {
+	benchmarkVQSortInt32(b, 1000)
+}
+
+func BenchmarkVQSort_Int32_10000(b *testing.B) {
+	benchmarkVQSortInt32(b, 10000)
+}
+
+func BenchmarkVQSort_Int32_100000(b *testing.B) {
+	benchmarkVQSortInt32(b, 100000)
+}
+
+func benchmarkVQSortInt32(b *testing.B, n int) {
+	ref := generateInt32(n)
+	data := make([]int32, n)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		copy(data, ref)
+		VQSort(data)
+	}
+}
+
 // Int64 benchmarks
 func BenchmarkSort_Int64_100(b *testing.B) {
 	benchmarkSortInt64(b, 100)
@@ -328,5 +356,108 @@ func BenchmarkScalarPartition3Way_Float32_10000(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		copy(data, ref)
 		scalarPartition3WayBench(data, pivot)
+	}
+}
+
+// Radix sort benchmarks - compare against stdlib
+
+func BenchmarkRadixSortInt32_100(b *testing.B) {
+	benchmarkRadixSortInt32(b, 100)
+}
+
+func BenchmarkRadixSortInt32_1000(b *testing.B) {
+	benchmarkRadixSortInt32(b, 1000)
+}
+
+func BenchmarkRadixSortInt32_10000(b *testing.B) {
+	benchmarkRadixSortInt32(b, 10000)
+}
+
+func BenchmarkRadixSortInt32_100000(b *testing.B) {
+	benchmarkRadixSortInt32(b, 100000)
+}
+
+func BenchmarkRadixSortInt32_1000000(b *testing.B) {
+	benchmarkRadixSortInt32(b, 1000000)
+}
+
+func benchmarkRadixSortInt32(b *testing.B, n int) {
+	ref := generateInt32(n)
+	data := make([]int32, n)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		copy(data, ref)
+		RadixSort(data)
+	}
+}
+
+func BenchmarkStdlibSortInt32_100(b *testing.B) {
+	benchmarkStdlibSortInt32(b, 100)
+}
+
+func BenchmarkStdlibSortInt32_1000(b *testing.B) {
+	benchmarkStdlibSortInt32(b, 1000)
+}
+
+func BenchmarkStdlibSortInt32_10000(b *testing.B) {
+	benchmarkStdlibSortInt32(b, 10000)
+}
+
+func BenchmarkStdlibSortInt32_100000(b *testing.B) {
+	benchmarkStdlibSortInt32(b, 100000)
+}
+
+func BenchmarkStdlibSortInt32_1000000(b *testing.B) {
+	benchmarkStdlibSortInt32(b, 1000000)
+}
+
+func benchmarkStdlibSortInt32(b *testing.B, n int) {
+	ref := generateInt32(n)
+	data := make([]int32, n)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		copy(data, ref)
+		slices.Sort(data)
+	}
+}
+
+// Int64 radix sort benchmarks
+func BenchmarkRadixSortInt64_10000(b *testing.B) {
+	benchmarkRadixSortInt64(b, 10000)
+}
+
+func BenchmarkRadixSortInt64_100000(b *testing.B) {
+	benchmarkRadixSortInt64(b, 100000)
+}
+
+func benchmarkRadixSortInt64(b *testing.B, n int) {
+	ref := generateInt64(n)
+	data := make([]int64, n)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		copy(data, ref)
+		RadixSort(data)
+	}
+}
+
+func BenchmarkStdlibSortInt64_10000(b *testing.B) {
+	benchmarkStdlibSortInt64(b, 10000)
+}
+
+func BenchmarkStdlibSortInt64_100000(b *testing.B) {
+	benchmarkStdlibSortInt64(b, 100000)
+}
+
+func benchmarkStdlibSortInt64(b *testing.B, n int) {
+	ref := generateInt64(n)
+	data := make([]int64, n)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		copy(data, ref)
+		slices.Sort(data)
 	}
 }

@@ -362,6 +362,89 @@ func TestCompressPartition3WayFloat32(t *testing.T) {
 	}
 }
 
+// TestRadixSortInt32 tests radix sort for int32
+func TestRadixSortInt32(t *testing.T) {
+	sizes := []int{0, 1, 7, 8, 15, 16, 31, 32, 63, 64, 100, 256, 1000, 10000}
+	for _, n := range sizes {
+		data := make([]int32, n)
+		for i := range data {
+			data[i] = rand.Int31n(1000000) - 500000 // Include negative numbers
+		}
+		RadixSort(data)
+		if !isSorted(data) {
+			t.Errorf("RadixSort[int32](n=%d) produced unsorted result", n)
+		}
+	}
+}
+
+// TestRadixSortInt64 tests radix sort for int64
+func TestRadixSortInt64(t *testing.T) {
+	sizes := []int{0, 1, 7, 8, 15, 16, 31, 32, 63, 64, 100, 256, 1000, 10000}
+	for _, n := range sizes {
+		data := make([]int64, n)
+		for i := range data {
+			data[i] = rand.Int63n(1000000) - 500000
+		}
+		RadixSort(data)
+		if !isSorted(data) {
+			t.Errorf("RadixSort[int64](n=%d) produced unsorted result", n)
+		}
+	}
+}
+
+// TestRadixSortInt32MatchesStdlib verifies RadixSort produces same result as slices.Sort
+func TestRadixSortInt32MatchesStdlib(t *testing.T) {
+	rand.Seed(54321)
+	sizes := []int{100, 256, 1000, 10000}
+	for _, n := range sizes {
+		data1 := make([]int32, n)
+		data2 := make([]int32, n)
+		for i := range data1 {
+			v := rand.Int31n(1000000) - 500000
+			data1[i] = v
+			data2[i] = v
+		}
+
+		RadixSort(data1)
+		slices.Sort(data2)
+
+		for i := range data1 {
+			if data1[i] != data2[i] {
+				t.Errorf("RadixSort[int32] mismatch at index %d: got %v, want %v", i, data1[i], data2[i])
+				break
+			}
+		}
+	}
+}
+
+// TestRadixSortInt32EdgeCases tests edge cases for radix sort
+func TestRadixSortInt32EdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []int32
+	}{
+		{"all_zeros", []int32{0, 0, 0, 0, 0}},
+		{"all_same", []int32{42, 42, 42, 42}},
+		{"all_negative", []int32{-5, -3, -8, -1, -9}},
+		{"all_positive", []int32{5, 3, 8, 1, 9}},
+		{"mixed_signs", []int32{-5, 3, -8, 1, 0, -9, 7}},
+		{"min_max", []int32{-2147483648, 2147483647, 0, -1, 1}},
+		{"sorted", []int32{1, 2, 3, 4, 5}},
+		{"reverse", []int32{5, 4, 3, 2, 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make([]int32, len(tt.data))
+			copy(data, tt.data)
+			RadixSort(data)
+			if !isSorted(data) {
+				t.Errorf("RadixSort[int32](%s) produced unsorted result: %v", tt.name, data)
+			}
+		})
+	}
+}
+
 // TestCompressPartition3WayMatchesRegular verifies compress partition matches regular partition
 func TestCompressPartition3WayMatchesRegular(t *testing.T) {
 	rand.Seed(12345)

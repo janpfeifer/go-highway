@@ -6,6 +6,9 @@ package asm
 // which don't exist in Go assembly context and cause runtime failures.
 //go:generate go tool goat ../c/ops_neon_arm64.c -O3 -e="--target=arm64" -e="-march=armv8-a+simd+fp" -e="-fno-builtin-memset"
 
+// Per-vector operations with typed wrappers (Float32x4, Int32x4, etc.)
+//go:generate go tool goat ../c/vec_neon_arm64.c -O3 -e="--target=arm64" -e="-march=armv8-a+simd+fp"
+
 import "unsafe"
 
 // Float32 operations - exported wrappers
