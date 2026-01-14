@@ -1070,6 +1070,44 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			call.Args = []ast.Expr{allTrue}
 		}
 
+	case "MaskNot":
+		// hwy.MaskNot(mask) -> mask.Xor(allTrue)
+		// where allTrue = one.Equal(one) (comparing 1.0 == 1.0 gives all-true mask)
+		if opInfo.Package == "special" && len(call.Args) >= 1 {
+			vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+			pkgName := getVecPackageName(ctx.target)
+			mask := call.Args[0]
+
+			// Create pkg.Broadcast*(1.0) for float types or 1 for int types
+			var oneLit ast.Expr
+			if ctx.elemType == "float32" || ctx.elemType == "float64" {
+				oneLit = &ast.BasicLit{Kind: token.FLOAT, Value: "1.0"}
+			} else {
+				oneLit = &ast.BasicLit{Kind: token.INT, Value: "1"}
+			}
+			oneCall := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent(pkgName),
+					Sel: ast.NewIdent("Broadcast" + vecTypeName),
+				},
+				Args: []ast.Expr{oneLit},
+			}
+			// Create one.Equal(one) to get all-true mask
+			allTrue := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   oneCall,
+					Sel: ast.NewIdent("Equal"),
+				},
+				Args: []ast.Expr{cloneExpr(oneCall)},
+			}
+			// Create mask.Xor(allTrue) to invert
+			call.Fun = &ast.SelectorExpr{
+				X:   mask,
+				Sel: ast.NewIdent("Xor"),
+			}
+			call.Args = []ast.Expr{allTrue}
+		}
+
 	case "IsInf":
 		// hwy.IsInf(x, sign) -> compare with +Inf and/or -Inf
 		// sign=0: either +Inf or -Inf, sign=1: +Inf only, sign=-1: -Inf only
@@ -1306,6 +1344,67 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			fullName = "IfThenElse"
 		}
 		selExpr.X = ast.NewIdent(pkgName)
+	case "AllTrue":
+		// AllTrue has type-specific versions for inlining:
+		// AllTrueVal for Int32x4 masks, AllTrueValFloat64 for Int64x2 masks
+		switch ctx.elemType {
+		case "float32", "int32":
+			fullName = "AllTrueVal"
+		case "float64", "int64":
+			fullName = "AllTrueValFloat64"
+		default:
+			fullName = "AllTrueVal"
+		}
+		selExpr.X = ast.NewIdent(pkgName)
+	case "AllFalse":
+		// AllFalse has type-specific versions for inlining:
+		// AllFalseVal for Int32x4 masks, AllFalseValFloat64 for Int64x2 masks
+		switch ctx.elemType {
+		case "float32", "int32":
+			fullName = "AllFalseVal"
+		case "float64", "int64":
+			fullName = "AllFalseValFloat64"
+		default:
+			fullName = "AllFalseVal"
+		}
+		selExpr.X = ast.NewIdent(pkgName)
+	case "MaskNot":
+		// MaskNot(mask) -> mask.Xor(allTrue)
+		// where allTrue = one.Equal(one) (comparing 1.0 == 1.0 gives all-true mask)
+		if opInfo.Package == "special" && len(call.Args) >= 1 {
+			vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
+			mask := call.Args[0]
+
+			// Create pkg.Broadcast*(1.0) for float types or 1 for int types
+			var oneLit ast.Expr
+			if ctx.elemType == "float32" || ctx.elemType == "float64" {
+				oneLit = &ast.BasicLit{Kind: token.FLOAT, Value: "1.0"}
+			} else {
+				oneLit = &ast.BasicLit{Kind: token.INT, Value: "1"}
+			}
+			oneCall := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent(pkgName),
+					Sel: ast.NewIdent("Broadcast" + vecTypeName),
+				},
+				Args: []ast.Expr{oneLit},
+			}
+			// Create one.Equal(one) to get all-true mask
+			allTrue := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   oneCall,
+					Sel: ast.NewIdent("Equal"),
+				},
+				Args: []ast.Expr{cloneExpr(oneCall)},
+			}
+			// Create mask.Xor(allTrue) to invert
+			call.Fun = &ast.SelectorExpr{
+				X:   mask,
+				Sel: ast.NewIdent("Xor"),
+			}
+			call.Args = []ast.Expr{allTrue}
+		}
+		return // Don't set fullName, we've already transformed the call
 	default:
 		// For contrib functions, add target and type suffix (e.g., math.Exp_AVX2_F32x8)
 		if opInfo.SubPackage != "" {
@@ -1369,7 +1468,10 @@ func transformGenDecl(decl *ast.GenDecl, ctx *transformContext) {
 		// Transform type if present
 		if valueSpec.Type != nil {
 			typeStr := exprToString(valueSpec.Type)
+			// First specialize generic type parameters (T -> float32)
 			specialized := specializeType(typeStr, ctx.typeParams, ctx.elemType)
+			// Then transform hwy.Vec[float32] -> asm.Float32x4 for SIMD targets
+			specialized = specializeVecType(specialized, ctx.elemType, ctx.target)
 			if specialized != typeStr {
 				valueSpec.Type = parseTypeExpr(specialized)
 			}

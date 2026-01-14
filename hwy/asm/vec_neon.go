@@ -215,17 +215,51 @@ func (v Float32x4) ReduceMax() float32 {
 }
 
 // Greater returns a mask where v > other.
+// Pure Go for inlining - avoids slice overhead.
 func (v Float32x4) Greater(other Float32x4) Int32x4 {
-	var result Int32x4
-	GtF32(v[:], other[:], result[:])
-	return result
+	var r Int32x4
+	if v[0] > other[0] {
+		r[0] = -1
+	}
+	if v[1] > other[1] {
+		r[1] = -1
+	}
+	if v[2] > other[2] {
+		r[2] = -1
+	}
+	if v[3] > other[3] {
+		r[3] = -1
+	}
+	return r
+}
+
+// GreaterThan is an alias for Greater (matches archsimd naming).
+func (v Float32x4) GreaterThan(other Float32x4) Int32x4 {
+	return v.Greater(other)
 }
 
 // Less returns a mask where v < other.
+// Pure Go for inlining - avoids slice overhead.
 func (v Float32x4) Less(other Float32x4) Int32x4 {
-	var result Int32x4
-	LtF32(v[:], other[:], result[:])
-	return result
+	var r Int32x4
+	if v[0] < other[0] {
+		r[0] = -1
+	}
+	if v[1] < other[1] {
+		r[1] = -1
+	}
+	if v[2] < other[2] {
+		r[2] = -1
+	}
+	if v[3] < other[3] {
+		r[3] = -1
+	}
+	return r
+}
+
+// LessThan is an alias for Less (matches archsimd naming).
+func (v Float32x4) LessThan(other Float32x4) Int32x4 {
+	return v.Less(other)
 }
 
 // GreaterEqual returns a mask where v >= other.
@@ -440,18 +474,39 @@ func (v Float64x2) ReduceMax() float64 {
 }
 
 // Greater returns a mask where v > other.
-// Note: Returns Int64x2 mask for Float64x2 comparisons.
+// Pure Go for inlining - avoids slice overhead.
 func (v Float64x2) Greater(other Float64x2) Int64x2 {
-	var result Int64x2
-	GtF64(v[:], other[:], result[:])
-	return result
+	var r Int64x2
+	if v[0] > other[0] {
+		r[0] = -1
+	}
+	if v[1] > other[1] {
+		r[1] = -1
+	}
+	return r
+}
+
+// GreaterThan is an alias for Greater (matches archsimd naming).
+func (v Float64x2) GreaterThan(other Float64x2) Int64x2 {
+	return v.Greater(other)
 }
 
 // Less returns a mask where v < other.
+// Pure Go for inlining - avoids slice overhead.
 func (v Float64x2) Less(other Float64x2) Int64x2 {
-	var result Int64x2
-	LtF64(v[:], other[:], result[:])
-	return result
+	var r Int64x2
+	if v[0] < other[0] {
+		r[0] = -1
+	}
+	if v[1] < other[1] {
+		r[1] = -1
+	}
+	return r
+}
+
+// LessThan is an alias for Less (matches archsimd naming).
+func (v Float64x2) LessThan(other Float64x2) Int64x2 {
+	return v.Less(other)
 }
 
 // LessEqual returns a mask where v <= other.
@@ -688,6 +743,68 @@ func (v Int32x4) Equal(other Int32x4) Int32x4 {
 	return result
 }
 
+// Greater returns a mask where v > other.
+// Pure Go for inlining - avoids slice overhead.
+func (v Int32x4) Greater(other Int32x4) Int32x4 {
+	var r Int32x4
+	if v[0] > other[0] {
+		r[0] = -1
+	}
+	if v[1] > other[1] {
+		r[1] = -1
+	}
+	if v[2] > other[2] {
+		r[2] = -1
+	}
+	if v[3] > other[3] {
+		r[3] = -1
+	}
+	return r
+}
+
+// GreaterThan is an alias for Greater (matches archsimd naming).
+func (v Int32x4) GreaterThan(other Int32x4) Int32x4 {
+	return v.Greater(other)
+}
+
+// Less returns a mask where v < other.
+// Pure Go for inlining - avoids slice overhead.
+func (v Int32x4) Less(other Int32x4) Int32x4 {
+	var r Int32x4
+	if v[0] < other[0] {
+		r[0] = -1
+	}
+	if v[1] < other[1] {
+		r[1] = -1
+	}
+	if v[2] < other[2] {
+		r[2] = -1
+	}
+	if v[3] < other[3] {
+		r[3] = -1
+	}
+	return r
+}
+
+// LessThan is an alias for Less (matches archsimd naming).
+func (v Int32x4) LessThan(other Int32x4) Int32x4 {
+	return v.Less(other)
+}
+
+// LessEqual returns a mask where v <= other.
+func (v Int32x4) LessEqual(other Int32x4) Int32x4 {
+	var result Int32x4
+	LeI32(v[:], other[:], result[:])
+	return result
+}
+
+// GreaterEqual returns a mask where v >= other.
+func (v Int32x4) GreaterEqual(other Int32x4) Int32x4 {
+	var result Int32x4
+	GeI32(v[:], other[:], result[:])
+	return result
+}
+
 // Merge selects elements: mask ? v : other
 // mask should have -1 (all bits set) for true, 0 for false.
 func (v Int32x4) Merge(other Int32x4, mask Int32x4) Int32x4 {
@@ -900,6 +1017,56 @@ func (v Int64x2) Equal(other Int64x2) Int64x2 {
 	return result
 }
 
+// Greater returns a mask where v > other.
+// Pure Go for inlining - avoids slice overhead.
+func (v Int64x2) Greater(other Int64x2) Int64x2 {
+	var r Int64x2
+	if v[0] > other[0] {
+		r[0] = -1
+	}
+	if v[1] > other[1] {
+		r[1] = -1
+	}
+	return r
+}
+
+// GreaterThan is an alias for Greater (matches archsimd naming).
+func (v Int64x2) GreaterThan(other Int64x2) Int64x2 {
+	return v.Greater(other)
+}
+
+// Less returns a mask where v < other.
+// Pure Go for inlining - avoids slice overhead.
+func (v Int64x2) Less(other Int64x2) Int64x2 {
+	var r Int64x2
+	if v[0] < other[0] {
+		r[0] = -1
+	}
+	if v[1] < other[1] {
+		r[1] = -1
+	}
+	return r
+}
+
+// LessThan is an alias for Less (matches archsimd naming).
+func (v Int64x2) LessThan(other Int64x2) Int64x2 {
+	return v.Less(other)
+}
+
+// LessEqual returns a mask where v <= other.
+func (v Int64x2) LessEqual(other Int64x2) Int64x2 {
+	var result Int64x2
+	LeI64(v[:], other[:], result[:])
+	return result
+}
+
+// GreaterEqual returns a mask where v >= other.
+func (v Int64x2) GreaterEqual(other Int64x2) Int64x2 {
+	var result Int64x2
+	GeI64(v[:], other[:], result[:])
+	return result
+}
+
 // AsFloat64x2 reinterprets bits as float64.
 func (v Int64x2) AsFloat64x2() Float64x2 {
 	var result Float64x2
@@ -994,21 +1161,239 @@ func CountTrue[T Int32x4 | Int64x2](mask T) int {
 	return 0
 }
 
+// AllTrue returns true if all lanes in the mask are true.
+// Pure Go for inlining - checks all lanes directly.
+func AllTrue[T Int32x4 | Int64x2](mask T) bool {
+	switch m := any(mask).(type) {
+	case Int32x4:
+		return m[0] != 0 && m[1] != 0 && m[2] != 0 && m[3] != 0
+	case Int64x2:
+		return m[0] != 0 && m[1] != 0
+	}
+	return false
+}
+
+// AllFalse returns true if all lanes in the mask are false.
+// Pure Go for inlining - checks all lanes directly.
+func AllFalse[T Int32x4 | Int64x2](mask T) bool {
+	switch m := any(mask).(type) {
+	case Int32x4:
+		return m[0] == 0 && m[1] == 0 && m[2] == 0 && m[3] == 0
+	case Int64x2:
+		return m[0] == 0 && m[1] == 0
+	}
+	return false
+}
+
+// ===== Compress lookup tables =====
+// For 4-lane NEON, we use lookup tables to avoid branching.
+// Each entry maps a 4-bit mask to the lane indices that should be gathered.
+
+// compressTableF32 maps a 4-bit mask to byte offsets for gathering.
+// Entry i corresponds to mask bits (lane3<<3 | lane2<<2 | lane1<<1 | lane0).
+// Values are byte offsets within the 16-byte vector (lane * 4 bytes).
+var compressTableF32 = [16][4]uint8{
+	{0, 0, 0, 0},    // 0b0000: no elements
+	{0, 0, 0, 0},    // 0b0001: lane 0
+	{4, 0, 0, 0},    // 0b0010: lane 1
+	{0, 4, 0, 0},    // 0b0011: lane 0,1
+	{8, 0, 0, 0},    // 0b0100: lane 2
+	{0, 8, 0, 0},    // 0b0101: lane 0,2
+	{4, 8, 0, 0},    // 0b0110: lane 1,2
+	{0, 4, 8, 0},    // 0b0111: lane 0,1,2
+	{12, 0, 0, 0},   // 0b1000: lane 3
+	{0, 12, 0, 0},   // 0b1001: lane 0,3
+	{4, 12, 0, 0},   // 0b1010: lane 1,3
+	{0, 4, 12, 0},   // 0b1011: lane 0,1,3
+	{8, 12, 0, 0},   // 0b1100: lane 2,3
+	{0, 8, 12, 0},   // 0b1101: lane 0,2,3
+	{4, 8, 12, 0},   // 0b1110: lane 1,2,3
+	{0, 4, 8, 12},   // 0b1111: all elements
+}
+
+// compressCountTable maps a 4-bit mask to the count of set bits.
+var compressCountTable = [16]int{0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4}
+
+// compressPartitionBytesF32 maps a 4-bit mask to 16-byte permutation indices for TBL.
+// Each entry is 16 bytes representing how to shuffle bytes for partition-style compress.
+// This is the byte-level version of compressPartitionTableF32 for NEON TBL instruction.
+// Lane 0 = bytes 0-3, Lane 1 = bytes 4-7, Lane 2 = bytes 8-11, Lane 3 = bytes 12-15.
+var compressPartitionBytesF32 = [16][16]byte{
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b0000: [0,1,2,3]
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b0001: [0,1,2,3]
+	{4, 5, 6, 7, 0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b0010: [1,0,2,3]
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b0011: [0,1,2,3]
+	{8, 9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15},   // 0b0100: [2,0,1,3]
+	{0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15},   // 0b0101: [0,2,1,3]
+	{4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 12, 13, 14, 15},   // 0b0110: [1,2,0,3]
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b0111: [0,1,2,3]
+	{12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},   // 0b1000: [3,0,1,2]
+	{0, 1, 2, 3, 12, 13, 14, 15, 4, 5, 6, 7, 8, 9, 10, 11},   // 0b1001: [0,3,1,2]
+	{4, 5, 6, 7, 12, 13, 14, 15, 0, 1, 2, 3, 8, 9, 10, 11},   // 0b1010: [1,3,0,2]
+	{0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 8, 9, 10, 11},   // 0b1011: [0,1,3,2]
+	{8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7},   // 0b1100: [2,3,0,1]
+	{0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 15, 4, 5, 6, 7},   // 0b1101: [0,2,3,1]
+	{4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3},   // 0b1110: [1,2,3,0]
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b1111: [0,1,2,3]
+}
+
+// compressPartitionBytesF64 maps a 2-bit mask to 16-byte permutation indices for TBL.
+// For Float64x2: Lane 0 = bytes 0-7, Lane 1 = bytes 8-15.
+var compressPartitionBytesF64 = [4][16]byte{
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b00: [0,1]
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b01: [0,1]
+	{8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7},   // 0b10: [1,0]
+	{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},   // 0b11: [0,1]
+}
+
+// compressPartitionTableF32 maps a 4-bit mask to lane indices for PARTITION ordering.
+// Unlike compress which only stores matching elements, partition reorders so that:
+// - Lanes where mask=true come first (positions 0, 1, ...)
+// - Lanes where mask=false come after (positions count, count+1, ...)
+// This enables the Highway VQSort double-store trick.
+// Values are lane indices (0-3), not byte offsets.
+var compressPartitionTableF32 = [16][4]uint8{
+	{0, 1, 2, 3}, // 0b0000: all false → keep original order for false elements
+	{0, 1, 2, 3}, // 0b0001: lane 0 true → [0], [1,2,3]
+	{1, 0, 2, 3}, // 0b0010: lane 1 true → [1], [0,2,3]
+	{0, 1, 2, 3}, // 0b0011: lanes 0,1 true → [0,1], [2,3]
+	{2, 0, 1, 3}, // 0b0100: lane 2 true → [2], [0,1,3]
+	{0, 2, 1, 3}, // 0b0101: lanes 0,2 true → [0,2], [1,3]
+	{1, 2, 0, 3}, // 0b0110: lanes 1,2 true → [1,2], [0,3]
+	{0, 1, 2, 3}, // 0b0111: lanes 0,1,2 true → [0,1,2], [3]
+	{3, 0, 1, 2}, // 0b1000: lane 3 true → [3], [0,1,2]
+	{0, 3, 1, 2}, // 0b1001: lanes 0,3 true → [0,3], [1,2]
+	{1, 3, 0, 2}, // 0b1010: lanes 1,3 true → [1,3], [0,2]
+	{0, 1, 3, 2}, // 0b1011: lanes 0,1,3 true → [0,1,3], [2]
+	{2, 3, 0, 1}, // 0b1100: lanes 2,3 true → [2,3], [0,1]
+	{0, 2, 3, 1}, // 0b1101: lanes 0,2,3 true → [0,2,3], [1]
+	{1, 2, 3, 0}, // 0b1110: lanes 1,2,3 true → [1,2,3], [0]
+	{0, 1, 2, 3}, // 0b1111: all true → keep original order
+}
+
+// ===== CompressKeys (partition-style compress) =====
+// These reorder vectors so matching elements come first, non-matching come after.
+// This is the key primitive for Highway's VQSort double-store partition trick.
+
+// maskToIndex4 converts a 4-lane Int32x4 mask to a 4-bit index.
+// Inlined for performance.
+func maskToIndex4(mask Int32x4) int {
+	idx := 0
+	if mask[0] != 0 {
+		idx |= 1
+	}
+	if mask[1] != 0 {
+		idx |= 2
+	}
+	if mask[2] != 0 {
+		idx |= 4
+	}
+	if mask[3] != 0 {
+		idx |= 8
+	}
+	return idx
+}
+
+// CompressKeysF32x4 reorders v so elements where mask=true come first.
+// Returns (reordered vector, count of true elements).
+// Unlike CompressStore which discards false elements, this keeps ALL elements
+// in partition order: [true elements...][false elements...].
+// Note: Scalar implementation is faster than TBL assembly due to Go inlining.
+func CompressKeysF32x4(v Float32x4, mask Int32x4) (Float32x4, int) {
+	idx := maskToIndex4(mask)
+	count := compressCountTable[idx]
+	perm := &compressPartitionTableF32[idx]
+
+	var result Float32x4
+	result[0] = v[perm[0]]
+	result[1] = v[perm[1]]
+	result[2] = v[perm[2]]
+	result[3] = v[perm[3]]
+	return result, count
+}
+
+// CompressKeysI32x4 reorders v so elements where mask=true come first.
+// Returns (reordered vector, count of true elements).
+// Note: Scalar implementation is faster than TBL assembly due to Go inlining.
+func CompressKeysI32x4(v Int32x4, mask Int32x4) (Int32x4, int) {
+	idx := maskToIndex4(mask)
+	count := compressCountTable[idx]
+	perm := &compressPartitionTableF32[idx]
+
+	var result Int32x4
+	result[0] = v[perm[0]]
+	result[1] = v[perm[1]]
+	result[2] = v[perm[2]]
+	result[3] = v[perm[3]]
+	return result, count
+}
+
+// ===== Fast CountTrue functions =====
+// These use popcount to count set mask bits efficiently.
+
+// CountTrueF32x4 returns the count of true lanes in an Int32x4 mask.
+// Inlinable pure Go implementation.
+func CountTrueF32x4(mask Int32x4) int {
+	idx := 0
+	if mask[0] != 0 {
+		idx |= 1
+	}
+	if mask[1] != 0 {
+		idx |= 2
+	}
+	if mask[2] != 0 {
+		idx |= 4
+	}
+	if mask[3] != 0 {
+		idx |= 8
+	}
+	return compressCountTable[idx]
+}
+
+// CountTrueF64x2 returns the count of true lanes in an Int64x2 mask.
+// Inlinable pure Go implementation.
+func CountTrueF64x2(mask Int64x2) int {
+	count := 0
+	if mask[0] != 0 {
+		count++
+	}
+	if mask[1] != 0 {
+		count++
+	}
+	return count
+}
+
 // ===== CompressStore functions =====
 // These compress elements where mask is true and store directly to a slice.
 
 // CompressStoreF32x4 compresses float32 elements and stores to dst.
 // Returns number of elements stored.
+// Uses lookup table for efficient gathering without branches.
 func CompressStoreF32x4(v Float32x4, mask Int32x4, dst []float32) int {
-	count := 0
-	for i := 0; i < 4; i++ {
-		if mask[i] != 0 {
-			if count < len(dst) {
-				dst[count] = v[i]
-			}
-			count++
-		}
+	// Build mask index
+	idx := 0
+	if mask[0] != 0 {
+		idx |= 1
 	}
+	if mask[1] != 0 {
+		idx |= 2
+	}
+	if mask[2] != 0 {
+		idx |= 4
+	}
+	if mask[3] != 0 {
+		idx |= 8
+	}
+
+	count := compressCountTable[idx]
+	perm := &compressTableF32[idx]
+
+	// Gather elements using byte offsets
+	// Each byte offset / 4 gives the lane index
+	for i := 0; i < count; i++ {
+		dst[i] = v[perm[i]>>2]
+	}
+
 	return count
 }
 
@@ -1182,22 +1567,25 @@ func MaskAndNotFloat64(a, b Int64x2) Int64x2 {
 }
 
 // AllTrueVal returns true if all lanes in the mask are true (for float32).
-// Uses value receiver instead of slice.
+// Pure Go for inlining - direct comparisons instead of assembly.
 func AllTrueVal(mask Int32x4) bool {
-	return allTrueI32x4Asm((*[4]int32)(&mask))
+	return mask[0] != 0 && mask[1] != 0 && mask[2] != 0 && mask[3] != 0
 }
 
 // AllTrueValFloat64 returns true if all lanes in the mask are true (for float64).
+// Pure Go for inlining - direct comparisons instead of assembly.
 func AllTrueValFloat64(mask Int64x2) bool {
-	return allTrueI64x2Asm((*[2]int64)(&mask))
+	return mask[0] != 0 && mask[1] != 0
 }
 
 // AllFalseVal returns true if all lanes in the mask are false (for float32).
+// Pure Go for inlining - direct comparisons instead of assembly.
 func AllFalseVal(mask Int32x4) bool {
-	return allFalseI32x4Asm((*[4]int32)(&mask))
+	return mask[0] == 0 && mask[1] == 0 && mask[2] == 0 && mask[3] == 0
 }
 
 // AllFalseValFloat64 returns true if all lanes in the mask are false (for float64).
+// Pure Go for inlining - direct comparisons instead of assembly.
 func AllFalseValFloat64(mask Int64x2) bool {
-	return allFalseI64x2Asm((*[2]int64)(&mask))
+	return mask[0] == 0 && mask[1] == 0
 }

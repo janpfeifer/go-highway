@@ -12496,3 +12496,55 @@ LBB137_11:
 	WORD $0xf900006c // str	x12, [x3]
 	WORD $0xa8c17bfd // ldp	x29, x30, [sp],
 	RET
+
+TEXT ·compress_keys_f32x4_neon(SB), $0-24
+	MOVD input+0(FP), R0
+	MOVD perm_entry+8(FP), R1
+	MOVD output+16(FP), R2
+	WORD $0xa9bf7bfd          // stp	x29, x30, [sp,
+	WORD $0x3dc00000          // ldr	q0, [x0]
+	WORD $0x3dc00021          // ldr	q1, [x1]
+	WORD $0x910003fd          // mov	x29, sp
+	WORD $0x4e010000          // tbl	v0.16b, { v0.16b }, v1.16b
+	WORD $0x3d800040          // str	q0, [x2]
+	WORD $0xa8c17bfd          // ldp	x29, x30, [sp],
+	RET
+
+TEXT ·compress_keys_i32x4_neon(SB), $0-24
+	MOVD input+0(FP), R0
+	MOVD perm_entry+8(FP), R1
+	MOVD output+16(FP), R2
+	WORD $0xa9bf7bfd          // stp	x29, x30, [sp,
+	WORD $0x3dc00000          // ldr	q0, [x0]
+	WORD $0x3dc00021          // ldr	q1, [x1]
+	WORD $0x910003fd          // mov	x29, sp
+	WORD $0x4e010000          // tbl	v0.16b, { v0.16b }, v1.16b
+	WORD $0x3d800040          // str	q0, [x2]
+	WORD $0xa8c17bfd          // ldp	x29, x30, [sp],
+	RET
+
+TEXT ·compress_keys_f64x2_neon(SB), $0-24
+	MOVD input+0(FP), R0
+	MOVD perm_entry+8(FP), R1
+	MOVD output+16(FP), R2
+	WORD $0xa9bf7bfd          // stp	x29, x30, [sp,
+	WORD $0x3dc00000          // ldr	q0, [x0]
+	WORD $0x3dc00021          // ldr	q1, [x1]
+	WORD $0x910003fd          // mov	x29, sp
+	WORD $0x4e010000          // tbl	v0.16b, { v0.16b }, v1.16b
+	WORD $0x3d800040          // str	q0, [x2]
+	WORD $0xa8c17bfd          // ldp	x29, x30, [sp],
+	RET
+
+TEXT ·compress_keys_i64x2_neon(SB), $0-24
+	MOVD input+0(FP), R0
+	MOVD perm_entry+8(FP), R1
+	MOVD output+16(FP), R2
+	WORD $0xa9bf7bfd          // stp	x29, x30, [sp,
+	WORD $0x3dc00000          // ldr	q0, [x0]
+	WORD $0x3dc00021          // ldr	q1, [x1]
+	WORD $0x910003fd          // mov	x29, sp
+	WORD $0x4e010000          // tbl	v0.16b, { v0.16b }, v1.16b
+	WORD $0x3d800040          // str	q0, [x2]
+	WORD $0xa8c17bfd          // ldp	x29, x30, [sp],
+	RET

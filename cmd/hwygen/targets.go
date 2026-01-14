@@ -77,8 +77,9 @@ func AVX2Target() Target {
 			"Less":    {Name: "Less", IsMethod: true},    // a < b, returns mask
 
 			// ===== Mask operations =====
-			"MaskAnd": {Name: "And", IsMethod: true}, // MaskAnd(a, b) -> a.And(b)
-			"MaskOr":  {Name: "Or", IsMethod: true},  // MaskOr(a, b) -> a.Or(b)
+			"MaskAnd": {Name: "And", IsMethod: true},                          // MaskAnd(a, b) -> a.And(b)
+			"MaskOr":  {Name: "Or", IsMethod: true},                           // MaskOr(a, b) -> a.Or(b)
+			"MaskNot": {Package: "special", Name: "MaskNot", IsMethod: false}, // MaskNot(a) -> a.Xor(allTrue)
 
 			// ===== Conditional/Blend operations =====
 			"Merge": {Name: "Merge", IsMethod: true}, // a.Merge(b, mask): a where mask true, b otherwise
@@ -242,8 +243,9 @@ func AVX512Target() Target {
 			"Less":    {Name: "Less", IsMethod: true},    // a < b, returns mask
 
 			// ===== Mask operations =====
-			"MaskAnd": {Name: "And", IsMethod: true}, // MaskAnd(a, b) -> a.And(b)
-			"MaskOr":  {Name: "Or", IsMethod: true},  // MaskOr(a, b) -> a.Or(b)
+			"MaskAnd": {Name: "And", IsMethod: true},                          // MaskAnd(a, b) -> a.And(b)
+			"MaskOr":  {Name: "Or", IsMethod: true},                           // MaskOr(a, b) -> a.Or(b)
+			"MaskNot": {Package: "special", Name: "MaskNot", IsMethod: false}, // MaskNot(a) -> a.Xor(allTrue)
 
 			// ===== Conditional/Blend operations =====
 			"Merge": {Name: "Merge", IsMethod: true}, // a.Merge(b, mask): a where mask true, b otherwise
@@ -409,6 +411,7 @@ func FallbackTarget() Target {
 			// ===== Mask operations =====
 			"MaskAnd": {Package: "hwy", Name: "MaskAnd", IsMethod: false},
 			"MaskOr":  {Package: "hwy", Name: "MaskOr", IsMethod: false},
+			"MaskNot": {Package: "hwy", Name: "MaskNot", IsMethod: false},
 
 			// ===== Conditional/Blend operations =====
 			"Merge": {Package: "hwy", Name: "Merge", IsMethod: false},
@@ -574,8 +577,9 @@ func NEONTarget() Target {
 			"Less":    {Name: "Less", IsMethod: true},    // a < b, returns mask
 
 			// ===== Mask operations =====
-			"MaskAnd": {Name: "And", IsMethod: true}, // MaskAnd(a, b) -> a.And(b)
-			"MaskOr":  {Name: "Or", IsMethod: true},  // MaskOr(a, b) -> a.Or(b)
+			"MaskAnd": {Name: "And", IsMethod: true},                          // MaskAnd(a, b) -> a.And(b)
+			"MaskOr":  {Name: "Or", IsMethod: true},                           // MaskOr(a, b) -> a.Or(b)
+			"MaskNot": {Package: "special", Name: "MaskNot", IsMethod: false}, // MaskNot(a) -> a.Xor(allTrue)
 
 			// ===== Conditional/Blend operations =====
 			"Merge": {Name: "Merge", IsMethod: true}, // a.Merge(b, mask): a where mask true, b otherwise

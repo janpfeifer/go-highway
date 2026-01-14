@@ -7,37 +7,21 @@ import (
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
 	stdmath "math"
 	"simd/archsimd"
-	"sync"
 )
 
-// Hoisted constants - lazily initialized on first use to avoid init-time crashes
+// Hoisted constants - pre-broadcasted at package init time
 var (
-	BaseGELU_AVX512_vHalf_f32        archsimd.Float32x16
-	BaseGELU_AVX512_vOne_f32         archsimd.Float32x16
-	BaseGELU_AVX512_vInvSqrt2_f32    archsimd.Float32x16
-	BaseGELU_AVX512_vHalf_f64        archsimd.Float64x8
-	BaseGELU_AVX512_vOne_f64         archsimd.Float64x8
-	BaseGELU_AVX512_vInvSqrt2_f64    archsimd.Float64x8
-	BaseGELUApprox_AVX512_vCoeff_f32 archsimd.Float32x16
-	BaseGELUApprox_AVX512_vCoeff_f64 archsimd.Float64x8
-	_hoistOnce                       sync.Once
+	BaseGELU_AVX512_vHalf_f64        = archsimd.BroadcastFloat64x8(float64(0.5))
+	BaseGELUApprox_AVX512_vCoeff_f32 = archsimd.BroadcastFloat32x16(float32(1.702))
+	BaseGELUApprox_AVX512_vCoeff_f64 = archsimd.BroadcastFloat64x8(float64(1.702))
+	BaseGELU_AVX512_vHalf_f32        = archsimd.BroadcastFloat32x16(float32(0.5))
+	BaseGELU_AVX512_vOne_f32         = archsimd.BroadcastFloat32x16(float32(1.0))
+	BaseGELU_AVX512_vInvSqrt2_f32    = archsimd.BroadcastFloat32x16(float32(0.7071067811865476))
+	BaseGELU_AVX512_vOne_f64         = archsimd.BroadcastFloat64x8(float64(1.0))
+	BaseGELU_AVX512_vInvSqrt2_f64    = archsimd.BroadcastFloat64x8(float64(0.7071067811865476))
 )
-
-func _initHoistedConstants() {
-	_hoistOnce.Do(func() {
-		BaseGELU_AVX512_vHalf_f32 = archsimd.BroadcastFloat32x16(float32(0.5))
-		BaseGELU_AVX512_vOne_f32 = archsimd.BroadcastFloat32x16(float32(1.0))
-		BaseGELU_AVX512_vInvSqrt2_f32 = archsimd.BroadcastFloat32x16(float32(0.7071067811865476))
-		BaseGELU_AVX512_vHalf_f64 = archsimd.BroadcastFloat64x8(float64(0.5))
-		BaseGELU_AVX512_vOne_f64 = archsimd.BroadcastFloat64x8(float64(1.0))
-		BaseGELU_AVX512_vInvSqrt2_f64 = archsimd.BroadcastFloat64x8(float64(0.7071067811865476))
-		BaseGELUApprox_AVX512_vCoeff_f32 = archsimd.BroadcastFloat32x16(float32(1.702))
-		BaseGELUApprox_AVX512_vCoeff_f64 = archsimd.BroadcastFloat64x8(float64(1.702))
-	})
-}
 
 func BaseGELU_avx512(input []float32, output []float32) {
-	_initHoistedConstants()
 	size := min(len(input), len(output))
 	if size == 0 {
 		return
@@ -69,7 +53,6 @@ func BaseGELU_avx512(input []float32, output []float32) {
 }
 
 func BaseGELU_avx512_Float64(input []float64, output []float64) {
-	_initHoistedConstants()
 	size := min(len(input), len(output))
 	if size == 0 {
 		return
@@ -101,7 +84,6 @@ func BaseGELU_avx512_Float64(input []float64, output []float64) {
 }
 
 func BaseGELUApprox_avx512(input []float32, output []float32) {
-	_initHoistedConstants()
 	size := min(len(input), len(output))
 	if size == 0 {
 		return
@@ -130,7 +112,6 @@ func BaseGELUApprox_avx512(input []float32, output []float32) {
 }
 
 func BaseGELUApprox_avx512_Float64(input []float64, output []float64) {
-	_initHoistedConstants()
 	size := min(len(input), len(output))
 	if size == 0 {
 		return

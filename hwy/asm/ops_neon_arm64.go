@@ -418,3 +418,15 @@ func count_equal_f64_neon(slice, len, target, result unsafe.Pointer)
 
 //go:noescape
 func count_equal_i64_neon(slice, len, target, result unsafe.Pointer)
+
+//go:noescape
+func compress_keys_f32x4_neon(input, perm_entry, output unsafe.Pointer)
+
+//go:noescape
+func compress_keys_i32x4_neon(input, perm_entry, output unsafe.Pointer)
+
+//go:noescape
+func compress_keys_f64x2_neon(input, perm_entry, output unsafe.Pointer)
+
+//go:noescape
+func compress_keys_i64x2_neon(input, perm_entry, output unsafe.Pointer)

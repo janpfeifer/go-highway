@@ -4835,3 +4835,49 @@ void count_equal_i64_neon(long *slice, long *len, long *target, long *result) {
     *result = count;
 }
 
+// CompressKeys for Float32x4 using NEON TBL instruction.
+// Takes input float32x4, a 16-byte permutation table entry, and stores result.
+// The permutation table maps each 4-bit mask to byte shuffle indices for
+// partition-style reordering (true elements first, false elements after).
+// This is the key primitive for Highway's VQSort double-store partition trick.
+void compress_keys_f32x4_neon(float *input, unsigned char *perm_entry, float *output) {
+    // Load input vector as bytes (16 bytes = 4 floats)
+    uint8x16_t input_bytes = vld1q_u8((unsigned char*)input);
+
+    // Load the 16-byte permutation indices
+    uint8x16_t perm = vld1q_u8(perm_entry);
+
+    // Use TBL to permute bytes - single instruction!
+    uint8x16_t result_bytes = vqtbl1q_u8(input_bytes, perm);
+
+    // Store result
+    vst1q_u8((unsigned char*)output, result_bytes);
+}
+
+// CompressKeys for Int32x4 using NEON TBL instruction.
+// Same as float32x4 - both are 16 bytes with 4 lanes.
+void compress_keys_i32x4_neon(long *input, unsigned char *perm_entry, long *output) {
+    uint8x16_t input_bytes = vld1q_u8((unsigned char*)input);
+    uint8x16_t perm = vld1q_u8(perm_entry);
+    uint8x16_t result_bytes = vqtbl1q_u8(input_bytes, perm);
+    vst1q_u8((unsigned char*)output, result_bytes);
+}
+
+// CompressKeys for Float64x2 using NEON TBL instruction.
+// 2 lanes of 8 bytes each = 16 bytes total.
+void compress_keys_f64x2_neon(double *input, unsigned char *perm_entry, double *output) {
+    uint8x16_t input_bytes = vld1q_u8((unsigned char*)input);
+    uint8x16_t perm = vld1q_u8(perm_entry);
+    uint8x16_t result_bytes = vqtbl1q_u8(input_bytes, perm);
+    vst1q_u8((unsigned char*)output, result_bytes);
+}
+
+// CompressKeys for Int64x2 using NEON TBL instruction.
+// Same as float64x2 - both are 16 bytes with 2 lanes.
+void compress_keys_i64x2_neon(long *input, unsigned char *perm_entry, long *output) {
+    uint8x16_t input_bytes = vld1q_u8((unsigned char*)input);
+    uint8x16_t perm = vld1q_u8(perm_entry);
+    uint8x16_t result_bytes = vqtbl1q_u8(input_bytes, perm);
+    vst1q_u8((unsigned char*)output, result_bytes);
+}
+
