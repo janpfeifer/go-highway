@@ -23,6 +23,6 @@ require (
 
 // Use goat fork with x86 SIMD support and ARM64 ABI fixes
 // (github.com/ajroetker/goat branch feature/x86-simd-support)
-replace github.com/gorse-io/goat => github.com/ajroetker/goat v0.0.0-stack-support
+replace github.com/gorse-io/goat => github.com/ajroetker/goat v0.0.0-stack-support-002
 
 tool github.com/gorse-io/goat
