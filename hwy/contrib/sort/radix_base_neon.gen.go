@@ -13,7 +13,7 @@ func BaseRadixPass_neon_Int32(src []int32, dst []int32, shift int) {
 		return
 	}
 	lanes := 4
-	mask := int32(0xFF)
+	mask := int32(radixMask8_i32)
 	maskVec := asm.BroadcastInt32x4(mask)
 	var count [256]int
 	i := 0
@@ -24,13 +24,13 @@ func BaseRadixPass_neon_Int32(src []int32, dst []int32, shift int) {
 		var buf [16]int32
 		digits.StoreSlice(buf[:])
 		for j := 0; j < lanes; j++ {
-			digit := int(buf[j] & 0xFF)
+			digit := int(buf[j]) & 0xFF
 			count[digit]++
 		}
 		i += lanes
 	}
 	for ; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		count[digit]++
 	}
 	offset := 0
@@ -40,7 +40,7 @@ func BaseRadixPass_neon_Int32(src []int32, dst []int32, shift int) {
 		offset += c
 	}
 	for i := 0; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		dst[count[digit]] = src[i]
 		count[digit]++
 	}
@@ -52,7 +52,7 @@ func BaseRadixPass_neon_Int64(src []int64, dst []int64, shift int) {
 		return
 	}
 	lanes := 2
-	mask := int64(0xFF)
+	mask := int64(radixMask8_i64)
 	maskVec := asm.BroadcastInt64x2(mask)
 	var count [256]int
 	i := 0
@@ -63,13 +63,13 @@ func BaseRadixPass_neon_Int64(src []int64, dst []int64, shift int) {
 		var buf [16]int64
 		digits.StoreSlice(buf[:])
 		for j := 0; j < lanes; j++ {
-			digit := int(buf[j] & 0xFF)
+			digit := int(buf[j]) & 0xFF
 			count[digit]++
 		}
 		i += lanes
 	}
 	for ; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		count[digit]++
 	}
 	offset := 0
@@ -79,7 +79,7 @@ func BaseRadixPass_neon_Int64(src []int64, dst []int64, shift int) {
 		offset += c
 	}
 	for i := 0; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		dst[count[digit]] = src[i]
 		count[digit]++
 	}
@@ -90,7 +90,7 @@ func BaseRadixPass16_neon_Int32(src []int32, dst []int32, shift int) {
 	if n == 0 {
 		return
 	}
-	mask := int32(0xFFFF)
+	mask := int32(radixMask16_i32)
 	var count [65536]int
 	for i := 0; i < n; i++ {
 		digit := int((src[i] >> shift) & mask)
@@ -114,7 +114,7 @@ func BaseRadixPass16_neon_Int64(src []int64, dst []int64, shift int) {
 	if n == 0 {
 		return
 	}
-	mask := int64(0xFFFF)
+	mask := int64(radixMask16_i64)
 	var count [65536]int
 	for i := 0; i < n; i++ {
 		digit := int((src[i] >> shift) & mask)
@@ -138,7 +138,7 @@ func BaseRadixPass16Signed_neon_Int32(src []int32, dst []int32, shift int) {
 	if n == 0 {
 		return
 	}
-	mask := int32(0xFFFF)
+	mask := int32(radixMask16_i32)
 	var count [65536]int
 	for i := 0; i < n; i++ {
 		digit := int((src[i] >> shift) & mask)
@@ -167,7 +167,7 @@ func BaseRadixPass16Signed_neon_Int64(src []int64, dst []int64, shift int) {
 	if n == 0 {
 		return
 	}
-	mask := int64(0xFFFF)
+	mask := int64(radixMask16_i64)
 	var count [65536]int
 	for i := 0; i < n; i++ {
 		digit := int((src[i] >> shift) & mask)
@@ -197,7 +197,7 @@ func BaseRadixPassSigned_neon_Int32(src []int32, dst []int32, shift int) {
 		return
 	}
 	lanes := 4
-	mask := int32(0xFF)
+	mask := int32(radixMask8_i32)
 	maskVec := asm.BroadcastInt32x4(mask)
 	var count [256]int
 	i := 0
@@ -208,13 +208,13 @@ func BaseRadixPassSigned_neon_Int32(src []int32, dst []int32, shift int) {
 		var buf [16]int32
 		digits.StoreSlice(buf[:])
 		for j := 0; j < lanes; j++ {
-			digit := int(buf[j] & 0xFF)
+			digit := int(buf[j]) & 0xFF
 			count[digit]++
 		}
 		i += lanes
 	}
 	for ; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		count[digit]++
 	}
 	offset := 0
@@ -229,7 +229,7 @@ func BaseRadixPassSigned_neon_Int32(src []int32, dst []int32, shift int) {
 		offset += c
 	}
 	for i := 0; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		dst[count[digit]] = src[i]
 		count[digit]++
 	}
@@ -241,7 +241,7 @@ func BaseRadixPassSigned_neon_Int64(src []int64, dst []int64, shift int) {
 		return
 	}
 	lanes := 2
-	mask := int64(0xFF)
+	mask := int64(radixMask8_i64)
 	maskVec := asm.BroadcastInt64x2(mask)
 	var count [256]int
 	i := 0
@@ -252,13 +252,13 @@ func BaseRadixPassSigned_neon_Int64(src []int64, dst []int64, shift int) {
 		var buf [16]int64
 		digits.StoreSlice(buf[:])
 		for j := 0; j < lanes; j++ {
-			digit := int(buf[j] & 0xFF)
+			digit := int(buf[j]) & 0xFF
 			count[digit]++
 		}
 		i += lanes
 	}
 	for ; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		count[digit]++
 	}
 	offset := 0
@@ -273,7 +273,7 @@ func BaseRadixPassSigned_neon_Int64(src []int64, dst []int64, shift int) {
 		offset += c
 	}
 	for i := 0; i < n; i++ {
-		digit := int((src[i] >> shift) & 0xFF)
+		digit := int(src[i]>>shift) & 0xFF
 		dst[count[digit]] = src[i]
 		count[digit]++
 	}

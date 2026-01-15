@@ -110,8 +110,12 @@ func detectContribPackagesForTarget(funcs []ParsedFunc, target Target) ContribPa
 				// This is a contrib algo function reference (like algo.BaseApply)
 				pkgs.Algo = true
 			} else if call.Package == "hwy" {
-				// Other hwy package references
+				// Other hwy package references (operations not in OpMap)
 				pkgs.HwyCore = true
+				// For non-Fallback targets, we need hwy import for unmapped operations
+				if target.Name != "Fallback" {
+					pkgs.HwyPkg = true
+				}
 			}
 		}
 	}
@@ -569,8 +573,8 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 		if contribPkgs.Algo {
 			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/contrib/algo"`)
 		}
-		// stdmath for scalar tail code - only if HwyCore uses math operations
-		if contribPkgs.StdMath || (contribPkgs.HwyCore && contribPkgs.Math) {
+		// stdmath only if explicitly needed (math.Inf, math.NaN, etc. were found)
+		if contribPkgs.StdMath {
 			imports = append(imports, `stdmath "math"`)
 		}
 	} else {

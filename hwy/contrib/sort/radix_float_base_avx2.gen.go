@@ -4,22 +4,23 @@
 package sort
 
 import (
+	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 )
 
 func BaseFloatToSortable_avx2(data []float32) {
 	n := len(data)
 	lanes := 8
-	signBitVec := archsimd.SignBit()
+	signBitVec := hwy.SignBit_AVX2_F32x8()
 	zeroVec := archsimd.BroadcastFloat32x8(0)
-	allOnesVec := zeroVec.Not()
+	allOnesVec := hwy.Not_AVX2_F32x8(zeroVec)
 	i := 0
 	for i+lanes <= n {
 		v := archsimd.LoadFloat32x8Slice(data[i:])
-		isNeg := v.LessThan(zeroVec)
-		negResult := v.Xor(allOnesVec)
-		posResult := v.Xor(signBitVec)
-		result := archsimd.IfThenElse(isNeg, negResult, posResult)
+		isNeg := v.Less(zeroVec)
+		negResult := hwy.Xor_AVX2_F32x8(v, allOnesVec)
+		posResult := hwy.Xor_AVX2_F32x8(v, signBitVec)
+		result := hwy.IfThenElse_AVX2_F32x8(isNeg, negResult, posResult)
 		result.StoreSlice(data[i:])
 		i += lanes
 	}
@@ -28,16 +29,16 @@ func BaseFloatToSortable_avx2(data []float32) {
 func BaseFloatToSortable_avx2_Float64(data []float64) {
 	n := len(data)
 	lanes := 4
-	signBitVec := archsimd.SignBit()
+	signBitVec := hwy.SignBit_AVX2_F64x4()
 	zeroVec := archsimd.BroadcastFloat64x4(0)
-	allOnesVec := zeroVec.Not()
+	allOnesVec := hwy.Not_AVX2_F64x4(zeroVec)
 	i := 0
 	for i+lanes <= n {
 		v := archsimd.LoadFloat64x4Slice(data[i:])
-		isNeg := v.LessThan(zeroVec)
-		negResult := v.Xor(allOnesVec)
-		posResult := v.Xor(signBitVec)
-		result := archsimd.IfThenElseFloat64(isNeg, negResult, posResult)
+		isNeg := v.Less(zeroVec)
+		negResult := hwy.Xor_AVX2_F64x4(v, allOnesVec)
+		posResult := hwy.Xor_AVX2_F64x4(v, signBitVec)
+		result := hwy.IfThenElse_AVX2_F64x4(isNeg, negResult, posResult)
 		result.StoreSlice(data[i:])
 		i += lanes
 	}
@@ -46,17 +47,17 @@ func BaseFloatToSortable_avx2_Float64(data []float64) {
 func BaseSortableToFloat_avx2(data []float32) {
 	n := len(data)
 	lanes := 8
-	signBitVec := archsimd.SignBit()
+	signBitVec := hwy.SignBit_AVX2_F32x8()
 	zeroVec := archsimd.BroadcastFloat32x8(0)
-	allOnesVec := zeroVec.Not()
+	allOnesVec := hwy.Not_AVX2_F32x8(zeroVec)
 	i := 0
 	for i+lanes <= n {
 		v := archsimd.LoadFloat32x8Slice(data[i:])
-		masked := v.And(signBitVec)
+		masked := hwy.And_AVX2_F32x8(v, signBitVec)
 		wasPositive := masked.NotEqual(zeroVec)
-		posResult := v.Xor(signBitVec)
-		negResult := v.Xor(allOnesVec)
-		result := archsimd.IfThenElse(wasPositive, posResult, negResult)
+		posResult := hwy.Xor_AVX2_F32x8(v, signBitVec)
+		negResult := hwy.Xor_AVX2_F32x8(v, allOnesVec)
+		result := hwy.IfThenElse_AVX2_F32x8(wasPositive, posResult, negResult)
 		result.StoreSlice(data[i:])
 		i += lanes
 	}
@@ -65,17 +66,17 @@ func BaseSortableToFloat_avx2(data []float32) {
 func BaseSortableToFloat_avx2_Float64(data []float64) {
 	n := len(data)
 	lanes := 4
-	signBitVec := archsimd.SignBit()
+	signBitVec := hwy.SignBit_AVX2_F64x4()
 	zeroVec := archsimd.BroadcastFloat64x4(0)
-	allOnesVec := zeroVec.Not()
+	allOnesVec := hwy.Not_AVX2_F64x4(zeroVec)
 	i := 0
 	for i+lanes <= n {
 		v := archsimd.LoadFloat64x4Slice(data[i:])
-		masked := v.And(signBitVec)
+		masked := hwy.And_AVX2_F64x4(v, signBitVec)
 		wasPositive := masked.NotEqual(zeroVec)
-		posResult := v.Xor(signBitVec)
-		negResult := v.Xor(allOnesVec)
-		result := archsimd.IfThenElseFloat64(wasPositive, posResult, negResult)
+		posResult := hwy.Xor_AVX2_F64x4(v, signBitVec)
+		negResult := hwy.Xor_AVX2_F64x4(v, allOnesVec)
+		result := hwy.IfThenElse_AVX2_F64x4(wasPositive, posResult, negResult)
 		result.StoreSlice(data[i:])
 		i += lanes
 	}

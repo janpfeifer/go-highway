@@ -4,6 +4,7 @@
 package sort
 
 import (
+	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 )
 
@@ -25,9 +26,9 @@ func BasePartition3Way_avx2(data []float32, pivot float32) (int, int) {
 			break
 		}
 		v := archsimd.LoadFloat32x8Slice(data[i:])
-		maskLess := v.LessThan(pivotVec)
-		maskGreater := v.GreaterThan(pivotVec)
-		if archsimd.AllTrue(maskLess) {
+		maskLess := v.Less(pivotVec)
+		maskGreater := v.Greater(pivotVec)
+		if hwy.AllTrue_AVX2_F32x8(maskLess) {
 			if lt == i {
 				lt += lanes
 				i += lanes
@@ -43,14 +44,14 @@ func BasePartition3Way_avx2(data []float32, pivot float32) (int, int) {
 			}
 			break
 		}
-		if archsimd.AllTrue(maskGreater) {
+		if hwy.AllTrue_AVX2_F32x8(maskGreater) {
 			gt -= lanes
 			vGt := archsimd.LoadFloat32x8Slice(data[gt:])
 			v.StoreSlice(data[gt:])
 			vGt.StoreSlice(data[i:])
 			continue
 		}
-		if archsimd.AllFalse(maskLess) && archsimd.AllFalse(maskGreater) {
+		if hwy.AllFalse_AVX2_F32x8(maskLess) && hwy.AllFalse_AVX2_F32x8(maskGreater) {
 			i += lanes
 			continue
 		}
@@ -107,9 +108,9 @@ func BasePartition3Way_avx2_Float64(data []float64, pivot float64) (int, int) {
 			break
 		}
 		v := archsimd.LoadFloat64x4Slice(data[i:])
-		maskLess := v.LessThan(pivotVec)
-		maskGreater := v.GreaterThan(pivotVec)
-		if archsimd.AllTrue(maskLess) {
+		maskLess := v.Less(pivotVec)
+		maskGreater := v.Greater(pivotVec)
+		if hwy.AllTrue_AVX2_F64x4(maskLess) {
 			if lt == i {
 				lt += lanes
 				i += lanes
@@ -125,14 +126,14 @@ func BasePartition3Way_avx2_Float64(data []float64, pivot float64) (int, int) {
 			}
 			break
 		}
-		if archsimd.AllTrue(maskGreater) {
+		if hwy.AllTrue_AVX2_F64x4(maskGreater) {
 			gt -= lanes
 			vGt := archsimd.LoadFloat64x4Slice(data[gt:])
 			v.StoreSlice(data[gt:])
 			vGt.StoreSlice(data[i:])
 			continue
 		}
-		if archsimd.AllFalse(maskLess) && archsimd.AllFalse(maskGreater) {
+		if hwy.AllFalse_AVX2_F64x4(maskLess) && hwy.AllFalse_AVX2_F64x4(maskGreater) {
 			i += lanes
 			continue
 		}
@@ -189,9 +190,9 @@ func BasePartition3Way_avx2_Int32(data []int32, pivot int32) (int, int) {
 			break
 		}
 		v := archsimd.LoadInt32x8Slice(data[i:])
-		maskLess := v.LessThan(pivotVec)
-		maskGreater := v.GreaterThan(pivotVec)
-		if archsimd.AllTrue(maskLess) {
+		maskLess := v.Less(pivotVec)
+		maskGreater := v.Greater(pivotVec)
+		if hwy.AllTrue_AVX2_I32x8(maskLess) {
 			if lt == i {
 				lt += lanes
 				i += lanes
@@ -207,14 +208,14 @@ func BasePartition3Way_avx2_Int32(data []int32, pivot int32) (int, int) {
 			}
 			break
 		}
-		if archsimd.AllTrue(maskGreater) {
+		if hwy.AllTrue_AVX2_I32x8(maskGreater) {
 			gt -= lanes
 			vGt := archsimd.LoadInt32x8Slice(data[gt:])
 			v.StoreSlice(data[gt:])
 			vGt.StoreSlice(data[i:])
 			continue
 		}
-		if archsimd.AllFalse(maskLess) && archsimd.AllFalse(maskGreater) {
+		if hwy.AllFalse_AVX2_I32x8(maskLess) && hwy.AllFalse_AVX2_I32x8(maskGreater) {
 			i += lanes
 			continue
 		}
@@ -271,9 +272,9 @@ func BasePartition3Way_avx2_Int64(data []int64, pivot int64) (int, int) {
 			break
 		}
 		v := archsimd.LoadInt64x4Slice(data[i:])
-		maskLess := v.LessThan(pivotVec)
-		maskGreater := v.GreaterThan(pivotVec)
-		if archsimd.AllTrue(maskLess) {
+		maskLess := v.Less(pivotVec)
+		maskGreater := v.Greater(pivotVec)
+		if hwy.AllTrue_AVX2_I64x4(maskLess) {
 			if lt == i {
 				lt += lanes
 				i += lanes
@@ -289,14 +290,14 @@ func BasePartition3Way_avx2_Int64(data []int64, pivot int64) (int, int) {
 			}
 			break
 		}
-		if archsimd.AllTrue(maskGreater) {
+		if hwy.AllTrue_AVX2_I64x4(maskGreater) {
 			gt -= lanes
 			vGt := archsimd.LoadInt64x4Slice(data[gt:])
 			v.StoreSlice(data[gt:])
 			vGt.StoreSlice(data[i:])
 			continue
 		}
-		if archsimd.AllFalse(maskLess) && archsimd.AllFalse(maskGreater) {
+		if hwy.AllFalse_AVX2_I64x4(maskLess) && hwy.AllFalse_AVX2_I64x4(maskGreater) {
 			i += lanes
 			continue
 		}
@@ -353,11 +354,11 @@ func BasePartition_avx2(data []float32, pivot float32) int {
 		}
 		v := archsimd.LoadFloat32x8Slice(data[left:])
 		mask := v.LessEqual(pivotVec)
-		if archsimd.AllTrue(mask) {
+		if hwy.AllTrue_AVX2_F32x8(mask) {
 			left += lanes
 			continue
 		}
-		if archsimd.AllFalse(mask) {
+		if hwy.AllFalse_AVX2_F32x8(mask) {
 			right -= lanes
 			vRight := archsimd.LoadFloat32x8Slice(data[right:])
 			v.StoreSlice(data[right:])
@@ -409,11 +410,11 @@ func BasePartition_avx2_Float64(data []float64, pivot float64) int {
 		}
 		v := archsimd.LoadFloat64x4Slice(data[left:])
 		mask := v.LessEqual(pivotVec)
-		if archsimd.AllTrue(mask) {
+		if hwy.AllTrue_AVX2_F64x4(mask) {
 			left += lanes
 			continue
 		}
-		if archsimd.AllFalse(mask) {
+		if hwy.AllFalse_AVX2_F64x4(mask) {
 			right -= lanes
 			vRight := archsimd.LoadFloat64x4Slice(data[right:])
 			v.StoreSlice(data[right:])
@@ -465,11 +466,11 @@ func BasePartition_avx2_Int32(data []int32, pivot int32) int {
 		}
 		v := archsimd.LoadInt32x8Slice(data[left:])
 		mask := v.LessEqual(pivotVec)
-		if archsimd.AllTrue(mask) {
+		if hwy.AllTrue_AVX2_I32x8(mask) {
 			left += lanes
 			continue
 		}
-		if archsimd.AllFalse(mask) {
+		if hwy.AllFalse_AVX2_I32x8(mask) {
 			right -= lanes
 			vRight := archsimd.LoadInt32x8Slice(data[right:])
 			v.StoreSlice(data[right:])
@@ -521,11 +522,11 @@ func BasePartition_avx2_Int64(data []int64, pivot int64) int {
 		}
 		v := archsimd.LoadInt64x4Slice(data[left:])
 		mask := v.LessEqual(pivotVec)
-		if archsimd.AllTrue(mask) {
+		if hwy.AllTrue_AVX2_I64x4(mask) {
 			left += lanes
 			continue
 		}
-		if archsimd.AllFalse(mask) {
+		if hwy.AllFalse_AVX2_I64x4(mask) {
 			right -= lanes
 			vRight := archsimd.LoadInt64x4Slice(data[right:])
 			v.StoreSlice(data[right:])

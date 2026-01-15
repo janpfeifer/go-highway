@@ -4,6 +4,8 @@
 package image
 
 import (
+	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/math"
 	"simd/archsimd"
 )
 
@@ -21,14 +23,14 @@ func BaseBrightnessContrast_avx512(img *Image[float32], out *Image[float32], sca
 		i := 0
 		for ; i+lanes <= width; i += lanes {
 			v := archsimd.LoadFloat32x16Slice(inRow[i:])
-			result := v.FMA(scaleVec, offsetVec)
+			result := v.MulAdd(scaleVec, offsetVec)
 			result.StoreSlice(outRow[i:])
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [16]float32{}
 			copy(buf[:], inRow[i:i+remaining])
 			v := archsimd.LoadFloat32x16Slice(buf[:])
-			result := v.FMA(scaleVec, offsetVec)
+			result := v.MulAdd(scaleVec, offsetVec)
 			result.StoreSlice(buf[:])
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
@@ -49,14 +51,14 @@ func BaseBrightnessContrast_avx512_Float64(img *Image[float64], out *Image[float
 		i := 0
 		for ; i+lanes <= width; i += lanes {
 			v := archsimd.LoadFloat64x8Slice(inRow[i:])
-			result := v.FMA(scaleVec, offsetVec)
+			result := v.MulAdd(scaleVec, offsetVec)
 			result.StoreSlice(outRow[i:])
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [8]float64{}
 			copy(buf[:], inRow[i:i+remaining])
 			v := archsimd.LoadFloat64x8Slice(buf[:])
-			result := v.FMA(scaleVec, offsetVec)
+			result := v.MulAdd(scaleVec, offsetVec)
 			result.StoreSlice(buf[:])
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
@@ -135,7 +137,7 @@ func BaseThreshold_avx512(img *Image[float32], out *Image[float32], threshold fl
 		for ; i+lanes <= width; i += lanes {
 			v := archsimd.LoadFloat32x16Slice(inRow[i:])
 			mask := v.GreaterEqual(threshVec)
-			result := archsimd.IfThenElse(mask, aboveVec, belowVec)
+			result := hwy.IfThenElse_AVX512_F32x16(mask, aboveVec, belowVec)
 			result.StoreSlice(outRow[i:])
 		}
 		if remaining := width - i; remaining > 0 {
@@ -143,7 +145,7 @@ func BaseThreshold_avx512(img *Image[float32], out *Image[float32], threshold fl
 			copy(buf[:], inRow[i:i+remaining])
 			v := archsimd.LoadFloat32x16Slice(buf[:])
 			mask := v.GreaterEqual(threshVec)
-			result := archsimd.IfThenElse(mask, aboveVec, belowVec)
+			result := hwy.IfThenElse_AVX512_F32x16(mask, aboveVec, belowVec)
 			result.StoreSlice(buf[:])
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
@@ -166,7 +168,7 @@ func BaseThreshold_avx512_Float64(img *Image[float64], out *Image[float64], thre
 		for ; i+lanes <= width; i += lanes {
 			v := archsimd.LoadFloat64x8Slice(inRow[i:])
 			mask := v.GreaterEqual(threshVec)
-			result := archsimd.IfThenElseFloat64(mask, aboveVec, belowVec)
+			result := hwy.IfThenElse_AVX512_F64x8(mask, aboveVec, belowVec)
 			result.StoreSlice(outRow[i:])
 		}
 		if remaining := width - i; remaining > 0 {
@@ -174,7 +176,7 @@ func BaseThreshold_avx512_Float64(img *Image[float64], out *Image[float64], thre
 			copy(buf[:], inRow[i:i+remaining])
 			v := archsimd.LoadFloat64x8Slice(buf[:])
 			mask := v.GreaterEqual(threshVec)
-			result := archsimd.IfThenElseFloat64(mask, aboveVec, belowVec)
+			result := hwy.IfThenElse_AVX512_F64x8(mask, aboveVec, belowVec)
 			result.StoreSlice(buf[:])
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
@@ -408,14 +410,14 @@ func BaseGamma_avx512(img *Image[float32], out *Image[float32], gamma float32) {
 		i := 0
 		for ; i+lanes <= width; i += lanes {
 			v := archsimd.LoadFloat32x16Slice(inRow[i:])
-			result := hwy.Pow(v, gammaVec)
+			result := math.BasePowVec_avx512(v, gammaVec)
 			result.StoreSlice(outRow[i:])
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [16]float32{}
 			copy(buf[:], inRow[i:i+remaining])
 			v := archsimd.LoadFloat32x16Slice(buf[:])
-			result := hwy.Pow(v, gammaVec)
+			result := math.BasePowVec_avx512(v, gammaVec)
 			result.StoreSlice(buf[:])
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
@@ -435,14 +437,14 @@ func BaseGamma_avx512_Float64(img *Image[float64], out *Image[float64], gamma fl
 		i := 0
 		for ; i+lanes <= width; i += lanes {
 			v := archsimd.LoadFloat64x8Slice(inRow[i:])
-			result := hwy.Pow(v, gammaVec)
+			result := math.BasePowVec_avx512_Float64(v, gammaVec)
 			result.StoreSlice(outRow[i:])
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [8]float64{}
 			copy(buf[:], inRow[i:i+remaining])
 			v := archsimd.LoadFloat64x8Slice(buf[:])
-			result := hwy.Pow(v, gammaVec)
+			result := math.BasePowVec_avx512_Float64(v, gammaVec)
 			result.StoreSlice(buf[:])
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}

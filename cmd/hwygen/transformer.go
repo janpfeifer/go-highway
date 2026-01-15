@@ -1227,6 +1227,69 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 		}
 
+	case "ShiftRight", "ShiftLeft", "ShiftAllRight", "ShiftAllLeft":
+		// hwy.ShiftRight(v, shift) -> v.ShiftAllRight(uint64(shift))
+		// archsimd's ShiftAllRight/ShiftAllLeft expect uint64, but hwy uses int
+		if len(call.Args) >= 2 {
+			call.Fun = &ast.SelectorExpr{
+				X:   call.Args[0],
+				Sel: ast.NewIdent(opInfo.Name),
+			}
+			shiftArg := call.Args[1]
+			// Wrap shift in uint64() cast for archsimd targets
+			if ctx.target.VecPackage == "archsimd" {
+				shiftArg = &ast.CallExpr{
+					Fun:  ast.NewIdent("uint64"),
+					Args: []ast.Expr{shiftArg},
+				}
+			}
+			call.Args = []ast.Expr{shiftArg}
+		}
+
+	case "And", "Xor":
+		// archsimd float types don't have And/Xor methods, only int types do.
+		// For float types on archsimd, use hwy wrappers.
+		if ctx.target.VecPackage == "archsimd" && (ctx.elemType == "float32" || ctx.elemType == "float64") {
+			// hwy.And(a, b) -> hwy.And_AVX2_F32x8(a, b)
+			fullName := fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			call.Fun = &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent(fullName),
+			}
+			// Keep args as [a, b]
+		} else {
+			// Integer types or non-archsimd: use method call a.And(b)
+			if len(call.Args) >= 2 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent(opInfo.Name),
+				}
+				call.Args = call.Args[1:]
+			}
+		}
+
+	case "Not":
+		// archsimd float types don't have Not method, only int types do.
+		// For float types on archsimd, use hwy wrappers.
+		if ctx.target.VecPackage == "archsimd" && (ctx.elemType == "float32" || ctx.elemType == "float64") {
+			// hwy.Not(a) -> hwy.Not_AVX2_F32x8(a)
+			fullName := fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			call.Fun = &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent(fullName),
+			}
+			// Keep args as [a]
+		} else {
+			// Integer types or non-archsimd: use method call a.Not()
+			if len(call.Args) >= 1 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent(opInfo.Name),
+				}
+				call.Args = nil
+			}
+		}
+
 	default:
 		// Binary operations: hwy.Add(a, b) -> a.Add(b)
 		if len(call.Args) >= 2 {
@@ -1283,6 +1346,15 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 	vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
 	pkgName := getVecPackageName(ctx.target)
 
+	// Check if this op should be redirected to hwy wrappers (archsimd doesn't have it)
+	if opInfo.Package == "hwy" && opInfo.SubPackage == "" {
+		// Use hwy wrapper instead of archsimd
+		fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+		selExpr.X = ast.NewIdent("hwy")
+		selExpr.Sel.Name = fullName
+		return
+	}
+
 	switch funcName {
 	case "Load":
 		fullName = fmt.Sprintf("Load%sSlice", vecTypeName)
@@ -1305,65 +1377,89 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		fullName = fmt.Sprintf("MaskLoad%sSlice", vecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
 	case "Compress":
-		// Compress returns (Vec, int). Maps to CompressKeysF32x4, etc.
-		switch ctx.elemType {
-		case "float32":
-			fullName = "CompressKeysF32x4"
-		case "float64":
-			fullName = "CompressKeysF64x2"
-		case "int32":
-			fullName = "CompressKeysI32x4"
-		case "int64":
-			fullName = "CompressKeysI64x2"
-		default:
-			fullName = "CompressKeysF32x4"
+		// Use hwy wrapper if configured
+		if opInfo.Package == "hwy" {
+			fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			// Compress returns (Vec, int). Maps to CompressKeysF32x4, etc.
+			switch ctx.elemType {
+			case "float32":
+				fullName = "CompressKeysF32x4"
+			case "float64":
+				fullName = "CompressKeysF64x2"
+			case "int32":
+				fullName = "CompressKeysI32x4"
+			case "int64":
+				fullName = "CompressKeysI64x2"
+			default:
+				fullName = "CompressKeysF32x4"
+			}
+			selExpr.X = ast.NewIdent(pkgName)
 		}
-		selExpr.X = ast.NewIdent(pkgName)
 	case "CompressStore":
-		// CompressStore has type-specific versions: CompressStore (float32), CompressStoreFloat64, etc.
-		switch ctx.elemType {
-		case "float32":
-			fullName = "CompressStore"
-		case "float64":
-			fullName = "CompressStoreFloat64"
-		case "int32":
-			fullName = "CompressStoreInt32"
-		case "int64":
-			fullName = "CompressStoreInt64"
-		default:
-			fullName = "CompressStore"
+		// Use hwy wrapper if configured
+		if opInfo.Package == "hwy" {
+			fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			// CompressStore has type-specific versions: CompressStore (float32), CompressStoreFloat64, etc.
+			switch ctx.elemType {
+			case "float32":
+				fullName = "CompressStore"
+			case "float64":
+				fullName = "CompressStoreFloat64"
+			case "int32":
+				fullName = "CompressStoreInt32"
+			case "int64":
+				fullName = "CompressStoreInt64"
+			default:
+				fullName = "CompressStore"
+			}
+			selExpr.X = ast.NewIdent(pkgName)
 		}
-		selExpr.X = ast.NewIdent(pkgName)
 	case "FirstN":
-		// FirstN returns a mask type: Int32x4 for 4-lane, Int64x2 for 2-lane
-		switch ctx.elemType {
-		case "float32":
-			fullName = "FirstN"
-		case "float64":
-			fullName = "FirstNFloat64"
-		case "int32":
-			fullName = "FirstN" // Int32x4 mask for int32
-		case "int64":
-			fullName = "FirstNInt64"
-		default:
-			fullName = "FirstN"
+		// Use hwy wrapper if configured
+		if opInfo.Package == "hwy" {
+			fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			// FirstN returns a mask type: Int32x4 for 4-lane, Int64x2 for 2-lane
+			switch ctx.elemType {
+			case "float32":
+				fullName = "FirstN"
+			case "float64":
+				fullName = "FirstNFloat64"
+			case "int32":
+				fullName = "FirstN" // Int32x4 mask for int32
+			case "int64":
+				fullName = "FirstNInt64"
+			default:
+				fullName = "FirstN"
+			}
+			selExpr.X = ast.NewIdent(pkgName)
 		}
-		selExpr.X = ast.NewIdent(pkgName)
 	case "IfThenElse":
-		// IfThenElse has type-specific versions for NEON
-		switch ctx.elemType {
-		case "float32":
-			fullName = "IfThenElse"
-		case "float64":
-			fullName = "IfThenElseFloat64"
-		case "int32":
-			fullName = "IfThenElseInt32"
-		case "int64":
-			fullName = "IfThenElseInt64"
-		default:
-			fullName = "IfThenElse"
+		// Use hwy wrapper if configured
+		if opInfo.Package == "hwy" {
+			fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			// IfThenElse has type-specific versions for NEON
+			switch ctx.elemType {
+			case "float32":
+				fullName = "IfThenElse"
+			case "float64":
+				fullName = "IfThenElseFloat64"
+			case "int32":
+				fullName = "IfThenElseInt32"
+			case "int64":
+				fullName = "IfThenElseInt64"
+			default:
+				fullName = "IfThenElse"
+			}
+			selExpr.X = ast.NewIdent(pkgName)
 		}
-		selExpr.X = ast.NewIdent(pkgName)
 	case "AllTrue":
 		// AllTrue has type-specific versions for inlining:
 		// AllTrueVal for Int32x4 masks, AllTrueValFloat64 for Int64x2 masks
@@ -1441,10 +1537,25 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			call.Args = []ast.Expr{allTrue}
 		}
 		return // Don't set fullName, we've already transformed the call
+	case "ShiftRight", "ShiftLeft", "ShiftAllRight", "ShiftAllLeft":
+		// archsimd's ShiftAllRight/ShiftAllLeft expect uint64, but hwy uses int.
+		// After function-to-method transformation, the shift is the last arg.
+		// Wrap it in a uint64() cast for archsimd targets.
+		if ctx.target.VecPackage == "archsimd" && len(call.Args) >= 1 {
+			lastIdx := len(call.Args) - 1
+			call.Args[lastIdx] = &ast.CallExpr{
+				Fun:  ast.NewIdent("uint64"),
+				Args: []ast.Expr{call.Args[lastIdx]},
+			}
+		}
+		fullName = opInfo.Name
+		selExpr.X = ast.NewIdent(pkgName)
 	default:
-		// For contrib functions, add target and type suffix (e.g., math.Exp_AVX2_F32x8)
+		// For contrib functions (SubPackage), use hwygen's naming convention:
+		// lowercase target, type suffix only for non-default types
+		// e.g., math.BaseExpVec_avx2, math.BaseExpVec_avx2_Float64
 		if opInfo.SubPackage != "" {
-			fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+			fullName = fmt.Sprintf("%s_%s%s", opInfo.Name, strings.ToLower(ctx.target.Name), getHwygenTypeSuffix(ctx.elemType))
 			selExpr.X = ast.NewIdent(opInfo.SubPackage) // math, dot, matvec, algo
 		} else if opInfo.Package == "hwy" {
 			// Core ops from hwy package (e.g., hwy.Sqrt_AVX2_F32x8)
@@ -1486,6 +1597,23 @@ func getShortTypeName(elemType string, target Target) string {
 		return fmt.Sprintf("I64x%d", lanes)
 	default:
 		return "Vec"
+	}
+}
+
+// getHwygenTypeSuffix returns the type suffix used by hwygen for generated functions.
+// float32 is the default (no suffix), other types get _Float64, _Int32, _Int64.
+func getHwygenTypeSuffix(elemType string) string {
+	switch elemType {
+	case "float32":
+		return "" // default type, no suffix
+	case "float64":
+		return "_Float64"
+	case "int32":
+		return "_Int32"
+	case "int64":
+		return "_Int64"
+	default:
+		return ""
 	}
 }
 
@@ -2099,9 +2227,22 @@ func specializeVecType(typeStr string, elemType string, target Target) string {
 }
 
 // getMaskTypeName returns the mask type name for a given element type and target.
-// Masks are typically represented as integer vectors with matching lane count.
+// For archsimd (AVX2/AVX512), masks are dedicated Mask32xN or Mask64xN types.
+// For NEON and fallback, masks may use integer vector types.
 func getMaskTypeName(elemType string, target Target) string {
 	lanes := target.LanesFor(elemType)
+	// For archsimd targets, use proper Mask types
+	if target.VecPackage == "archsimd" {
+		switch elemType {
+		case "float32", "int32":
+			return fmt.Sprintf("Mask32x%d", lanes)
+		case "float64", "int64":
+			return fmt.Sprintf("Mask64x%d", lanes)
+		default:
+			return ""
+		}
+	}
+	// For other targets (NEON, fallback), use integer vector types
 	switch elemType {
 	case "float32":
 		return fmt.Sprintf("Int32x%d", lanes)

@@ -12,5 +12,6 @@ var (
 
 // 16-bit mask constants for radix sort
 var (
+	radixMask16_i32 int32 = 0xFFFF
 	radixMask16_i64 int64 = 0xFFFF
 )

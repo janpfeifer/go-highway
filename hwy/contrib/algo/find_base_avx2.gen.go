@@ -4,6 +4,7 @@
 package algo
 
 import (
+	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 )
 
@@ -18,7 +19,7 @@ func BaseFind_avx2(slice []float32, value float32) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadFloat32x8Slice(slice[i:])
 		mask := v.Equal(target)
-		if idx := archsimd.FindFirstTrue(mask); idx >= 0 {
+		if idx := hwy.FindFirstTrue_AVX2_F32x8(mask); idx >= 0 {
 			return i + idx
 		}
 	}
@@ -41,7 +42,7 @@ func BaseFind_avx2_Float64(slice []float64, value float64) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadFloat64x4Slice(slice[i:])
 		mask := v.Equal(target)
-		if idx := archsimd.FindFirstTrue(mask); idx >= 0 {
+		if idx := hwy.FindFirstTrue_AVX2_F64x4(mask); idx >= 0 {
 			return i + idx
 		}
 	}
@@ -64,7 +65,7 @@ func BaseFind_avx2_Int32(slice []int32, value int32) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadInt32x8Slice(slice[i:])
 		mask := v.Equal(target)
-		if idx := archsimd.FindFirstTrue(mask); idx >= 0 {
+		if idx := hwy.FindFirstTrue_AVX2_I32x8(mask); idx >= 0 {
 			return i + idx
 		}
 	}
@@ -87,7 +88,7 @@ func BaseFind_avx2_Int64(slice []int64, value int64) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadInt64x4Slice(slice[i:])
 		mask := v.Equal(target)
-		if idx := archsimd.FindFirstTrue(mask); idx >= 0 {
+		if idx := hwy.FindFirstTrue_AVX2_I64x4(mask); idx >= 0 {
 			return i + idx
 		}
 	}
@@ -111,7 +112,7 @@ func BaseCount_avx2(slice []float32, value float32) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadFloat32x8Slice(slice[i:])
 		mask := v.Equal(target)
-		count += archsimd.CountTrue(mask)
+		count += hwy.CountTrue_AVX2_F32x8(mask)
 	}
 	for ; i < n; i++ {
 		if slice[i] == value {
@@ -133,7 +134,7 @@ func BaseCount_avx2_Float64(slice []float64, value float64) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadFloat64x4Slice(slice[i:])
 		mask := v.Equal(target)
-		count += archsimd.CountTrue(mask)
+		count += hwy.CountTrue_AVX2_F64x4(mask)
 	}
 	for ; i < n; i++ {
 		if slice[i] == value {
@@ -155,7 +156,7 @@ func BaseCount_avx2_Int32(slice []int32, value int32) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadInt32x8Slice(slice[i:])
 		mask := v.Equal(target)
-		count += archsimd.CountTrue(mask)
+		count += hwy.CountTrue_AVX2_I32x8(mask)
 	}
 	for ; i < n; i++ {
 		if slice[i] == value {
@@ -177,7 +178,7 @@ func BaseCount_avx2_Int64(slice []int64, value int64) int {
 	for ; i+lanes <= n; i += lanes {
 		v := archsimd.LoadInt64x4Slice(slice[i:])
 		mask := v.Equal(target)
-		count += archsimd.CountTrue(mask)
+		count += hwy.CountTrue_AVX2_I64x4(mask)
 	}
 	for ; i < n; i++ {
 		if slice[i] == value {

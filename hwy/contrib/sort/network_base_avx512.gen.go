@@ -4,6 +4,7 @@
 package sort
 
 import (
+	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 )
 
@@ -101,8 +102,8 @@ func BaseIsSorted_avx512(data []float32) bool {
 	for ; i+lanes < n; i += lanes {
 		v1 := archsimd.LoadFloat32x16Slice(data[i:])
 		v2 := archsimd.LoadFloat32x16Slice(data[i+1:])
-		mask := v1.GreaterThan(v2)
-		if archsimd.FindFirstTrue(mask) >= 0 {
+		mask := v1.Greater(v2)
+		if hwy.FindFirstTrue_AVX512_F32x16(mask) >= 0 {
 			return false
 		}
 	}
@@ -124,8 +125,8 @@ func BaseIsSorted_avx512_Float64(data []float64) bool {
 	for ; i+lanes < n; i += lanes {
 		v1 := archsimd.LoadFloat64x8Slice(data[i:])
 		v2 := archsimd.LoadFloat64x8Slice(data[i+1:])
-		mask := v1.GreaterThan(v2)
-		if archsimd.FindFirstTrue(mask) >= 0 {
+		mask := v1.Greater(v2)
+		if hwy.FindFirstTrue_AVX512_F64x8(mask) >= 0 {
 			return false
 		}
 	}
@@ -147,8 +148,8 @@ func BaseIsSorted_avx512_Int32(data []int32) bool {
 	for ; i+lanes < n; i += lanes {
 		v1 := archsimd.LoadInt32x16Slice(data[i:])
 		v2 := archsimd.LoadInt32x16Slice(data[i+1:])
-		mask := v1.GreaterThan(v2)
-		if archsimd.FindFirstTrue(mask) >= 0 {
+		mask := v1.Greater(v2)
+		if hwy.FindFirstTrue_AVX512_I32x16(mask) >= 0 {
 			return false
 		}
 	}
@@ -170,8 +171,8 @@ func BaseIsSorted_avx512_Int64(data []int64) bool {
 	for ; i+lanes < n; i += lanes {
 		v1 := archsimd.LoadInt64x8Slice(data[i:])
 		v2 := archsimd.LoadInt64x8Slice(data[i+1:])
-		mask := v1.GreaterThan(v2)
-		if archsimd.FindFirstTrue(mask) >= 0 {
+		mask := v1.Greater(v2)
+		if hwy.FindFirstTrue_AVX512_I64x8(mask) >= 0 {
 			return false
 		}
 	}
