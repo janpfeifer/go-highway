@@ -427,7 +427,8 @@ void promote_f16_to_f32_avx512(unsigned short *a, float *result, long *len) {
     // Scalar remainder
     for (; i < n; i++) {
         __m128h hv = _mm_load_sh(a + i);
-        result[i] = _mm_cvtsh_ss(hv);
+        __m128 fv = _mm_cvtsh_ss(_mm_setzero_ps(), hv);
+        result[i] = _mm_cvtss_f32(fv);
     }
 }
 
@@ -489,7 +490,8 @@ void demote_f32_to_f16_avx512(float *a, unsigned short *result, long *len) {
 
     // Scalar remainder
     for (; i < n; i++) {
-        __m128h hv = _mm_cvtss_sh(_mm_setzero_ph(), a[i]);
+        __m128 fv = _mm_set_ss(a[i]);
+        __m128h hv = _mm_cvtss_sh(_mm_setzero_ph(), fv);
         _mm_store_sh(result + i, hv);
     }
 }
