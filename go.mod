@@ -21,8 +21,7 @@ require (
 	modernc.org/token v1.1.0 // indirect
 )
 
-// Use goat fork with cross-compilation support
-// (github.com/ajroetker/goat branch feature/cross-compilation)
-replace github.com/gorse-io/goat => github.com/ajroetker/goat v0.0.0-cross-compile-005
+// Use ajroetker/goat fork with SME frame size and smstop fixes
+replace github.com/gorse-io/goat => github.com/ajroetker/goat v0.0.0-sve-sme-support-003
 
 tool github.com/gorse-io/goat

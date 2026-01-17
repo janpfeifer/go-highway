@@ -7,3 +7,7 @@ examples/contrib_test/contrib_test
 # GOAT build artifacts
 hwy/c/*.o
 hwy/c/*.s
+hwy/contrib/matmul/c/*.o
+hwy/contrib/matmul/c/*.s
+hwy/contrib/matvec/c/*.o
+hwy/contrib/matvec/c/*.s
