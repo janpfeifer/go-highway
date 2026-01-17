@@ -53,8 +53,14 @@ func matmul_fmopa_at_f32(at, b, c unsafe.Pointer, m, n, k int64)
 //go:noescape
 func matmul_fmopa_at_f64(at, b, c unsafe.Pointer, m, n, k int64)
 
+//go:noescape
+func matmul_fmopa_at_f16(at, b, c, pm, pn, pk, scratch unsafe.Pointer)
+
+//go:noescape
+func matmul_bfmopa_at_bf16(at, b, c, pm, pn, pk, scratch unsafe.Pointer)
+
 // Transpose buffer pools to avoid allocations
-var transposePool = sync.Pool{
+var transposePool32 = sync.Pool{
 	New: func() interface{} {
 		return make([]float32, 0, 256*256)
 	},
@@ -66,18 +72,22 @@ var transposePool64 = sync.Pool{
 	},
 }
 
-// transposeMatrix transposes M×K matrix A into K×M matrix AT (row-major to column-major)
-// AT[k,i] = A[i,k]
-func transposeMatrix(a []float32, m, k int, at []float32) {
-	for i := 0; i < m; i++ {
-		for j := 0; j < k; j++ {
-			at[j*m+i] = a[i*k+j]
-		}
-	}
+var transposePoolF16 = sync.Pool{
+	New: func() interface{} {
+		return make([]hwy.Float16, 0, 256*256)
+	},
 }
 
-// transposeMatrix64 transposes M×K matrix A into K×M matrix AT for float64
-func transposeMatrix64(a []float64, m, k int, at []float64) {
+var transposePoolBF16 = sync.Pool{
+	New: func() interface{} {
+		return make([]hwy.BFloat16, 0, 256*256)
+	},
+}
+
+// transposeMatrix transposes M×K matrix A into K×M matrix AT (row-major to column-major)
+// AT[k,i] = A[i,k]
+// Uses generics to support all float types.
+func transposeMatrix[T hwy.Floats](a []T, m, k int, at []T) {
 	for i := 0; i < m; i++ {
 		for j := 0; j < k; j++ {
 			at[j*m+i] = a[i*k+j]
@@ -124,7 +134,7 @@ func matmulFMOPA(a, b, c []float32, m, n, k int) {
 
 	// Get transpose buffer from pool
 	atSize := m * k
-	atBuf := transposePool.Get().([]float32)
+	atBuf := transposePool32.Get().([]float32)
 	if cap(atBuf) < atSize {
 		atBuf = make([]float32, atSize)
 	} else {
@@ -145,7 +155,7 @@ func matmulFMOPA(a, b, c []float32, m, n, k int) {
 	)
 
 	// Return buffer to pool
-	transposePool.Put(atBuf)
+	transposePool32.Put(atBuf)
 }
 
 // matmulFMOPA64 uses ARM SME FMOPA instruction for float64 matrix multiplication.
@@ -174,7 +184,7 @@ func matmulFMOPA64(a, b, c []float64, m, n, k int) {
 	}
 
 	// Transpose A (M×K) to AT (K×M) for contiguous column access
-	transposeMatrix64(a, m, k, atBuf)
+	transposeMatrix(a, m, k, atBuf)
 
 	// Call FMOPA with transposed A
 	matmul_fmopa_at_f64(
@@ -190,11 +200,111 @@ func matmulFMOPA64(a, b, c []float64, m, n, k int) {
 	transposePool64.Put(atBuf)
 }
 
+// matmulFMOPAF16 uses ARM SME FMOPA instruction for float16 matrix multiplication.
+// Uses widening: f16 -> f32 FMOPA -> f16, with 16×16 tiles (f32 accumulator).
+// Pre-transposes A for contiguous column access, enabling fast vector loads.
+func matmulFMOPAF16(a, b, c []hwy.Float16, m, n, k int) {
+	// For non-aligned sizes (16×16 tiles), fall back to NEON
+	if m%16 != 0 || n%16 != 0 || k%16 != 0 {
+		matmulNEONF16(a, b, c, m, n, k)
+		return
+	}
+
+	// For small matrices, NEON is faster (streaming mode has overhead)
+	if m < minDimForSME || n < minDimForSME || k < minDimForSME {
+		matmulNEONF16(a, b, c, m, n, k)
+		return
+	}
+
+	// Get transpose buffer from pool
+	atSize := m * k
+	atBuf := transposePoolF16.Get().([]hwy.Float16)
+	if cap(atBuf) < atSize {
+		atBuf = make([]hwy.Float16, atSize)
+	} else {
+		atBuf = atBuf[:atSize]
+	}
+
+	// Transpose A (M×K) to AT (K×M) for contiguous column access
+	transposeMatrix(a, m, k, atBuf)
+
+	// Scratch buffer for f32->f16 conversion
+	var scratch [16]float32
+	mVal := int64(m)
+	nVal := int64(n)
+	kVal := int64(k)
+
+	// Call FMOPA with transposed A
+	matmul_fmopa_at_f16(
+		unsafe.Pointer(unsafe.SliceData(atBuf)),
+		unsafe.Pointer(unsafe.SliceData(b)),
+		unsafe.Pointer(unsafe.SliceData(c)),
+		unsafe.Pointer(&mVal),
+		unsafe.Pointer(&nVal),
+		unsafe.Pointer(&kVal),
+		unsafe.Pointer(&scratch[0]),
+	)
+
+	// Return buffer to pool
+	transposePoolF16.Put(atBuf)
+}
+
+// matmulFMOPABF16 uses ARM SME BFMOPA instruction for bfloat16 matrix multiplication.
+// Uses widening: bf16 -> f32 FMOPA -> bf16, with 16×16 tiles (f32 accumulator).
+// Pre-transposes A for contiguous column access, enabling fast vector loads.
+func matmulFMOPABF16(a, b, c []hwy.BFloat16, m, n, k int) {
+	// For non-aligned sizes (16×16 tiles), fall back to NEON
+	if m%16 != 0 || n%16 != 0 || k%16 != 0 {
+		matmulNEONBF16(a, b, c, m, n, k)
+		return
+	}
+
+	// For small matrices, NEON is faster (streaming mode has overhead)
+	if m < minDimForSME || n < minDimForSME || k < minDimForSME {
+		matmulNEONBF16(a, b, c, m, n, k)
+		return
+	}
+
+	// Get transpose buffer from pool
+	atSize := m * k
+	atBuf := transposePoolBF16.Get().([]hwy.BFloat16)
+	if cap(atBuf) < atSize {
+		atBuf = make([]hwy.BFloat16, atSize)
+	} else {
+		atBuf = atBuf[:atSize]
+	}
+
+	// Transpose A (M×K) to AT (K×M) for contiguous column access
+	transposeMatrix(a, m, k, atBuf)
+
+	// Scratch buffer for f32->bf16 conversion
+	var scratch [16]float32
+	mVal := int64(m)
+	nVal := int64(n)
+	kVal := int64(k)
+
+	// Call BFMOPA with transposed A
+	matmul_bfmopa_at_bf16(
+		unsafe.Pointer(unsafe.SliceData(atBuf)),
+		unsafe.Pointer(unsafe.SliceData(b)),
+		unsafe.Pointer(unsafe.SliceData(c)),
+		unsafe.Pointer(&mVal),
+		unsafe.Pointer(&nVal),
+		unsafe.Pointer(&kVal),
+		unsafe.Pointer(&scratch[0]),
+	)
+
+	// Return buffer to pool
+	transposePoolBF16.Put(atBuf)
+}
+
 func init() {
 	if hwy.HasSME() {
 		// Use FMOPA implementation which works on Apple M4
 		// This overrides the generated dispatch for large aligned matrices
 		MatMulFloat32 = matmulFMOPA
 		MatMulFloat64 = matmulFMOPA64
+		MatMulFloat16 = matmulFMOPAF16
+		MatMulBFloat16 = matmulFMOPABF16
 	}
 }
