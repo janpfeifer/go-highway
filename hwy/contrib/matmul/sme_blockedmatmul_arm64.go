@@ -56,7 +56,7 @@ func blockedMatMulFMOPA(a, b, c []float32, m, n, k int) {
 
 	// Get transpose buffer from pool
 	atSize := m * k
-	atBuf := transposePool.Get().([]float32)
+	atBuf := transposePool32.Get().([]float32)
 	if cap(atBuf) < atSize {
 		atBuf = make([]float32, atSize)
 	} else {
@@ -77,7 +77,7 @@ func blockedMatMulFMOPA(a, b, c []float32, m, n, k int) {
 	)
 
 	// Return buffer to pool
-	transposePool.Put(atBuf)
+	transposePool32.Put(atBuf)
 }
 
 // blockedMatMulFMOPA64 uses ARM SME FMOPA for blocked matrix multiplication (f64).
@@ -106,7 +106,7 @@ func blockedMatMulFMOPA64(a, b, c []float64, m, n, k int) {
 	}
 
 	// Transpose A (M×K) to AT (K×M) for contiguous column access
-	transposeMatrix64(a, m, k, atBuf)
+	transposeMatrix(a, m, k, atBuf)
 
 	// Call blocked FMOPA with transposed A
 	blockedmatmul_fmopa_at_f64(
