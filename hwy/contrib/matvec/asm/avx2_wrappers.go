@@ -11,7 +11,7 @@ import (
 )
 
 // AVX2 with F16C and FMA for f16/bf16 support
-//go:generate go tool goat ../c/matvec_avx2_amd64.c -O3 --target x86_64 -e="-mavx2 -mfma -mf16c"
+//go:generate go tool goat ../c/matvec_avx2_amd64.c -O3 --target amd64 -m avx2 -m fma -m f16c
 
 // ============================================================================
 // AVX2 Matrix-Vector Multiplication

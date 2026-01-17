@@ -22,6 +22,6 @@ require (
 )
 
 // Use ajroetker/goat fork with SVE/SME streaming mode fixes
-replace github.com/gorse-io/goat => github.com/ajroetker/goat v0.0.0-sve-sme-support-004
+replace github.com/gorse-io/goat => github.com/ajroetker/goat v0.0.0-sve-sme-support-005
 
 tool github.com/gorse-io/goat

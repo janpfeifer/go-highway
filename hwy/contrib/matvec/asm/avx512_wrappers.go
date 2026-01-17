@@ -13,7 +13,7 @@ import (
 )
 
 // AVX-512 with FP16 and BF16 extensions
-//go:generate go tool goat ../c/matvec_avx512_amd64.c -O3 --target x86_64 -e="-mavx512f -mavx512fp16 -mavx512bf16"
+//go:generate go tool goat ../c/matvec_avx512_amd64.c -O3 --target amd64 -m avx512f -m avx512fp16 -m avx512bf16 -m avx512vl
 
 // ============================================================================
 // AVX-512 Matrix-Vector Multiplication
