@@ -53,10 +53,7 @@ func BasePartition3Way_fallback(data []float32, pivot float32) (int, int) {
 			i += lanes
 			continue
 		}
-		end := i + lanes
-		if end > gt {
-			end = gt
-		}
+		end := min(i+lanes, gt)
 		for i < end {
 			if data[i] < pivot {
 				data[lt], data[i] = data[i], data[lt]
@@ -135,10 +132,7 @@ func BasePartition3Way_fallback_Float64(data []float64, pivot float64) (int, int
 			i += lanes
 			continue
 		}
-		end := i + lanes
-		if end > gt {
-			end = gt
-		}
+		end := min(i+lanes, gt)
 		for i < end {
 			if data[i] < pivot {
 				data[lt], data[i] = data[i], data[lt]
@@ -217,10 +211,7 @@ func BasePartition3Way_fallback_Int32(data []int32, pivot int32) (int, int) {
 			i += lanes
 			continue
 		}
-		end := i + lanes
-		if end > gt {
-			end = gt
-		}
+		end := min(i+lanes, gt)
 		for i < end {
 			if data[i] < pivot {
 				data[lt], data[i] = data[i], data[lt]
@@ -299,10 +290,165 @@ func BasePartition3Way_fallback_Int64(data []int64, pivot int64) (int, int) {
 			i += lanes
 			continue
 		}
-		end := i + lanes
-		if end > gt {
-			end = gt
+		end := min(i+lanes, gt)
+		for i < end {
+			if data[i] < pivot {
+				data[lt], data[i] = data[i], data[lt]
+				lt++
+				i++
+			} else if data[i] > pivot {
+				gt--
+				data[i], data[gt] = data[gt], data[i]
+				if gt < end {
+					end = gt
+				}
+			} else {
+				i++
+			}
 		}
+	}
+	for i < gt {
+		if data[i] < pivot {
+			data[lt], data[i] = data[i], data[lt]
+			lt++
+			i++
+		} else if data[i] > pivot {
+			gt--
+			data[i], data[gt] = data[gt], data[i]
+		} else {
+			i++
+		}
+	}
+	return lt, gt
+}
+
+func BasePartition3Way_fallback_Uint32(data []uint32, pivot uint32) (int, int) {
+	n := len(data)
+	if n == 0 {
+		return 0, 0
+	}
+	lanes := hwy.MaxLanes[uint32]()
+	if n < lanes*4 {
+		return scalarPartition3Way(data, pivot)
+	}
+	pivotVec := hwy.Set(pivot)
+	lt := 0
+	gt := n
+	i := 0
+	for i+lanes <= gt {
+		if gt-lanes < i+lanes {
+			break
+		}
+		v := hwy.Load(data[i:])
+		maskLess := hwy.LessThan(v, pivotVec)
+		maskGreater := hwy.GreaterThan(v, pivotVec)
+		if hwy.AllTrue(maskLess) {
+			if lt == i {
+				lt += lanes
+				i += lanes
+				continue
+			}
+			if lt+lanes <= i {
+				vLt := hwy.Load(data[lt:])
+				hwy.Store(v, data[lt:])
+				hwy.Store(vLt, data[i:])
+				lt += lanes
+				i += lanes
+				continue
+			}
+			break
+		}
+		if hwy.AllTrue(maskGreater) {
+			gt -= lanes
+			vGt := hwy.Load(data[gt:])
+			hwy.Store(v, data[gt:])
+			hwy.Store(vGt, data[i:])
+			continue
+		}
+		if hwy.AllFalse(maskLess) && hwy.AllFalse(maskGreater) {
+			i += lanes
+			continue
+		}
+		end := min(i+lanes, gt)
+		for i < end {
+			if data[i] < pivot {
+				data[lt], data[i] = data[i], data[lt]
+				lt++
+				i++
+			} else if data[i] > pivot {
+				gt--
+				data[i], data[gt] = data[gt], data[i]
+				if gt < end {
+					end = gt
+				}
+			} else {
+				i++
+			}
+		}
+	}
+	for i < gt {
+		if data[i] < pivot {
+			data[lt], data[i] = data[i], data[lt]
+			lt++
+			i++
+		} else if data[i] > pivot {
+			gt--
+			data[i], data[gt] = data[gt], data[i]
+		} else {
+			i++
+		}
+	}
+	return lt, gt
+}
+
+func BasePartition3Way_fallback_Uint64(data []uint64, pivot uint64) (int, int) {
+	n := len(data)
+	if n == 0 {
+		return 0, 0
+	}
+	lanes := hwy.MaxLanes[uint64]()
+	if n < lanes*4 {
+		return scalarPartition3Way(data, pivot)
+	}
+	pivotVec := hwy.Set(pivot)
+	lt := 0
+	gt := n
+	i := 0
+	for i+lanes <= gt {
+		if gt-lanes < i+lanes {
+			break
+		}
+		v := hwy.Load(data[i:])
+		maskLess := hwy.LessThan(v, pivotVec)
+		maskGreater := hwy.GreaterThan(v, pivotVec)
+		if hwy.AllTrue(maskLess) {
+			if lt == i {
+				lt += lanes
+				i += lanes
+				continue
+			}
+			if lt+lanes <= i {
+				vLt := hwy.Load(data[lt:])
+				hwy.Store(v, data[lt:])
+				hwy.Store(vLt, data[i:])
+				lt += lanes
+				i += lanes
+				continue
+			}
+			break
+		}
+		if hwy.AllTrue(maskGreater) {
+			gt -= lanes
+			vGt := hwy.Load(data[gt:])
+			hwy.Store(v, data[gt:])
+			hwy.Store(vGt, data[i:])
+			continue
+		}
+		if hwy.AllFalse(maskLess) && hwy.AllFalse(maskGreater) {
+			i += lanes
+			continue
+		}
+		end := min(i+lanes, gt)
 		for i < end {
 			if data[i] < pivot {
 				data[lt], data[i] = data[i], data[lt]
@@ -363,10 +509,7 @@ func BasePartition_fallback(data []float32, pivot float32) int {
 			hwy.Store(vRight, data[left:])
 			continue
 		}
-		end := left + lanes
-		if end > right {
-			end = right
-		}
+		end := min(left+lanes, right)
 		for left < end {
 			if data[left] <= pivot {
 				left++
@@ -419,10 +562,7 @@ func BasePartition_fallback_Float64(data []float64, pivot float64) int {
 			hwy.Store(vRight, data[left:])
 			continue
 		}
-		end := left + lanes
-		if end > right {
-			end = right
-		}
+		end := min(left+lanes, right)
 		for left < end {
 			if data[left] <= pivot {
 				left++
@@ -475,10 +615,7 @@ func BasePartition_fallback_Int32(data []int32, pivot int32) int {
 			hwy.Store(vRight, data[left:])
 			continue
 		}
-		end := left + lanes
-		if end > right {
-			end = right
-		}
+		end := min(left+lanes, right)
 		for left < end {
 			if data[left] <= pivot {
 				left++
@@ -531,10 +668,113 @@ func BasePartition_fallback_Int64(data []int64, pivot int64) int {
 			hwy.Store(vRight, data[left:])
 			continue
 		}
-		end := left + lanes
-		if end > right {
-			end = right
+		end := min(left+lanes, right)
+		for left < end {
+			if data[left] <= pivot {
+				left++
+			} else {
+				right--
+				data[left], data[right] = data[right], data[left]
+				if right < end {
+					end = right
+				}
+			}
 		}
+	}
+	for left < right {
+		if data[left] <= pivot {
+			left++
+		} else {
+			right--
+			data[left], data[right] = data[right], data[left]
+		}
+	}
+	return left
+}
+
+func BasePartition_fallback_Uint32(data []uint32, pivot uint32) int {
+	n := len(data)
+	if n == 0 {
+		return 0
+	}
+	lanes := hwy.MaxLanes[uint32]()
+	if n < lanes*4 {
+		return scalarPartition2Way(data, pivot)
+	}
+	pivotVec := hwy.Set(pivot)
+	left := 0
+	right := n
+	for left+lanes <= right {
+		if right-lanes < left+lanes {
+			break
+		}
+		v := hwy.Load(data[left:])
+		mask := hwy.LessEqual(v, pivotVec)
+		if hwy.AllTrue(mask) {
+			left += lanes
+			continue
+		}
+		if hwy.AllFalse(mask) {
+			right -= lanes
+			vRight := hwy.Load(data[right:])
+			hwy.Store(v, data[right:])
+			hwy.Store(vRight, data[left:])
+			continue
+		}
+		end := min(left+lanes, right)
+		for left < end {
+			if data[left] <= pivot {
+				left++
+			} else {
+				right--
+				data[left], data[right] = data[right], data[left]
+				if right < end {
+					end = right
+				}
+			}
+		}
+	}
+	for left < right {
+		if data[left] <= pivot {
+			left++
+		} else {
+			right--
+			data[left], data[right] = data[right], data[left]
+		}
+	}
+	return left
+}
+
+func BasePartition_fallback_Uint64(data []uint64, pivot uint64) int {
+	n := len(data)
+	if n == 0 {
+		return 0
+	}
+	lanes := hwy.MaxLanes[uint64]()
+	if n < lanes*4 {
+		return scalarPartition2Way(data, pivot)
+	}
+	pivotVec := hwy.Set(pivot)
+	left := 0
+	right := n
+	for left+lanes <= right {
+		if right-lanes < left+lanes {
+			break
+		}
+		v := hwy.Load(data[left:])
+		mask := hwy.LessEqual(v, pivotVec)
+		if hwy.AllTrue(mask) {
+			left += lanes
+			continue
+		}
+		if hwy.AllFalse(mask) {
+			right -= lanes
+			vRight := hwy.Load(data[right:])
+			hwy.Store(v, data[right:])
+			hwy.Store(vRight, data[left:])
+			continue
+		}
+		end := min(left+lanes, right)
 		for left < end {
 			if data[left] <= pivot {
 				left++

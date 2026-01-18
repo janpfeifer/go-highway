@@ -14,8 +14,8 @@ type Target struct {
 
 // OpInfo describes how to transform a hwy operation for this target.
 type OpInfo struct {
-	Package    string // "" for archsimd methods, "hwy" for core package, "math"/"dot" for contrib
-	SubPackage string // For contrib: "math", "dot", "matvec", "algo"
+	Package    string // "" for archsimd methods, "hwy" for core package, "math"/"vec" for contrib
+	SubPackage string // For contrib: "math", "vec", "matvec", "matmul", "algo", "image", "bitpack", "sort"
 	Name       string // Target function/method name
 	IsMethod   bool   // true if a.Add(b), false if Add(a, b)
 }
@@ -32,6 +32,8 @@ func AVX2Target() Target {
 			"float64":      "Float64x4",
 			"int32":        "Int32x8",
 			"int64":        "Int64x4",
+			"uint32":       "Uint32x8",
+			"uint64":       "Uint64x4",
 			"hwy.Float16":  "hwy.Vec[hwy.Float16]",
 			"hwy.BFloat16": "hwy.Vec[hwy.BFloat16]",
 		},
@@ -103,9 +105,10 @@ func AVX2Target() Target {
 			"ShiftRight":    {Name: "ShiftAllRight", IsMethod: true}, // Alias for ShiftAllRight
 
 			// ===== Reductions =====
+			// archsimd doesn't have ReduceMin/ReduceMax methods. Using hwy wrappers.
 			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
-			"ReduceMin": {Name: "ReduceMin", IsMethod: true},
-			"ReduceMax": {Name: "ReduceMax", IsMethod: true},
+			"ReduceMin": {Package: "hwy", Name: "ReduceMin", IsMethod: false},
+			"ReduceMax": {Package: "hwy", Name: "ReduceMax", IsMethod: false},
 
 			// ===== Comparisons =====
 			// Note: archsimd uses Less/Greater, not LessThan/GreaterThan
@@ -132,7 +135,7 @@ func AVX2Target() Target {
 			"Reverse4":           {Name: "Reverse4", IsMethod: false},
 			"Reverse8":           {Name: "Reverse8", IsMethod: false},
 			"Broadcast":          {Name: "Broadcast", IsMethod: true},
-			"GetLane":            {Name: "GetLane", IsMethod: false},
+			"GetLane":            {Package: "hwy", Name: "GetLane", IsMethod: false},
 			"InsertLane":         {Name: "InsertLane", IsMethod: false},
 			"InterleaveLower":    {Name: "InterleaveLower", IsMethod: false},
 			"InterleaveUpper":    {Name: "InterleaveUpper", IsMethod: false},
@@ -195,8 +198,8 @@ func AVX2Target() Target {
 			"Sigmoid": {Package: "math", SubPackage: "math", Name: "BaseSigmoidVec", IsMethod: false},
 			"Erf":     {Package: "math", SubPackage: "math", Name: "BaseErfVec", IsMethod: false},
 
-			// ===== contrib/dot: Dot product operations =====
-			"Dot": {Package: "dot", SubPackage: "dot", Name: "Dot", IsMethod: false},
+			// ===== contrib/vec: Dot product operations =====
+			"Dot": {Package: "vec", SubPackage: "vec", Name: "Dot", IsMethod: false},
 
 			// ===== IEEE 754 Operations =====
 			// Pow2 computes 2^k via bit manipulation. Transformer adds target and type suffix.
@@ -222,6 +225,8 @@ func AVX512Target() Target {
 			"float64":      "Float64x8",
 			"int32":        "Int32x16",
 			"int64":        "Int64x8",
+			"uint32":       "Uint32x16",
+			"uint64":       "Uint64x8",
 			"hwy.Float16":  "hwy.Vec[hwy.Float16]",
 			"hwy.BFloat16": "hwy.Vec[hwy.BFloat16]",
 		},
@@ -294,9 +299,10 @@ func AVX512Target() Target {
 			"ShiftRight":    {Name: "ShiftAllRight", IsMethod: true}, // Alias for ShiftAllRight
 
 			// ===== Reductions =====
+			// archsimd doesn't have ReduceMin/ReduceMax methods. Using hwy wrappers.
 			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
-			"ReduceMin": {Name: "ReduceMin", IsMethod: true},
-			"ReduceMax": {Name: "ReduceMax", IsMethod: true},
+			"ReduceMin": {Package: "hwy", Name: "ReduceMin", IsMethod: false},
+			"ReduceMax": {Package: "hwy", Name: "ReduceMax", IsMethod: false},
 
 			// ===== Comparisons =====
 			// Note: archsimd uses Less/Greater, not LessThan/GreaterThan
@@ -323,7 +329,7 @@ func AVX512Target() Target {
 			"Reverse4":           {Name: "Reverse4", IsMethod: false},
 			"Reverse8":           {Name: "Reverse8", IsMethod: false},
 			"Broadcast":          {Name: "Broadcast", IsMethod: true},
-			"GetLane":            {Name: "GetLane", IsMethod: false},
+			"GetLane":            {Package: "hwy", Name: "GetLane", IsMethod: false},
 			"InsertLane":         {Name: "InsertLane", IsMethod: false},
 			"InterleaveLower":    {Name: "InterleaveLower", IsMethod: false},
 			"InterleaveUpper":    {Name: "InterleaveUpper", IsMethod: false},
@@ -388,8 +394,8 @@ func AVX512Target() Target {
 			"Sigmoid": {Package: "math", SubPackage: "math", Name: "BaseSigmoidVec", IsMethod: false},
 			"Erf":     {Package: "math", SubPackage: "math", Name: "BaseErfVec", IsMethod: false},
 
-			// ===== contrib/dot: Dot product operations =====
-			"Dot": {Package: "dot", SubPackage: "dot", Name: "Dot", IsMethod: false},
+			// ===== contrib/vec: Dot product operations =====
+			"Dot": {Package: "vec", SubPackage: "vec", Name: "Dot", IsMethod: false},
 
 			// ===== IEEE 754 Operations =====
 			"Pow2": {Package: "hwy", Name: "Pow2", IsMethod: false},
@@ -416,6 +422,8 @@ func FallbackTarget() Target {
 			"float64":      "hwy.Vec[float64]",
 			"int32":        "hwy.Vec[int32]",
 			"int64":        "hwy.Vec[int64]",
+			"uint32":       "hwy.Vec[uint32]",
+			"uint64":       "hwy.Vec[uint64]",
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations - use hwy package =====
@@ -570,8 +578,8 @@ func FallbackTarget() Target {
 			"Sigmoid": {Package: "math", SubPackage: "math", Name: "BaseSigmoidVec", IsMethod: false},
 			"Erf":     {Package: "math", SubPackage: "math", Name: "BaseErfVec", IsMethod: false},
 
-			// ===== contrib/dot: Dot product =====
-			"Dot": {Package: "hwy", SubPackage: "dot", Name: "Dot", IsMethod: false},
+			// ===== contrib/vec: Dot product =====
+			"Dot": {Package: "vec", SubPackage: "vec", Name: "Dot", IsMethod: false},
 
 			// ===== IEEE 754 Operations =====
 			"Pow2": {Package: "hwy", Name: "Pow2", IsMethod: false},
@@ -596,6 +604,8 @@ func NEONTarget() Target {
 			"float64":      "Float64x2",
 			"int32":        "Int32x4",
 			"int64":        "Int64x2",
+			"uint32":       "Uint32x4",
+			"uint64":       "Uint64x2",
 			"hwy.Float16":  "hwy.Vec[hwy.Float16]",
 			"hwy.BFloat16": "hwy.Vec[hwy.BFloat16]",
 		},
@@ -691,7 +701,7 @@ func NEONTarget() Target {
 			"Reverse2":           {Name: "Reverse2", IsMethod: false},
 			"Reverse4":           {Name: "Reverse4", IsMethod: false},
 			"Broadcast":          {Name: "Broadcast", IsMethod: true},
-			"GetLane":            {Name: "GetLane", IsMethod: false},
+			"GetLane":            {Name: "Get", IsMethod: true},
 			"InsertLane":         {Name: "InsertLane", IsMethod: false},
 			"InterleaveLower":    {Name: "InterleaveLower", IsMethod: false},
 			"InterleaveUpper":    {Name: "InterleaveUpper", IsMethod: false},
@@ -749,8 +759,8 @@ func NEONTarget() Target {
 			"Sigmoid": {Package: "math", SubPackage: "math", Name: "BaseSigmoidVec", IsMethod: false},
 			"Erf":     {Package: "math", SubPackage: "math", Name: "BaseErfVec", IsMethod: false},
 
-			// ===== contrib/dot: Dot product operations =====
-			"Dot": {Package: "dot", SubPackage: "dot", Name: "Dot", IsMethod: false},
+			// ===== contrib/vec: Dot product operations =====
+			"Dot": {Package: "vec", SubPackage: "vec", Name: "Dot", IsMethod: false},
 
 			// ===== IEEE 754 Operations =====
 			"Pow2": {Name: "Pow2", IsMethod: true},

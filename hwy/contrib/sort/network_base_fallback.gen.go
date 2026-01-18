@@ -90,6 +90,48 @@ func BaseSortSmall_fallback_Int64(data []int64) {
 	InsertionSortSmall(data)
 }
 
+func BaseSortSmall_fallback_Uint32(data []uint32) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+	if n <= 4 {
+		InsertionSortSmall(data)
+		return
+	}
+	lanes := hwy.MaxLanes[uint32]()
+	if n <= lanes {
+		SortSingleVector(data)
+		return
+	}
+	if n <= lanes*2 {
+		SortTwoVectors(data)
+		return
+	}
+	InsertionSortSmall(data)
+}
+
+func BaseSortSmall_fallback_Uint64(data []uint64) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+	if n <= 4 {
+		InsertionSortSmall(data)
+		return
+	}
+	lanes := hwy.MaxLanes[uint64]()
+	if n <= lanes {
+		SortSingleVector(data)
+		return
+	}
+	if n <= lanes*2 {
+		SortTwoVectors(data)
+		return
+	}
+	InsertionSortSmall(data)
+}
+
 func BaseIsSorted_fallback(data []float32) bool {
 	n := len(data)
 	if n <= 1 {
@@ -165,6 +207,52 @@ func BaseIsSorted_fallback_Int64(data []int64) bool {
 		return true
 	}
 	lanes := hwy.MaxLanes[int64]()
+	i := 0
+	for ; i+lanes < n; i += lanes {
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
+		mask := hwy.GreaterThan(v1, v2)
+		if hwy.FindFirstTrue(mask) >= 0 {
+			return false
+		}
+	}
+	for ; i < n-1; i++ {
+		if data[i] > data[i+1] {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseIsSorted_fallback_Uint32(data []uint32) bool {
+	n := len(data)
+	if n <= 1 {
+		return true
+	}
+	lanes := hwy.MaxLanes[uint32]()
+	i := 0
+	for ; i+lanes < n; i += lanes {
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
+		mask := hwy.GreaterThan(v1, v2)
+		if hwy.FindFirstTrue(mask) >= 0 {
+			return false
+		}
+	}
+	for ; i < n-1; i++ {
+		if data[i] > data[i+1] {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseIsSorted_fallback_Uint64(data []uint64) bool {
+	n := len(data)
+	if n <= 1 {
+		return true
+	}
+	lanes := hwy.MaxLanes[uint64]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
 		v1 := hwy.Load(data[i:])

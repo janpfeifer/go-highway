@@ -14,10 +14,14 @@ var Partition3WayFloat32 func(data []float32, pivot float32) (int, int)
 var Partition3WayFloat64 func(data []float64, pivot float64) (int, int)
 var Partition3WayInt32 func(data []int32, pivot int32) (int, int)
 var Partition3WayInt64 func(data []int64, pivot int64) (int, int)
+var Partition3WayUint32 func(data []uint32, pivot uint32) (int, int)
+var Partition3WayUint64 func(data []uint64, pivot uint64) (int, int)
 var PartitionFloat32 func(data []float32, pivot float32) int
 var PartitionFloat64 func(data []float64, pivot float64) int
 var PartitionInt32 func(data []int32, pivot int32) int
 var PartitionInt64 func(data []int64, pivot int64) int
+var PartitionUint32 func(data []uint32, pivot uint32) int
+var PartitionUint64 func(data []uint64, pivot uint64) int
 
 // Partition3Way is the generic API that dispatches to the appropriate SIMD implementation.
 func Partition3Way[T hwy.Lanes](data []T, pivot T) (int, int) {
@@ -30,6 +34,10 @@ func Partition3Way[T hwy.Lanes](data []T, pivot T) (int, int) {
 		return Partition3WayInt32(any(data).([]int32), any(pivot).(int32))
 	case []int64:
 		return Partition3WayInt64(any(data).([]int64), any(pivot).(int64))
+	case []uint32:
+		return Partition3WayUint32(any(data).([]uint32), any(pivot).(uint32))
+	case []uint64:
+		return Partition3WayUint64(any(data).([]uint64), any(pivot).(uint64))
 	}
 	panic("unreachable")
 }
@@ -45,6 +53,10 @@ func Partition[T hwy.Lanes](data []T, pivot T) int {
 		return PartitionInt32(any(data).([]int32), any(pivot).(int32))
 	case []int64:
 		return PartitionInt64(any(data).([]int64), any(pivot).(int64))
+	case []uint32:
+		return PartitionUint32(any(data).([]uint32), any(pivot).(uint32))
+	case []uint64:
+		return PartitionUint64(any(data).([]uint64), any(pivot).(uint64))
 	}
 	panic("unreachable")
 }
@@ -70,10 +82,14 @@ func initPartitionAVX2() {
 	Partition3WayFloat64 = BasePartition3Way_avx2_Float64
 	Partition3WayInt32 = BasePartition3Way_avx2_Int32
 	Partition3WayInt64 = BasePartition3Way_avx2_Int64
+	Partition3WayUint32 = BasePartition3Way_avx2_Uint32
+	Partition3WayUint64 = BasePartition3Way_avx2_Uint64
 	PartitionFloat32 = BasePartition_avx2
 	PartitionFloat64 = BasePartition_avx2_Float64
 	PartitionInt32 = BasePartition_avx2_Int32
 	PartitionInt64 = BasePartition_avx2_Int64
+	PartitionUint32 = BasePartition_avx2_Uint32
+	PartitionUint64 = BasePartition_avx2_Uint64
 }
 
 func initPartitionAVX512() {
@@ -81,10 +97,14 @@ func initPartitionAVX512() {
 	Partition3WayFloat64 = BasePartition3Way_avx512_Float64
 	Partition3WayInt32 = BasePartition3Way_avx512_Int32
 	Partition3WayInt64 = BasePartition3Way_avx512_Int64
+	Partition3WayUint32 = BasePartition3Way_avx512_Uint32
+	Partition3WayUint64 = BasePartition3Way_avx512_Uint64
 	PartitionFloat32 = BasePartition_avx512
 	PartitionFloat64 = BasePartition_avx512_Float64
 	PartitionInt32 = BasePartition_avx512_Int32
 	PartitionInt64 = BasePartition_avx512_Int64
+	PartitionUint32 = BasePartition_avx512_Uint32
+	PartitionUint64 = BasePartition_avx512_Uint64
 }
 
 func initPartitionFallback() {
@@ -92,8 +112,12 @@ func initPartitionFallback() {
 	Partition3WayFloat64 = BasePartition3Way_fallback_Float64
 	Partition3WayInt32 = BasePartition3Way_fallback_Int32
 	Partition3WayInt64 = BasePartition3Way_fallback_Int64
+	Partition3WayUint32 = BasePartition3Way_fallback_Uint32
+	Partition3WayUint64 = BasePartition3Way_fallback_Uint64
 	PartitionFloat32 = BasePartition_fallback
 	PartitionFloat64 = BasePartition_fallback_Float64
 	PartitionInt32 = BasePartition_fallback_Int32
 	PartitionInt64 = BasePartition_fallback_Int64
+	PartitionUint32 = BasePartition_fallback_Uint32
+	PartitionUint64 = BasePartition_fallback_Uint64
 }

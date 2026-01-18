@@ -14,10 +14,14 @@ var SortSmallFloat32 func(data []float32)
 var SortSmallFloat64 func(data []float64)
 var SortSmallInt32 func(data []int32)
 var SortSmallInt64 func(data []int64)
+var SortSmallUint32 func(data []uint32)
+var SortSmallUint64 func(data []uint64)
 var IsSortedFloat32 func(data []float32) bool
 var IsSortedFloat64 func(data []float64) bool
 var IsSortedInt32 func(data []int32) bool
 var IsSortedInt64 func(data []int64) bool
+var IsSortedUint32 func(data []uint32) bool
+var IsSortedUint64 func(data []uint64) bool
 
 // SortSmall is the generic API that dispatches to the appropriate SIMD implementation.
 func SortSmall[T hwy.Lanes](data []T) {
@@ -30,6 +34,10 @@ func SortSmall[T hwy.Lanes](data []T) {
 		SortSmallInt32(any(data).([]int32))
 	case []int64:
 		SortSmallInt64(any(data).([]int64))
+	case []uint32:
+		SortSmallUint32(any(data).([]uint32))
+	case []uint64:
+		SortSmallUint64(any(data).([]uint64))
 	}
 }
 
@@ -44,6 +52,10 @@ func IsSorted[T hwy.Lanes](data []T) bool {
 		return IsSortedInt32(any(data).([]int32))
 	case []int64:
 		return IsSortedInt64(any(data).([]int64))
+	case []uint32:
+		return IsSortedUint32(any(data).([]uint32))
+	case []uint64:
+		return IsSortedUint64(any(data).([]uint64))
 	}
 	panic("unreachable")
 }
@@ -69,10 +81,14 @@ func initNetworkAVX2() {
 	SortSmallFloat64 = BaseSortSmall_avx2_Float64
 	SortSmallInt32 = BaseSortSmall_avx2_Int32
 	SortSmallInt64 = BaseSortSmall_avx2_Int64
+	SortSmallUint32 = BaseSortSmall_avx2_Uint32
+	SortSmallUint64 = BaseSortSmall_avx2_Uint64
 	IsSortedFloat32 = BaseIsSorted_avx2
 	IsSortedFloat64 = BaseIsSorted_avx2_Float64
 	IsSortedInt32 = BaseIsSorted_avx2_Int32
 	IsSortedInt64 = BaseIsSorted_avx2_Int64
+	IsSortedUint32 = BaseIsSorted_avx2_Uint32
+	IsSortedUint64 = BaseIsSorted_avx2_Uint64
 }
 
 func initNetworkAVX512() {
@@ -80,10 +96,14 @@ func initNetworkAVX512() {
 	SortSmallFloat64 = BaseSortSmall_avx512_Float64
 	SortSmallInt32 = BaseSortSmall_avx512_Int32
 	SortSmallInt64 = BaseSortSmall_avx512_Int64
+	SortSmallUint32 = BaseSortSmall_avx512_Uint32
+	SortSmallUint64 = BaseSortSmall_avx512_Uint64
 	IsSortedFloat32 = BaseIsSorted_avx512
 	IsSortedFloat64 = BaseIsSorted_avx512_Float64
 	IsSortedInt32 = BaseIsSorted_avx512_Int32
 	IsSortedInt64 = BaseIsSorted_avx512_Int64
+	IsSortedUint32 = BaseIsSorted_avx512_Uint32
+	IsSortedUint64 = BaseIsSorted_avx512_Uint64
 }
 
 func initNetworkFallback() {
@@ -91,8 +111,12 @@ func initNetworkFallback() {
 	SortSmallFloat64 = BaseSortSmall_fallback_Float64
 	SortSmallInt32 = BaseSortSmall_fallback_Int32
 	SortSmallInt64 = BaseSortSmall_fallback_Int64
+	SortSmallUint32 = BaseSortSmall_fallback_Uint32
+	SortSmallUint64 = BaseSortSmall_fallback_Uint64
 	IsSortedFloat32 = BaseIsSorted_fallback
 	IsSortedFloat64 = BaseIsSorted_fallback_Float64
 	IsSortedInt32 = BaseIsSorted_fallback_Int32
 	IsSortedInt64 = BaseIsSorted_fallback_Int64
+	IsSortedUint32 = BaseIsSorted_fallback_Uint32
+	IsSortedUint64 = BaseIsSorted_fallback_Uint64
 }

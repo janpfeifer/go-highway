@@ -1,10 +1,10 @@
-package dot
+package vec
 
 //go:generate go run ../../../cmd/hwygen -input dot_base.go -output . -targets avx2,avx512,neon,fallback -dispatch dot
 
 import "github.com/ajroetker/go-highway/hwy"
 
-// BaseDot computes the dot product of two slices using hwy primitives.
+// BaseDot computes the dot product (inner product) of two vectors using hwy primitives.
 // The result is the sum of element-wise products: Σ(a[i] * b[i]).
 //
 // If the slices have different lengths, the computation uses the minimum length.

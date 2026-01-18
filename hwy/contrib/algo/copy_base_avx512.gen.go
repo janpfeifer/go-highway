@@ -21,10 +21,7 @@ func BaseCopyIf_avx512(src []float32, dst []float32, pred func(archsimd.Float32x
 		v := archsimd.LoadFloat32x16Slice(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_F32x16(v, mask, dst[dstIdx:])
-		if count > remaining {
-			count = remaining
-		}
+		count := min(hwy.CompressStore_AVX512_F32x16(v, mask, dst[dstIdx:]), remaining)
 		dstIdx += count
 		if dstIdx >= dstLen {
 			break
@@ -38,10 +35,7 @@ func BaseCopyIf_avx512(src []float32, dst []float32, pred func(archsimd.Float32x
 		tailMask := hwy.FirstN_AVX512_F32x16(remaining)
 		mask = mask.And(tailMask)
 		dstRemaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_F32x16(v, mask, dst[dstIdx:])
-		if count > dstRemaining {
-			count = dstRemaining
-		}
+		count := min(hwy.CompressStore_AVX512_F32x16(v, mask, dst[dstIdx:]), dstRemaining)
 		dstIdx += count
 	}
 	return dstIdx
@@ -60,10 +54,7 @@ func BaseCopyIf_avx512_Float64(src []float64, dst []float64, pred func(archsimd.
 		v := archsimd.LoadFloat64x8Slice(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_F64x8(v, mask, dst[dstIdx:])
-		if count > remaining {
-			count = remaining
-		}
+		count := min(hwy.CompressStore_AVX512_F64x8(v, mask, dst[dstIdx:]), remaining)
 		dstIdx += count
 		if dstIdx >= dstLen {
 			break
@@ -77,10 +68,7 @@ func BaseCopyIf_avx512_Float64(src []float64, dst []float64, pred func(archsimd.
 		tailMask := hwy.FirstN_AVX512_F64x8(remaining)
 		mask = mask.And(tailMask)
 		dstRemaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_F64x8(v, mask, dst[dstIdx:])
-		if count > dstRemaining {
-			count = dstRemaining
-		}
+		count := min(hwy.CompressStore_AVX512_F64x8(v, mask, dst[dstIdx:]), dstRemaining)
 		dstIdx += count
 	}
 	return dstIdx
@@ -99,10 +87,7 @@ func BaseCopyIf_avx512_Int32(src []int32, dst []int32, pred func(archsimd.Int32x
 		v := archsimd.LoadInt32x16Slice(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_I32x16(v, mask, dst[dstIdx:])
-		if count > remaining {
-			count = remaining
-		}
+		count := min(hwy.CompressStore_AVX512_I32x16(v, mask, dst[dstIdx:]), remaining)
 		dstIdx += count
 		if dstIdx >= dstLen {
 			break
@@ -116,10 +101,7 @@ func BaseCopyIf_avx512_Int32(src []int32, dst []int32, pred func(archsimd.Int32x
 		tailMask := hwy.FirstN_AVX512_I32x16(remaining)
 		mask = mask.And(tailMask)
 		dstRemaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_I32x16(v, mask, dst[dstIdx:])
-		if count > dstRemaining {
-			count = dstRemaining
-		}
+		count := min(hwy.CompressStore_AVX512_I32x16(v, mask, dst[dstIdx:]), dstRemaining)
 		dstIdx += count
 	}
 	return dstIdx
@@ -138,10 +120,7 @@ func BaseCopyIf_avx512_Int64(src []int64, dst []int64, pred func(archsimd.Int64x
 		v := archsimd.LoadInt64x8Slice(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_I64x8(v, mask, dst[dstIdx:])
-		if count > remaining {
-			count = remaining
-		}
+		count := min(hwy.CompressStore_AVX512_I64x8(v, mask, dst[dstIdx:]), remaining)
 		dstIdx += count
 		if dstIdx >= dstLen {
 			break
@@ -155,10 +134,73 @@ func BaseCopyIf_avx512_Int64(src []int64, dst []int64, pred func(archsimd.Int64x
 		tailMask := hwy.FirstN_AVX512_I64x8(remaining)
 		mask = mask.And(tailMask)
 		dstRemaining := dstLen - dstIdx
-		count := hwy.CompressStore_AVX512_I64x8(v, mask, dst[dstIdx:])
-		if count > dstRemaining {
-			count = dstRemaining
+		count := min(hwy.CompressStore_AVX512_I64x8(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}
+
+func BaseCopyIf_avx512_Uint32(src []uint32, dst []uint32, pred func(archsimd.Uint32x16) archsimd.Mask32x16) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := 16
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := archsimd.LoadUint32x16Slice(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX512_Uint32x16(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
 		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := [16]uint32{}
+		copy(buf[:], src[i:i+remaining])
+		v := archsimd.LoadUint32x16Slice(buf[:])
+		mask := pred(v)
+		tailMask := hwy.FirstN_AVX512_Uint32x16(remaining)
+		mask = mask.And(tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX512_Uint32x16(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}
+
+func BaseCopyIf_avx512_Uint64(src []uint64, dst []uint64, pred func(archsimd.Uint64x8) archsimd.Mask64x8) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := 8
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := archsimd.LoadUint64x8Slice(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX512_Uint64x8(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := [8]uint64{}
+		copy(buf[:], src[i:i+remaining])
+		v := archsimd.LoadUint64x8Slice(buf[:])
+		mask := pred(v)
+		tailMask := hwy.FirstN_AVX512_Uint64x8(remaining)
+		mask = mask.And(tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX512_Uint64x8(v, mask, dst[dstIdx:]), dstRemaining)
 		dstIdx += count
 	}
 	return dstIdx
