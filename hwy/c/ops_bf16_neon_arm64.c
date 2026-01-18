@@ -390,3 +390,32 @@ void matmul_bf16_neon(unsigned short *a, unsigned short *b, float *c,
         }
     }
 }
+
+// ============================================================================
+// BFloat16 Load Operations (for vec operations)
+// ============================================================================
+
+// Load4: Load 4 consecutive bfloat16x8 vectors (32 bfloat16 values = 64 bytes)
+// Uses vld1q_bf16_x4 which loads 64 bytes in a single instruction
+void load4_bf16x8(unsigned short *ptr,
+                  bfloat16x8_t *out0, bfloat16x8_t *out1,
+                  bfloat16x8_t *out2, bfloat16x8_t *out3) {
+    bfloat16x8x4_t v = vld1q_bf16_x4((bfloat16_t*)ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Store4: Store 4 consecutive bfloat16x8 vectors (32 bfloat16 values = 64 bytes)
+// Uses vst1q_bf16_x4 which stores 64 bytes in a single instruction
+void store4_bf16x8(unsigned short *ptr,
+                   bfloat16x8_t v0, bfloat16x8_t v1,
+                   bfloat16x8_t v2, bfloat16x8_t v3) {
+    bfloat16x8x4_t v;
+    v.val[0] = v0;
+    v.val[1] = v1;
+    v.val[2] = v2;
+    v.val[3] = v3;
+    vst1q_bf16_x4((bfloat16_t*)ptr, v);
+}

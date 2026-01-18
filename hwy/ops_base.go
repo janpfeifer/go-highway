@@ -15,6 +15,32 @@ func Load[T Lanes](src []T) Vec[T] {
 	return Vec[T]{data: data}
 }
 
+// Load4 loads 4 consecutive vectors from a slice for 4x loop unrolling.
+// On ARM NEON, this maps to a single ld1 instruction with 4 registers,
+// which is more efficient than 4 separate Load calls.
+// On AVX2/AVX512, the code generator expands this to 4 separate loads
+// since wider registers already provide efficient memory throughput.
+func Load4[T Lanes](src []T) (Vec[T], Vec[T], Vec[T], Vec[T]) {
+	lanes := MaxLanes[T]()
+	v0 := Load(src)
+	v1 := Load(src[lanes:])
+	v2 := Load(src[lanes*2:])
+	v3 := Load(src[lanes*3:])
+	return v0, v1, v2, v3
+}
+
+// Load4_NEON_Vec is a wrapper for Float16/BFloat16 types on NEON.
+// These types don't have native SIMD support, so we use the generic Load4.
+func Load4_NEON_Vec[T Lanes](src []T) (Vec[T], Vec[T], Vec[T], Vec[T]) {
+	return Load4(src)
+}
+
+// Load4_Fallback_Vec is a wrapper for Float16/BFloat16 types on Fallback.
+// Uses the generic Load4 implementation.
+func Load4_Fallback_Vec[T Lanes](src []T) (Vec[T], Vec[T], Vec[T], Vec[T]) {
+	return Load4(src)
+}
+
 // Store writes a vector's data to a slice.
 func Store[T Lanes](v Vec[T], dst []T) {
 	n := min(len(dst), len(v.data))

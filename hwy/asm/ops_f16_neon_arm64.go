@@ -44,4 +44,10 @@ func min_f16_neon(a, b, result, len unsafe.Pointer)
 func max_f16_neon(a, b, result, len unsafe.Pointer)
 
 //go:noescape
+func load4_f16x8(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func store4_f16x8(ptr unsafe.Pointer, v0, v1, v2, v3 [16]byte)
+
+//go:noescape
 func sqrt_f16_neon(a, result, len unsafe.Pointer)

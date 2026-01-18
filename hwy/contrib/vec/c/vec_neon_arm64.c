@@ -271,59 +271,110 @@ void squared_norm_f64(double *v, long *pn, double *result) {
 // l2_squared_distance_f32: Compute squared Euclidean distance
 // =============================================================================
 // func l2_squared_distance_f32(a, b unsafe.Pointer, n int64) float32
-void l2_squared_distance_f32(float *a, float *b, long *pn, float *result) {
-    long n = *pn;
+// Uses FMA for small arrays (better latency) and separate fmul+fadd for large
+// arrays (better pipelining on Apple Silicon).
+// Threshold of 768 elements determined empirically on M4.
+#define L2_FMA_THRESHOLD 768
 
-    if (n <= 0) {
+void l2_squared_distance_f32(float *a, float *b, long *pn, float *result) {
+    int size = *pn;
+
+    if (size <= 0) {
         *result = 0.0f;
         return;
     }
 
+    // use the vectorized version for the first n - (n % 4) elements
+    int l = size - (size % 4);
+
     // 4 independent accumulators for better instruction-level parallelism
-    float32x4_t sum0 = vdupq_n_f32(0.0f);
-    float32x4_t sum1 = vdupq_n_f32(0.0f);
-    float32x4_t sum2 = vdupq_n_f32(0.0f);
-    float32x4_t sum3 = vdupq_n_f32(0.0f);
-    long i = 0;
+    float32x4_t sum0 = vdupq_n_f32(0);
+    float32x4_t sum1 = vdupq_n_f32(0);
+    float32x4_t sum2 = vdupq_n_f32(0);
+    float32x4_t sum3 = vdupq_n_f32(0);
+    int i = 0;
 
-    // Process 16 elements at a time with 4x unrolling
-    long limit = n - (n % 4);
-    for (; i + 16 <= limit; i += 16) {
-        float32x4x4_t va4 = vld1q_f32_x4(a + i);
-        float32x4x4_t vb4 = vld1q_f32_x4(b + i);
+    if (size <= L2_FMA_THRESHOLD) {
+        // Small arrays: use FMA (fused multiply-add) for better latency
+        while (i + 16 <= l) {
+            float32x4x4_t va4 = vld1q_f32_x4(a + i);
+            float32x4x4_t vb4 = vld1q_f32_x4(b + i);
 
-        float32x4_t diff0 = vsubq_f32(va4.val[0], vb4.val[0]);
-        float32x4_t diff1 = vsubq_f32(va4.val[1], vb4.val[1]);
-        float32x4_t diff2 = vsubq_f32(va4.val[2], vb4.val[2]);
-        float32x4_t diff3 = vsubq_f32(va4.val[3], vb4.val[3]);
+            float32x4_t diff0 = vsubq_f32(va4.val[0], vb4.val[0]);
+            float32x4_t diff1 = vsubq_f32(va4.val[1], vb4.val[1]);
+            float32x4_t diff2 = vsubq_f32(va4.val[2], vb4.val[2]);
+            float32x4_t diff3 = vsubq_f32(va4.val[3], vb4.val[3]);
 
-        sum0 = vfmaq_f32(sum0, diff0, diff0);
-        sum1 = vfmaq_f32(sum1, diff1, diff1);
-        sum2 = vfmaq_f32(sum2, diff2, diff2);
-        sum3 = vfmaq_f32(sum3, diff3, diff3);
+            sum0 = vfmaq_f32(sum0, diff0, diff0);
+            sum1 = vfmaq_f32(sum1, diff1, diff1);
+            sum2 = vfmaq_f32(sum2, diff2, diff2);
+            sum3 = vfmaq_f32(sum3, diff3, diff3);
+
+            i += 16;
+        }
+
+        while (i < l) {
+            float32x4_t va = vld1q_f32(a + i);
+            float32x4_t vb = vld1q_f32(b + i);
+            float32x4_t diff = vsubq_f32(va, vb);
+            sum0 = vfmaq_f32(sum0, diff, diff);
+            i += 4;
+        }
+
+        // Combine accumulators then reduce
+        sum0 = vaddq_f32(sum0, sum1);
+        sum2 = vaddq_f32(sum2, sum3);
+        sum0 = vaddq_f32(sum0, sum2);
+        float scalar_sum = vaddvq_f32(sum0);
+
+        // Handle tail elements
+        for (int j = l; j < size; j++) {
+            float d = a[j] - b[j];
+            scalar_sum += d * d;
+        }
+
+        *result = scalar_sum;
+    } else {
+        // Large arrays: use separate fmul+fadd for better pipelining
+        while (i + 16 <= l) {
+            float32x4x4_t va4 = vld1q_f32_x4(a + i);
+            float32x4x4_t vb4 = vld1q_f32_x4(b + i);
+
+            float32x4_t diff0 = vsubq_f32(va4.val[0], vb4.val[0]);
+            float32x4_t diff1 = vsubq_f32(va4.val[1], vb4.val[1]);
+            float32x4_t diff2 = vsubq_f32(va4.val[2], vb4.val[2]);
+            float32x4_t diff3 = vsubq_f32(va4.val[3], vb4.val[3]);
+
+            sum0 += vmulq_f32(diff0, diff0);
+            sum1 += vmulq_f32(diff1, diff1);
+            sum2 += vmulq_f32(diff2, diff2);
+            sum3 += vmulq_f32(diff3, diff3);
+
+            i += 16;
+        }
+
+        while (i < l) {
+            float32x4_t va = vld1q_f32(a + i);
+            float32x4_t vb = vld1q_f32(b + i);
+            float32x4_t diff = vsubq_f32(va, vb);
+            sum0 += vmulq_f32(diff, diff);
+            i += 4;
+        }
+
+        // Horizontal sum with separate reductions
+        float scalar_sum = vaddvq_f32(sum0);
+        scalar_sum += vaddvq_f32(sum1);
+        scalar_sum += vaddvq_f32(sum2);
+        scalar_sum += vaddvq_f32(sum3);
+
+        // Handle tail elements
+        for (int j = l; j < size; j++) {
+            float d = a[j] - b[j];
+            scalar_sum += d * d;
+        }
+
+        *result = scalar_sum;
     }
-
-    // Handle remaining 4-element chunks
-    for (; i + 4 <= limit; i += 4) {
-        float32x4_t va = vld1q_f32(a + i);
-        float32x4_t vb = vld1q_f32(b + i);
-        float32x4_t diff = vsubq_f32(va, vb);
-        sum0 = vfmaq_f32(sum0, diff, diff);
-    }
-
-    // Combine accumulators and horizontal sum
-    sum0 = vaddq_f32(sum0, sum1);
-    sum2 = vaddq_f32(sum2, sum3);
-    sum0 = vaddq_f32(sum0, sum2);
-    float scalar_sum = vaddvq_f32(sum0);
-
-    // Handle tail elements
-    for (; i < n; i++) {
-        float d = a[i] - b[i];
-        scalar_sum += d * d;
-    }
-
-    *result = scalar_sum;
 }
 
 // =============================================================================
@@ -365,52 +416,96 @@ void l2_squared_distance_f64(double *a, double *b, long *pn, double *result) {
 // dot_f32: Compute dot product of two float32 slices
 // =============================================================================
 // func dot_f32(a, b unsafe.Pointer, n int64) float32
-void dot_f32(float *a, float *b, long *pn, float *result) {
-    long n = *pn;
+// Uses FMA for small arrays (better latency) and separate fmul+fadd for large
+// arrays (better pipelining on Apple Silicon).
+// Threshold of 768 elements determined empirically on M4.
+#define DOT_FMA_THRESHOLD 768
 
-    if (n <= 0) {
+void dot_f32(float *a, float *b, long *pn, float *result) {
+    int size = *pn;
+
+    if (size <= 0) {
         *result = 0.0f;
         return;
     }
 
+    // use the vectorized version for the first n - (n % 4) elements
+    int l = size - (size % 4);
+
     // 4 independent accumulators for better instruction-level parallelism
-    float32x4_t sum0 = vdupq_n_f32(0.0f);
-    float32x4_t sum1 = vdupq_n_f32(0.0f);
-    float32x4_t sum2 = vdupq_n_f32(0.0f);
-    float32x4_t sum3 = vdupq_n_f32(0.0f);
-    long i = 0;
+    float32x4_t sum0 = vdupq_n_f32(0);
+    float32x4_t sum1 = vdupq_n_f32(0);
+    float32x4_t sum2 = vdupq_n_f32(0);
+    float32x4_t sum3 = vdupq_n_f32(0);
+    int i = 0;
 
-    // Process 16 elements at a time with 4x unrolling
-    long limit = n - (n % 4);
-    for (; i + 16 <= limit; i += 16) {
-        float32x4x4_t va4 = vld1q_f32_x4(a + i);
-        float32x4x4_t vb4 = vld1q_f32_x4(b + i);
+    if (size <= DOT_FMA_THRESHOLD) {
+        // Small arrays: use FMA (fused multiply-add) for better latency
+        while (i + 16 <= l) {
+            float32x4x4_t va4 = vld1q_f32_x4(a + i);
+            float32x4x4_t vb4 = vld1q_f32_x4(b + i);
 
-        sum0 = vfmaq_f32(sum0, va4.val[0], vb4.val[0]);
-        sum1 = vfmaq_f32(sum1, va4.val[1], vb4.val[1]);
-        sum2 = vfmaq_f32(sum2, va4.val[2], vb4.val[2]);
-        sum3 = vfmaq_f32(sum3, va4.val[3], vb4.val[3]);
+            sum0 = vfmaq_f32(sum0, va4.val[0], vb4.val[0]);
+            sum1 = vfmaq_f32(sum1, va4.val[1], vb4.val[1]);
+            sum2 = vfmaq_f32(sum2, va4.val[2], vb4.val[2]);
+            sum3 = vfmaq_f32(sum3, va4.val[3], vb4.val[3]);
+
+            i += 16;
+        }
+
+        while (i < l) {
+            float32x4_t va = vld1q_f32(a + i);
+            float32x4_t vb = vld1q_f32(b + i);
+            sum0 = vfmaq_f32(sum0, va, vb);
+            i += 4;
+        }
+
+        // Combine accumulators then reduce
+        sum0 = vaddq_f32(sum0, sum1);
+        sum2 = vaddq_f32(sum2, sum3);
+        sum0 = vaddq_f32(sum0, sum2);
+        float scalar_sum = vaddvq_f32(sum0);
+
+        // Handle tail elements
+        for (int j = l; j < size; j++) {
+            scalar_sum += a[j] * b[j];
+        }
+
+        *result = scalar_sum;
+    } else {
+        // Large arrays: use separate fmul+fadd for better pipelining
+        while (i + 16 <= l) {
+            float32x4x4_t va4 = vld1q_f32_x4(a + i);
+            float32x4x4_t vb4 = vld1q_f32_x4(b + i);
+
+            sum0 += vmulq_f32(va4.val[0], vb4.val[0]);
+            sum1 += vmulq_f32(va4.val[1], vb4.val[1]);
+            sum2 += vmulq_f32(va4.val[2], vb4.val[2]);
+            sum3 += vmulq_f32(va4.val[3], vb4.val[3]);
+
+            i += 16;
+        }
+
+        while (i < l) {
+            float32x4_t va = vld1q_f32(a + i);
+            float32x4_t vb = vld1q_f32(b + i);
+            sum0 += vmulq_f32(va, vb);
+            i += 4;
+        }
+
+        // Horizontal sum with separate reductions
+        float scalar_sum = vaddvq_f32(sum0);
+        scalar_sum += vaddvq_f32(sum1);
+        scalar_sum += vaddvq_f32(sum2);
+        scalar_sum += vaddvq_f32(sum3);
+
+        // Handle tail elements
+        for (int j = l; j < size; j++) {
+            scalar_sum += a[j] * b[j];
+        }
+
+        *result = scalar_sum;
     }
-
-    // Handle remaining 4-element chunks
-    for (; i + 4 <= limit; i += 4) {
-        float32x4_t va = vld1q_f32(a + i);
-        float32x4_t vb = vld1q_f32(b + i);
-        sum0 = vfmaq_f32(sum0, va, vb);
-    }
-
-    // Combine accumulators and horizontal sum
-    sum0 = vaddq_f32(sum0, sum1);
-    sum2 = vaddq_f32(sum2, sum3);
-    sum0 = vaddq_f32(sum0, sum2);
-    float scalar_sum = vaddvq_f32(sum0);
-
-    // Handle tail elements
-    for (; i < n; i++) {
-        scalar_sum += a[i] * b[i];
-    }
-
-    *result = scalar_sum;
 }
 
 // =============================================================================

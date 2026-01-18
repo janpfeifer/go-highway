@@ -49,6 +49,15 @@ func LoadFloat32x4Slice(s []float32) Float32x4 {
 	return LoadFloat32x4(s)
 }
 
+// Load4Float32x4Slice loads 4 consecutive Float32x4 vectors (16 floats = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers. This is more efficient
+// than 4 separate loads for 4x loop unrolling.
+func Load4Float32x4Slice(s []float32) (Float32x4, Float32x4, Float32x4, Float32x4) {
+	var v0, v1, v2, v3 Float32x4
+	load4_f32x4(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
+}
+
 // ZeroFloat32x4 returns a zero vector.
 func ZeroFloat32x4() Float32x4 {
 	return Float32x4{}
@@ -389,6 +398,15 @@ func LoadFloat64x2(s []float64) Float64x2 {
 // LoadFloat64x2Slice is an alias for LoadFloat64x2 (matches archsimd naming).
 func LoadFloat64x2Slice(s []float64) Float64x2 {
 	return LoadFloat64x2(s)
+}
+
+// Load4Float64x2Slice loads 4 consecutive Float64x2 vectors (8 doubles = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers. This is more efficient
+// than 4 separate loads for 4x loop unrolling.
+func Load4Float64x2Slice(s []float64) (Float64x2, Float64x2, Float64x2, Float64x2) {
+	var v0, v1, v2, v3 Float64x2
+	load4_f64x2(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
 }
 
 // ZeroFloat64x2 returns a zero vector.
@@ -929,6 +947,14 @@ func LoadInt32x4Slice(s []int32) Int32x4 {
 	return LoadInt32x4(s)
 }
 
+// Load4Int32x4Slice loads 4 consecutive Int32x4 vectors (16 int32s = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers.
+func Load4Int32x4Slice(s []int32) (Int32x4, Int32x4, Int32x4, Int32x4) {
+	var v0, v1, v2, v3 Int32x4
+	load4_i32x4(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
+}
+
 // Get returns the element at the given index.
 func (v Int32x4) Get(i int) int32 {
 	return (*[4]int32)(unsafe.Pointer(&v))[i]
@@ -1136,6 +1162,14 @@ func LoadInt64x2(s []int64) Int64x2 {
 // LoadInt64x2Slice is an alias for LoadInt64x2 (matches archsimd naming).
 func LoadInt64x2Slice(s []int64) Int64x2 {
 	return LoadInt64x2(s)
+}
+
+// Load4Int64x2Slice loads 4 consecutive Int64x2 vectors (8 int64s = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers.
+func Load4Int64x2Slice(s []int64) (Int64x2, Int64x2, Int64x2, Int64x2) {
+	var v0, v1, v2, v3 Int64x2
+	load4_i64x2(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
 }
 
 // Get returns the element at the given index.
@@ -1956,6 +1990,14 @@ func LoadUint8x16(s []uint8) Uint8x16 {
 	return *(*Uint8x16)(unsafe.Pointer(&s[0]))
 }
 
+// Load4Uint8x16Slice loads 4 consecutive Uint8x16 vectors (64 bytes)
+// using a single ARM ld1 instruction with 4 registers.
+func Load4Uint8x16Slice(s []uint8) (Uint8x16, Uint8x16, Uint8x16, Uint8x16) {
+	var v0, v1, v2, v3 Uint8x16
+	load4_u8x16(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
+}
+
 // ZeroUint8x16 returns a zero vector.
 func ZeroUint8x16() Uint8x16 {
 	return Uint8x16{}
@@ -2080,6 +2122,14 @@ func BroadcastUint16x8(v uint16) Uint16x8 {
 // LoadUint16x8 loads 8 uint16 values from a slice.
 func LoadUint16x8(s []uint16) Uint16x8 {
 	return *(*Uint16x8)(unsafe.Pointer(&s[0]))
+}
+
+// Load4Uint16x8Slice loads 4 consecutive Uint16x8 vectors (32 uint16s = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers.
+func Load4Uint16x8Slice(s []uint16) (Uint16x8, Uint16x8, Uint16x8, Uint16x8) {
+	var v0, v1, v2, v3 Uint16x8
+	load4_u16x8(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
 }
 
 // ZeroUint16x8 returns a zero vector.
@@ -2210,6 +2260,14 @@ func LoadUint32x4(s []uint32) Uint32x4 {
 // LoadUint32x4Slice is an alias for LoadUint32x4 (matches archsimd naming).
 func LoadUint32x4Slice(s []uint32) Uint32x4 {
 	return LoadUint32x4(s)
+}
+
+// Load4Uint32x4Slice loads 4 consecutive Uint32x4 vectors (16 uint32s = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers.
+func Load4Uint32x4Slice(s []uint32) (Uint32x4, Uint32x4, Uint32x4, Uint32x4) {
+	var v0, v1, v2, v3 Uint32x4
+	load4_u32x4(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
 }
 
 // ZeroUint32x4 returns a zero vector.
@@ -2384,6 +2442,14 @@ func LoadUint64x2(s []uint64) Uint64x2 {
 // LoadUint64x2Slice is an alias for LoadUint64x2 (matches archsimd naming).
 func LoadUint64x2Slice(s []uint64) Uint64x2 {
 	return LoadUint64x2(s)
+}
+
+// Load4Uint64x2Slice loads 4 consecutive Uint64x2 vectors (8 uint64s = 64 bytes)
+// using a single ARM ld1 instruction with 4 registers.
+func Load4Uint64x2Slice(s []uint64) (Uint64x2, Uint64x2, Uint64x2, Uint64x2) {
+	var v0, v1, v2, v3 Uint64x2
+	load4_u64x2(unsafe.Pointer(&s[0]), unsafe.Pointer(&v0), unsafe.Pointer(&v1), unsafe.Pointer(&v2), unsafe.Pointer(&v3))
+	return v0, v1, v2, v3
 }
 
 // ZeroUint64x2 returns a zero vector.

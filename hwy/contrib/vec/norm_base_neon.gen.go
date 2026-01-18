@@ -62,11 +62,7 @@ func BaseSquaredNorm_neon(v []float32) float32 {
 		prod := vec.Mul(vec)
 		sum = sum.Add(prod)
 	}
-	result := func() float32 {
-		var _simd_temp [4]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-	}()
+	result := sum.ReduceSum()
 	for ; i < n; i++ {
 		result += v[i] * v[i]
 	}
@@ -86,11 +82,7 @@ func BaseSquaredNorm_neon_Float64(v []float64) float64 {
 		prod := vec.Mul(vec)
 		sum = sum.Add(prod)
 	}
-	result := func() float64 {
-		var _simd_temp [2]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1]
-	}()
+	result := sum.ReduceSum()
 	for ; i < n; i++ {
 		result += v[i] * v[i]
 	}

@@ -457,6 +457,35 @@ void max_f16_neon(unsigned short *a, unsigned short *b, unsigned short *result, 
     }
 }
 
+// ============================================================================
+// Float16 Load Operations (for vec operations)
+// ============================================================================
+
+// Load4: Load 4 consecutive float16x8 vectors (32 float16 values = 64 bytes)
+// Uses vld1q_f16_x4 which loads 64 bytes in a single instruction
+void load4_f16x8(unsigned short *ptr,
+                 float16x8_t *out0, float16x8_t *out1,
+                 float16x8_t *out2, float16x8_t *out3) {
+    float16x8x4_t v = vld1q_f16_x4((float16_t*)ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Store4: Store 4 consecutive float16x8 vectors (32 float16 values = 64 bytes)
+// Uses vst1q_f16_x4 which stores 64 bytes in a single instruction
+void store4_f16x8(unsigned short *ptr,
+                  float16x8_t v0, float16x8_t v1,
+                  float16x8_t v2, float16x8_t v3) {
+    float16x8x4_t v;
+    v.val[0] = v0;
+    v.val[1] = v1;
+    v.val[2] = v2;
+    v.val[3] = v3;
+    vst1q_f16_x4((float16_t*)ptr, v);
+}
+
 // Square root: result[i] = sqrt(a[i])
 void sqrt_f16_neon(unsigned short *a, unsigned short *result, long *len) {
     long n = *len;

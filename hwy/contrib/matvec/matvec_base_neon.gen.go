@@ -87,11 +87,7 @@ func BaseMatVec_neon(m []float32, rows int, cols int, v []float32, result []floa
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}
-		acc := func() float32 {
-			var _simd_temp [4]float32
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-		}()
+		acc := sum.ReduceSum()
 		for ; j < cols; j++ {
 			acc += row[j] * v[j]
 		}
@@ -120,11 +116,7 @@ func BaseMatVec_neon_Float64(m []float64, rows int, cols int, v []float64, resul
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}
-		acc := func() float64 {
-			var _simd_temp [2]float64
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1]
-		}()
+		acc := sum.ReduceSum()
 		for ; j < cols; j++ {
 			acc += row[j] * v[j]
 		}

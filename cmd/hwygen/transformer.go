@@ -2103,6 +2103,17 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 	case "Load":
 		fullName = fmt.Sprintf("Load%sSlice", vecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
+	case "Load4":
+		// For Vec types (Float16/BFloat16), use hwy wrapper since asm doesn't have Load4VecSlice
+		if strings.HasPrefix(vecTypeName, "Vec") || strings.HasPrefix(vecTypeName, "hwy.Vec") {
+			fullName = fmt.Sprintf("Load4_%s_Vec", ctx.target.Name)
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			// For NEON: asm.Load4Float32x4Slice (single ld1 instruction)
+			// For AVX2/512/Fallback: handled by hwy wrapper at line 2094-2100
+			fullName = fmt.Sprintf("Load4%sSlice", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+		}
 	case "Set", "Const":
 		// Both Set and Const broadcast a scalar value to all lanes
 		fullName = fmt.Sprintf("Broadcast%s", vecTypeName)
@@ -3574,7 +3585,13 @@ func postProcessSIMD(node ast.Node, ctx *transformContext) {
 			// Replace: sum += v.ReduceSum() or sum += hwy.ReduceSum(v)
 			// Skip for Float16/BFloat16 - hwy.Vec doesn't have StoreSlice(),
 			// and hwy.ReduceSumF16/BF16 work directly.
-			if !isHalfPrecisionType(ctx.elemType) {
+			// Also skip if target has native ReduceSum support (e.g., NEON has v.ReduceSum() method)
+			hasNativeReduceSum := false
+			if opInfo, ok := ctx.target.OpMap["ReduceSum"]; ok {
+				// Native if it's a method with no package prefix (direct method on vector type)
+				hasNativeReduceSum = opInfo.Package == "" && opInfo.IsMethod
+			}
+			if !isHalfPrecisionType(ctx.elemType) && !hasNativeReduceSum {
 				for i, rhs := range stmt.Rhs {
 					if call, ok := rhs.(*ast.CallExpr); ok {
 						if isReduceSumCall(call) {

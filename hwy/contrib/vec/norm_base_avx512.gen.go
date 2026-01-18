@@ -62,11 +62,7 @@ func BaseSquaredNorm_avx512(v []float32) float32 {
 		prod := vec.Mul(vec)
 		sum = sum.Add(prod)
 	}
-	result := func() float32 {
-		var _simd_temp [16]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7] + _simd_temp[8] + _simd_temp[9] + _simd_temp[10] + _simd_temp[11] + _simd_temp[12] + _simd_temp[13] + _simd_temp[14] + _simd_temp[15]
-	}()
+	result := sum.ReduceSum()
 	for ; i < n; i++ {
 		result += v[i] * v[i]
 	}
@@ -86,11 +82,7 @@ func BaseSquaredNorm_avx512_Float64(v []float64) float64 {
 		prod := vec.Mul(vec)
 		sum = sum.Add(prod)
 	}
-	result := func() float64 {
-		var _simd_temp [8]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-	}()
+	result := sum.ReduceSum()
 	for ; i < n; i++ {
 		result += v[i] * v[i]
 	}

@@ -668,3 +668,81 @@ uint64x2_t xor_u64x2(uint64x2_t a, uint64x2_t b) {
 uint64x2_t sel_u64x2(uint64x2_t mask, uint64x2_t yes, uint64x2_t no) {
     return vbslq_u64(mask, yes, no);
 }
+
+// ============================================================================
+// Multi-Register Load Operations (for better memory bandwidth)
+// ============================================================================
+// These use ld1 with 4 registers which loads 64 bytes in a single instruction,
+// providing better memory bandwidth than 4 separate 16-byte loads.
+
+// Float32x4: 4 vectors = 16 floats = 64 bytes
+void load4_f32x4(float *ptr, float32x4_t *out0, float32x4_t *out1, float32x4_t *out2, float32x4_t *out3) {
+    float32x4x4_t v = vld1q_f32_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Float64x2: 4 vectors = 8 doubles = 64 bytes
+void load4_f64x2(double *ptr, float64x2_t *out0, float64x2_t *out1, float64x2_t *out2, float64x2_t *out3) {
+    float64x2x4_t v = vld1q_f64_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Int32x4: 4 vectors = 16 int32s = 64 bytes
+void load4_i32x4(int *ptr, int32x4_t *out0, int32x4_t *out1, int32x4_t *out2, int32x4_t *out3) {
+    int32x4x4_t v = vld1q_s32_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Int64x2: 4 vectors = 8 int64s = 64 bytes
+void load4_i64x2(long long *ptr, int64x2_t *out0, int64x2_t *out1, int64x2_t *out2, int64x2_t *out3) {
+    int64x2x4_t v = vld1q_s64_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Uint32x4: 4 vectors = 16 uint32s = 64 bytes
+void load4_u32x4(unsigned int *ptr, uint32x4_t *out0, uint32x4_t *out1, uint32x4_t *out2, uint32x4_t *out3) {
+    uint32x4x4_t v = vld1q_u32_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Uint64x2: 4 vectors = 8 uint64s = 64 bytes
+void load4_u64x2(unsigned long long *ptr, uint64x2_t *out0, uint64x2_t *out1, uint64x2_t *out2, uint64x2_t *out3) {
+    uint64x2x4_t v = vld1q_u64_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Uint8x16: 4 vectors = 64 bytes
+void load4_u8x16(unsigned char *ptr, uint8x16_t *out0, uint8x16_t *out1, uint8x16_t *out2, uint8x16_t *out3) {
+    uint8x16x4_t v = vld1q_u8_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}
+
+// Uint16x8: 4 vectors = 32 uint16s = 64 bytes
+void load4_u16x8(unsigned short *ptr, uint16x8_t *out0, uint16x8_t *out1, uint16x8_t *out2, uint16x8_t *out3) {
+    uint16x8x4_t v = vld1q_u16_x4(ptr);
+    *out0 = v.val[0];
+    *out1 = v.val[1];
+    *out2 = v.val[2];
+    *out3 = v.val[3];
+}

@@ -55,11 +55,7 @@ func BaseSum_avx2(v []float32) float32 {
 		va := archsimd.LoadFloat32x8Slice(v[i:])
 		sum = sum.Add(va)
 	}
-	result := func() float32 {
-		var _simd_temp [8]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-	}()
+	result := sum.ReduceSum()
 	for ; i < len(v); i++ {
 		result += v[i]
 	}
@@ -77,11 +73,7 @@ func BaseSum_avx2_Float64(v []float64) float64 {
 		va := archsimd.LoadFloat64x4Slice(v[i:])
 		sum = sum.Add(va)
 	}
-	result := func() float64 {
-		var _simd_temp [4]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-	}()
+	result := sum.ReduceSum()
 	for ; i < len(v); i++ {
 		result += v[i]
 	}

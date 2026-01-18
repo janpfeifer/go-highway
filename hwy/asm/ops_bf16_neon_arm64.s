@@ -734,3 +734,37 @@ BB3_31:
 	WORD $0xf94017ea // ldr	x10, [sp, #40]                  ; 8-byte Folded Reload
 	WORD $0x927ff540 // and	x0, x10, #0x7ffffffffffffffe
 	B    BB3_19
+
+TEXT ·load4_bf16x8(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402400     // ld1.8h	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·store4_bf16x8(SB), $0-72
+	MOVD ptr+0(FP), R0
+	MOVD v0_0+8(FP), R9
+	MOVD v0_8+16(FP), R10
+	VMOV R9, V0.D[0]
+	VMOV R10, V0.D[1]
+	MOVD v1_0+24(FP), R9
+	MOVD v1_8+32(FP), R10
+	VMOV R9, V1.D[0]
+	VMOV R10, V1.D[1]
+	MOVD v2_0+40(FP), R9
+	MOVD v2_8+48(FP), R10
+	VMOV R9, V2.D[0]
+	VMOV R10, V2.D[1]
+	MOVD v3_0+56(FP), R9
+	MOVD v3_8+64(FP), R10
+	VMOV R9, V3.D[0]
+	VMOV R10, V3.D[1]
+	WORD $0x4c002400      // st1.8h	{ v0, v1, v2, v3 }, [x0]
+	RET

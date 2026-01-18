@@ -107,11 +107,7 @@ func BaseBatchL2SquaredDistance_avx2(query []float32, data []float32, distances 
 			diffSq := diff.Mul(diff)
 			sum = sum.Add(diffSq)
 		}
-		result := func() float32 {
-			var _simd_temp [8]float32
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-		}()
+		result := sum.ReduceSum()
 		for ; j < dims; j++ {
 			diff := query[j] - dataVec[j]
 			result += diff * diff
@@ -147,11 +143,7 @@ func BaseBatchL2SquaredDistance_avx2_Float64(query []float64, data []float64, di
 			diffSq := diff.Mul(diff)
 			sum = sum.Add(diffSq)
 		}
-		result := func() float64 {
-			var _simd_temp [4]float64
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-		}()
+		result := sum.ReduceSum()
 		for ; j < dims; j++ {
 			diff := query[j] - dataVec[j]
 			result += diff * diff
@@ -254,11 +246,7 @@ func BaseBatchDot_avx2(query []float32, data []float32, dots []float32, count in
 			prod := vq.Mul(vd)
 			sum = sum.Add(prod)
 		}
-		result := func() float32 {
-			var _simd_temp [8]float32
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-		}()
+		result := sum.ReduceSum()
 		for ; j < dims; j++ {
 			result += query[j] * dataVec[j]
 		}
@@ -292,11 +280,7 @@ func BaseBatchDot_avx2_Float64(query []float64, data []float64, dots []float64, 
 			prod := vq.Mul(vd)
 			sum = sum.Add(prod)
 		}
-		result := func() float64 {
-			var _simd_temp [4]float64
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-		}()
+		result := sum.ReduceSum()
 		for ; j < dims; j++ {
 			result += query[j] * dataVec[j]
 		}
