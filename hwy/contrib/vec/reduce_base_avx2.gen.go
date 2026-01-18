@@ -92,7 +92,6 @@ func BaseMin_avx2_Float16(v []hwy.Float16) hwy.Float16 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := hwy.Load(v)
 	lanes := 16
 	if len(v) < lanes {
 		result := v[0]
@@ -103,6 +102,7 @@ func BaseMin_avx2_Float16(v []hwy.Float16) hwy.Float16 {
 		}
 		return result
 	}
+	minVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -121,7 +121,6 @@ func BaseMin_avx2_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := hwy.Load(v)
 	lanes := 16
 	if len(v) < lanes {
 		result := v[0]
@@ -132,6 +131,7 @@ func BaseMin_avx2_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 		}
 		return result
 	}
+	minVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -150,7 +150,6 @@ func BaseMin_avx2(v []float32) float32 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := archsimd.LoadFloat32x8Slice(v)
 	lanes := 8
 	if len(v) < lanes {
 		result := v[0]
@@ -161,6 +160,7 @@ func BaseMin_avx2(v []float32) float32 {
 		}
 		return result
 	}
+	minVec := archsimd.LoadFloat32x8Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadFloat32x8Slice(v[i:])
@@ -179,7 +179,6 @@ func BaseMin_avx2_Float64(v []float64) float64 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := archsimd.LoadFloat64x4Slice(v)
 	lanes := 4
 	if len(v) < lanes {
 		result := v[0]
@@ -190,6 +189,7 @@ func BaseMin_avx2_Float64(v []float64) float64 {
 		}
 		return result
 	}
+	minVec := archsimd.LoadFloat64x4Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadFloat64x4Slice(v[i:])
@@ -208,7 +208,6 @@ func BaseMax_avx2(v []float32) float32 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := archsimd.LoadFloat32x8Slice(v)
 	lanes := 8
 	if len(v) < lanes {
 		result := v[0]
@@ -219,6 +218,7 @@ func BaseMax_avx2(v []float32) float32 {
 		}
 		return result
 	}
+	maxVec := archsimd.LoadFloat32x8Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadFloat32x8Slice(v[i:])
@@ -237,7 +237,6 @@ func BaseMax_avx2_Float64(v []float64) float64 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := archsimd.LoadFloat64x4Slice(v)
 	lanes := 4
 	if len(v) < lanes {
 		result := v[0]
@@ -248,6 +247,7 @@ func BaseMax_avx2_Float64(v []float64) float64 {
 		}
 		return result
 	}
+	maxVec := archsimd.LoadFloat64x4Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadFloat64x4Slice(v[i:])
@@ -266,7 +266,6 @@ func BaseMax_avx2_Int32(v []int32) int32 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := archsimd.LoadInt32x8Slice(v)
 	lanes := 8
 	if len(v) < lanes {
 		result := v[0]
@@ -277,6 +276,7 @@ func BaseMax_avx2_Int32(v []int32) int32 {
 		}
 		return result
 	}
+	maxVec := archsimd.LoadInt32x8Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadInt32x8Slice(v[i:])
@@ -295,7 +295,6 @@ func BaseMax_avx2_Int64(v []int64) int64 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := archsimd.LoadInt64x4Slice(v)
 	lanes := 4
 	if len(v) < lanes {
 		result := v[0]
@@ -306,6 +305,7 @@ func BaseMax_avx2_Int64(v []int64) int64 {
 		}
 		return result
 	}
+	maxVec := archsimd.LoadInt64x4Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadInt64x4Slice(v[i:])
@@ -324,7 +324,6 @@ func BaseMax_avx2_Uint32(v []uint32) uint32 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := archsimd.LoadUint32x8Slice(v)
 	lanes := 8
 	if len(v) < lanes {
 		result := v[0]
@@ -335,6 +334,7 @@ func BaseMax_avx2_Uint32(v []uint32) uint32 {
 		}
 		return result
 	}
+	maxVec := archsimd.LoadUint32x8Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadUint32x8Slice(v[i:])
@@ -353,7 +353,6 @@ func BaseMax_avx2_Uint64(v []uint64) uint64 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := archsimd.LoadUint64x4Slice(v)
 	lanes := 4
 	if len(v) < lanes {
 		result := v[0]
@@ -364,6 +363,7 @@ func BaseMax_avx2_Uint64(v []uint64) uint64 {
 		}
 		return result
 	}
+	maxVec := archsimd.LoadUint64x4Slice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadUint64x4Slice(v[i:])
@@ -382,8 +382,6 @@ func BaseMinMax_avx2_Float16(v []hwy.Float16) (min hwy.Float16, max hwy.Float16)
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	maxVec := minVec
 	lanes := 16
 	if len(v) < lanes {
 		min = v[0]
@@ -398,6 +396,8 @@ func BaseMinMax_avx2_Float16(v []hwy.Float16) (min hwy.Float16, max hwy.Float16)
 		}
 		return min, max
 	}
+	minVec := hwy.Load(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -421,8 +421,6 @@ func BaseMinMax_avx2_BFloat16(v []hwy.BFloat16) (min hwy.BFloat16, max hwy.BFloa
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	maxVec := minVec
 	lanes := 16
 	if len(v) < lanes {
 		min = v[0]
@@ -437,6 +435,8 @@ func BaseMinMax_avx2_BFloat16(v []hwy.BFloat16) (min hwy.BFloat16, max hwy.BFloa
 		}
 		return min, max
 	}
+	minVec := hwy.Load(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -460,8 +460,6 @@ func BaseMinMax_avx2(v []float32) (min float32, max float32) {
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := archsimd.LoadFloat32x8Slice(v)
-	maxVec := minVec
 	lanes := 8
 	if len(v) < lanes {
 		min = v[0]
@@ -476,6 +474,8 @@ func BaseMinMax_avx2(v []float32) (min float32, max float32) {
 		}
 		return min, max
 	}
+	minVec := archsimd.LoadFloat32x8Slice(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadFloat32x8Slice(v[i:])
@@ -499,8 +499,6 @@ func BaseMinMax_avx2_Float64(v []float64) (min float64, max float64) {
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := archsimd.LoadFloat64x4Slice(v)
-	maxVec := minVec
 	lanes := 4
 	if len(v) < lanes {
 		min = v[0]
@@ -515,6 +513,8 @@ func BaseMinMax_avx2_Float64(v []float64) (min float64, max float64) {
 		}
 		return min, max
 	}
+	minVec := archsimd.LoadFloat64x4Slice(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := archsimd.LoadFloat64x4Slice(v[i:])

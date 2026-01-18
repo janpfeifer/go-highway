@@ -60,10 +60,10 @@ func BaseMin[T hwy.Floats](v []T) T {
 		panic("vec: Min called on empty slice")
 	}
 
-	minVec := hwy.Load(v)
-	lanes := minVec.NumLanes()
+	// Get lanes count before loading to check slice length
+	lanes := hwy.Zero[T]().NumLanes()
 
-	// If slice is shorter than one vector, reduce and handle tail
+	// If slice is shorter than one vector, use scalar code
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -73,6 +73,8 @@ func BaseMin[T hwy.Floats](v []T) T {
 		}
 		return result
 	}
+
+	minVec := hwy.Load(v)
 
 	// Process full vectors
 	var i int
@@ -114,10 +116,10 @@ func BaseMax[T hwy.Lanes](v []T) T {
 		panic("vec: Max called on empty slice")
 	}
 
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	// Get lanes count before loading to check slice length
+	lanes := hwy.Zero[T]().NumLanes()
 
-	// If slice is shorter than one vector, reduce and handle tail
+	// If slice is shorter than one vector, use scalar code
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -127,6 +129,8 @@ func BaseMax[T hwy.Lanes](v []T) T {
 		}
 		return result
 	}
+
+	maxVec := hwy.Load(v)
 
 	// Process full vectors
 	var i int
@@ -170,9 +174,8 @@ func BaseMinMax[T hwy.Floats](v []T) (min, max T) {
 		panic("vec: MinMax called on empty slice")
 	}
 
-	minVec := hwy.Load(v)
-	maxVec := minVec
-	lanes := minVec.NumLanes()
+	// Get lanes count before loading to check slice length
+	lanes := hwy.Zero[T]().NumLanes()
 
 	// If slice is shorter than one vector, handle with scalar code
 	if len(v) < lanes {
@@ -188,6 +191,9 @@ func BaseMinMax[T hwy.Floats](v []T) (min, max T) {
 		}
 		return min, max
 	}
+
+	minVec := hwy.Load(v)
+	maxVec := minVec
 
 	// Process full vectors
 	var i int

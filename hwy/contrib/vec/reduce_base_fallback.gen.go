@@ -82,8 +82,7 @@ func BaseMin_fallback_Float16(v []hwy.Float16) hwy.Float16 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[hwy.Float16]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -93,6 +92,7 @@ func BaseMin_fallback_Float16(v []hwy.Float16) hwy.Float16 {
 		}
 		return result
 	}
+	minVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -111,8 +111,7 @@ func BaseMin_fallback_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[hwy.BFloat16]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -122,6 +121,7 @@ func BaseMin_fallback_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 		}
 		return result
 	}
+	minVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -140,8 +140,7 @@ func BaseMin_fallback(v []float32) float32 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[float32]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -151,6 +150,7 @@ func BaseMin_fallback(v []float32) float32 {
 		}
 		return result
 	}
+	minVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -169,8 +169,7 @@ func BaseMin_fallback_Float64(v []float64) float64 {
 	if len(v) == 0 {
 		panic("vec: Min called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[float64]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -180,6 +179,7 @@ func BaseMin_fallback_Float64(v []float64) float64 {
 		}
 		return result
 	}
+	minVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -198,8 +198,7 @@ func BaseMax_fallback(v []float32) float32 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	lanes := hwy.Zero[float32]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -209,6 +208,7 @@ func BaseMax_fallback(v []float32) float32 {
 		}
 		return result
 	}
+	maxVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -227,8 +227,7 @@ func BaseMax_fallback_Float64(v []float64) float64 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	lanes := hwy.Zero[float64]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -238,6 +237,7 @@ func BaseMax_fallback_Float64(v []float64) float64 {
 		}
 		return result
 	}
+	maxVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -256,8 +256,7 @@ func BaseMax_fallback_Int32(v []int32) int32 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	lanes := hwy.Zero[int32]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -267,6 +266,7 @@ func BaseMax_fallback_Int32(v []int32) int32 {
 		}
 		return result
 	}
+	maxVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -285,8 +285,7 @@ func BaseMax_fallback_Int64(v []int64) int64 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	lanes := hwy.Zero[int64]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -296,6 +295,7 @@ func BaseMax_fallback_Int64(v []int64) int64 {
 		}
 		return result
 	}
+	maxVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -314,8 +314,7 @@ func BaseMax_fallback_Uint32(v []uint32) uint32 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	lanes := hwy.Zero[uint32]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -325,6 +324,7 @@ func BaseMax_fallback_Uint32(v []uint32) uint32 {
 		}
 		return result
 	}
+	maxVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -343,8 +343,7 @@ func BaseMax_fallback_Uint64(v []uint64) uint64 {
 	if len(v) == 0 {
 		panic("vec: Max called on empty slice")
 	}
-	maxVec := hwy.Load(v)
-	lanes := maxVec.NumLanes()
+	lanes := hwy.Zero[uint64]().NumLanes()
 	if len(v) < lanes {
 		result := v[0]
 		for i := 1; i < len(v); i++ {
@@ -354,6 +353,7 @@ func BaseMax_fallback_Uint64(v []uint64) uint64 {
 		}
 		return result
 	}
+	maxVec := hwy.Load(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -372,9 +372,7 @@ func BaseMinMax_fallback_Float16(v []hwy.Float16) (min hwy.Float16, max hwy.Floa
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	maxVec := minVec
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[hwy.Float16]().NumLanes()
 	if len(v) < lanes {
 		min = v[0]
 		max = v[0]
@@ -388,6 +386,8 @@ func BaseMinMax_fallback_Float16(v []hwy.Float16) (min hwy.Float16, max hwy.Floa
 		}
 		return min, max
 	}
+	minVec := hwy.Load(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -411,9 +411,7 @@ func BaseMinMax_fallback_BFloat16(v []hwy.BFloat16) (min hwy.BFloat16, max hwy.B
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	maxVec := minVec
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[hwy.BFloat16]().NumLanes()
 	if len(v) < lanes {
 		min = v[0]
 		max = v[0]
@@ -427,6 +425,8 @@ func BaseMinMax_fallback_BFloat16(v []hwy.BFloat16) (min hwy.BFloat16, max hwy.B
 		}
 		return min, max
 	}
+	minVec := hwy.Load(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -450,9 +450,7 @@ func BaseMinMax_fallback(v []float32) (min float32, max float32) {
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	maxVec := minVec
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[float32]().NumLanes()
 	if len(v) < lanes {
 		min = v[0]
 		max = v[0]
@@ -466,6 +464,8 @@ func BaseMinMax_fallback(v []float32) (min float32, max float32) {
 		}
 		return min, max
 	}
+	minVec := hwy.Load(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
@@ -489,9 +489,7 @@ func BaseMinMax_fallback_Float64(v []float64) (min float64, max float64) {
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
-	minVec := hwy.Load(v)
-	maxVec := minVec
-	lanes := minVec.NumLanes()
+	lanes := hwy.Zero[float64]().NumLanes()
 	if len(v) < lanes {
 		min = v[0]
 		max = v[0]
@@ -505,6 +503,8 @@ func BaseMinMax_fallback_Float64(v []float64) (min float64, max float64) {
 		}
 		return min, max
 	}
+	minVec := hwy.Load(v)
+	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
 		va := hwy.Load(v[i:])
