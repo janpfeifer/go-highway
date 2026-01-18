@@ -98,6 +98,52 @@ func BaseFind_fallback_Int64(slice []int64, value int64) int {
 	return -1
 }
 
+func BaseFind_fallback_Uint32(slice []uint32, value uint32) int {
+	n := len(slice)
+	if n == 0 {
+		return -1
+	}
+	target := hwy.Set(value)
+	lanes := hwy.MaxLanes[uint32]()
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := hwy.Load(slice[i:])
+		mask := hwy.Equal(v, target)
+		if idx := hwy.FindFirstTrue(mask); idx >= 0 {
+			return i + idx
+		}
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			return i
+		}
+	}
+	return -1
+}
+
+func BaseFind_fallback_Uint64(slice []uint64, value uint64) int {
+	n := len(slice)
+	if n == 0 {
+		return -1
+	}
+	target := hwy.Set(value)
+	lanes := hwy.MaxLanes[uint64]()
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := hwy.Load(slice[i:])
+		mask := hwy.Equal(v, target)
+		if idx := hwy.FindFirstTrue(mask); idx >= 0 {
+			return i + idx
+		}
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			return i
+		}
+	}
+	return -1
+}
+
 func BaseCount_fallback(slice []float32, value float32) int {
 	n := len(slice)
 	if n == 0 {
@@ -186,6 +232,50 @@ func BaseCount_fallback_Int64(slice []int64, value int64) int {
 	return count
 }
 
+func BaseCount_fallback_Uint32(slice []uint32, value uint32) int {
+	n := len(slice)
+	if n == 0 {
+		return 0
+	}
+	target := hwy.Set(value)
+	lanes := hwy.MaxLanes[uint32]()
+	count := 0
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := hwy.Load(slice[i:])
+		mask := hwy.Equal(v, target)
+		count += hwy.CountTrue(mask)
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			count++
+		}
+	}
+	return count
+}
+
+func BaseCount_fallback_Uint64(slice []uint64, value uint64) int {
+	n := len(slice)
+	if n == 0 {
+		return 0
+	}
+	target := hwy.Set(value)
+	lanes := hwy.MaxLanes[uint64]()
+	count := 0
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := hwy.Load(slice[i:])
+		mask := hwy.Equal(v, target)
+		count += hwy.CountTrue(mask)
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			count++
+		}
+	}
+	return count
+}
+
 func BaseContains_fallback(slice []float32, value float32) bool {
 	return BaseFind_fallback(slice, value) >= 0
 }
@@ -200,6 +290,14 @@ func BaseContains_fallback_Int32(slice []int32, value int32) bool {
 
 func BaseContains_fallback_Int64(slice []int64, value int64) bool {
 	return BaseFind_fallback_Int64(slice, value) >= 0
+}
+
+func BaseContains_fallback_Uint32(slice []uint32, value uint32) bool {
+	return BaseFind_fallback_Uint32(slice, value) >= 0
+}
+
+func BaseContains_fallback_Uint64(slice []uint64, value uint64) bool {
+	return BaseFind_fallback_Uint64(slice, value) >= 0
 }
 
 func BaseAll_fallback(slice []float32, pred Predicate[float32]) bool {
@@ -230,6 +328,24 @@ func BaseAll_fallback_Int32(slice []int32, pred Predicate[int32]) bool {
 }
 
 func BaseAll_fallback_Int64(slice []int64, pred Predicate[int64]) bool {
+	for _, v := range slice {
+		if !pred.Test(v) {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseAll_fallback_Uint32(slice []uint32, pred Predicate[uint32]) bool {
+	for _, v := range slice {
+		if !pred.Test(v) {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseAll_fallback_Uint64(slice []uint64, pred Predicate[uint64]) bool {
 	for _, v := range slice {
 		if !pred.Test(v) {
 			return false
@@ -274,6 +390,24 @@ func BaseAny_fallback_Int64(slice []int64, pred Predicate[int64]) bool {
 	return false
 }
 
+func BaseAny_fallback_Uint32(slice []uint32, pred Predicate[uint32]) bool {
+	for _, v := range slice {
+		if pred.Test(v) {
+			return true
+		}
+	}
+	return false
+}
+
+func BaseAny_fallback_Uint64(slice []uint64, pred Predicate[uint64]) bool {
+	for _, v := range slice {
+		if pred.Test(v) {
+			return true
+		}
+	}
+	return false
+}
+
 func BaseNone_fallback(slice []float32, pred Predicate[float32]) bool {
 	return !BaseAny_fallback(slice, pred)
 }
@@ -288,6 +422,14 @@ func BaseNone_fallback_Int32(slice []int32, pred Predicate[int32]) bool {
 
 func BaseNone_fallback_Int64(slice []int64, pred Predicate[int64]) bool {
 	return !BaseAny_fallback_Int64(slice, pred)
+}
+
+func BaseNone_fallback_Uint32(slice []uint32, pred Predicate[uint32]) bool {
+	return !BaseAny_fallback_Uint32(slice, pred)
+}
+
+func BaseNone_fallback_Uint64(slice []uint64, pred Predicate[uint64]) bool {
+	return !BaseAny_fallback_Uint64(slice, pred)
 }
 
 func BaseFindIf_fallback(slice []float32, pred Predicate[float32]) int {
@@ -318,6 +460,24 @@ func BaseFindIf_fallback_Int32(slice []int32, pred Predicate[int32]) int {
 }
 
 func BaseFindIf_fallback_Int64(slice []int64, pred Predicate[int64]) int {
+	for i, v := range slice {
+		if pred.Test(v) {
+			return i
+		}
+	}
+	return -1
+}
+
+func BaseFindIf_fallback_Uint32(slice []uint32, pred Predicate[uint32]) int {
+	for i, v := range slice {
+		if pred.Test(v) {
+			return i
+		}
+	}
+	return -1
+}
+
+func BaseFindIf_fallback_Uint64(slice []uint64, pred Predicate[uint64]) int {
 	for i, v := range slice {
 		if pred.Test(v) {
 			return i
@@ -357,6 +517,26 @@ func BaseCountIf_fallback_Int32(slice []int32, pred Predicate[int32]) int {
 }
 
 func BaseCountIf_fallback_Int64(slice []int64, pred Predicate[int64]) int {
+	count := 0
+	for _, v := range slice {
+		if pred.Test(v) {
+			count++
+		}
+	}
+	return count
+}
+
+func BaseCountIf_fallback_Uint32(slice []uint32, pred Predicate[uint32]) int {
+	count := 0
+	for _, v := range slice {
+		if pred.Test(v) {
+			count++
+		}
+	}
+	return count
+}
+
+func BaseCountIf_fallback_Uint64(slice []uint64, pred Predicate[uint64]) int {
 	count := 0
 	for _, v := range slice {
 		if pred.Test(v) {

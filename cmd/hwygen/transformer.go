@@ -2122,6 +2122,10 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				fullName = "CompressStoreInt32"
 			case "int64":
 				fullName = "CompressStoreInt64"
+			case "uint32":
+				fullName = "CompressStoreUint32"
+			case "uint64":
+				fullName = "CompressStoreUint64"
 			default:
 				fullName = "CompressStore"
 			}
@@ -2139,10 +2143,10 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				fullName = "FirstN"
 			case "float64":
 				fullName = "FirstNFloat64"
-			case "int32":
-				fullName = "FirstN" // Int32x4 mask for int32
-			case "int64":
-				fullName = "FirstNInt64"
+			case "int32", "uint32":
+				fullName = "FirstN" // Int32x4 mask for 32-bit types
+			case "int64", "uint64":
+				fullName = "FirstNInt64" // Int64x2 mask for 64-bit types
 			default:
 				fullName = "FirstN"
 			}
@@ -2177,6 +2181,10 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			fullName = "AllTrueVal"
 		case "float64", "int64":
 			fullName = "AllTrueValFloat64"
+		case "uint32":
+			fullName = "AllTrueValUint32"
+		case "uint64":
+			fullName = "AllTrueValUint64"
 		default:
 			fullName = "AllTrueVal"
 		}
@@ -2189,6 +2197,10 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			fullName = "AllFalseVal"
 		case "float64", "int64":
 			fullName = "AllFalseValFloat64"
+		case "uint32":
+			fullName = "AllFalseValUint32"
+		case "uint64":
+			fullName = "AllFalseValUint64"
 		default:
 			fullName = "AllFalseVal"
 		}

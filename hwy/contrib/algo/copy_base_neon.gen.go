@@ -138,3 +138,69 @@ func BaseCopyIf_neon_Int64(src []int64, dst []int64, pred func(asm.Int64x2) asm.
 	}
 	return dstIdx
 }
+
+func BaseCopyIf_neon_Uint32(src []uint32, dst []uint32, pred func(asm.Uint32x4) asm.Int32x4) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := 4
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := asm.LoadUint32x4Slice(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(asm.CompressStoreUint32(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := [4]uint32{}
+		copy(buf[:], src[i:i+remaining])
+		v := asm.LoadUint32x4Slice(buf[:])
+		mask := pred(v)
+		tailMask := asm.FirstN(remaining)
+		mask = mask.And(tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(asm.CompressStoreUint32(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}
+
+func BaseCopyIf_neon_Uint64(src []uint64, dst []uint64, pred func(asm.Uint64x2) asm.Int64x2) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := 2
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := asm.LoadUint64x2Slice(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(asm.CompressStoreUint64(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := [2]uint64{}
+		copy(buf[:], src[i:i+remaining])
+		v := asm.LoadUint64x2Slice(buf[:])
+		mask := pred(v)
+		tailMask := asm.FirstNInt64(remaining)
+		mask = mask.And(tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(asm.CompressStoreUint64(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}

@@ -91,6 +91,48 @@ func BaseSortSmall_neon_Int64(data []int64) {
 	InsertionSortSmall(data)
 }
 
+func BaseSortSmall_neon_Uint32(data []uint32) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+	if n <= 4 {
+		InsertionSortSmall(data)
+		return
+	}
+	lanes := 4
+	if n <= lanes {
+		SortSingleVector(data)
+		return
+	}
+	if n <= lanes*2 {
+		SortTwoVectors(data)
+		return
+	}
+	InsertionSortSmall(data)
+}
+
+func BaseSortSmall_neon_Uint64(data []uint64) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+	if n <= 4 {
+		InsertionSortSmall(data)
+		return
+	}
+	lanes := 2
+	if n <= lanes {
+		SortSingleVector(data)
+		return
+	}
+	if n <= lanes*2 {
+		SortTwoVectors(data)
+		return
+	}
+	InsertionSortSmall(data)
+}
+
 func BaseIsSorted_neon(data []float32) bool {
 	n := len(data)
 	if n <= 1 {
@@ -170,6 +212,52 @@ func BaseIsSorted_neon_Int64(data []int64) bool {
 	for ; i+lanes < n; i += lanes {
 		v1 := asm.LoadInt64x2Slice(data[i:])
 		v2 := asm.LoadInt64x2Slice(data[i+1:])
+		mask := v1.GreaterThan(v2)
+		if asm.FindFirstTrue(mask) >= 0 {
+			return false
+		}
+	}
+	for ; i < n-1; i++ {
+		if data[i] > data[i+1] {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseIsSorted_neon_Uint32(data []uint32) bool {
+	n := len(data)
+	if n <= 1 {
+		return true
+	}
+	lanes := 4
+	i := 0
+	for ; i+lanes < n; i += lanes {
+		v1 := asm.LoadUint32x4Slice(data[i:])
+		v2 := asm.LoadUint32x4Slice(data[i+1:])
+		mask := v1.GreaterThan(v2)
+		if asm.FindFirstTrue(mask) >= 0 {
+			return false
+		}
+	}
+	for ; i < n-1; i++ {
+		if data[i] > data[i+1] {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseIsSorted_neon_Uint64(data []uint64) bool {
+	n := len(data)
+	if n <= 1 {
+		return true
+	}
+	lanes := 2
+	i := 0
+	for ; i+lanes < n; i += lanes {
+		v1 := asm.LoadUint64x2Slice(data[i:])
+		v2 := asm.LoadUint64x2Slice(data[i+1:])
 		mask := v1.GreaterThan(v2)
 		if asm.FindFirstTrue(mask) >= 0 {
 			return false

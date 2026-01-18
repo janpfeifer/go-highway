@@ -100,6 +100,52 @@ func BaseFind_avx2_Int64(slice []int64, value int64) int {
 	return -1
 }
 
+func BaseFind_avx2_Uint32(slice []uint32, value uint32) int {
+	n := len(slice)
+	if n == 0 {
+		return -1
+	}
+	target := archsimd.BroadcastUint32x8(value)
+	lanes := 8
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := archsimd.LoadUint32x8Slice(slice[i:])
+		mask := v.Equal(target)
+		if idx := hwy.FindFirstTrue_AVX2_Uint32x8(mask); idx >= 0 {
+			return i + idx
+		}
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			return i
+		}
+	}
+	return -1
+}
+
+func BaseFind_avx2_Uint64(slice []uint64, value uint64) int {
+	n := len(slice)
+	if n == 0 {
+		return -1
+	}
+	target := archsimd.BroadcastUint64x4(value)
+	lanes := 4
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := archsimd.LoadUint64x4Slice(slice[i:])
+		mask := v.Equal(target)
+		if idx := hwy.FindFirstTrue_AVX2_Uint64x4(mask); idx >= 0 {
+			return i + idx
+		}
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			return i
+		}
+	}
+	return -1
+}
+
 func BaseCount_avx2(slice []float32, value float32) int {
 	n := len(slice)
 	if n == 0 {
@@ -188,6 +234,50 @@ func BaseCount_avx2_Int64(slice []int64, value int64) int {
 	return count
 }
 
+func BaseCount_avx2_Uint32(slice []uint32, value uint32) int {
+	n := len(slice)
+	if n == 0 {
+		return 0
+	}
+	target := archsimd.BroadcastUint32x8(value)
+	lanes := 8
+	count := 0
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := archsimd.LoadUint32x8Slice(slice[i:])
+		mask := v.Equal(target)
+		count += hwy.CountTrue_AVX2_Uint32x8(mask)
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			count++
+		}
+	}
+	return count
+}
+
+func BaseCount_avx2_Uint64(slice []uint64, value uint64) int {
+	n := len(slice)
+	if n == 0 {
+		return 0
+	}
+	target := archsimd.BroadcastUint64x4(value)
+	lanes := 4
+	count := 0
+	i := 0
+	for ; i+lanes <= n; i += lanes {
+		v := archsimd.LoadUint64x4Slice(slice[i:])
+		mask := v.Equal(target)
+		count += hwy.CountTrue_AVX2_Uint64x4(mask)
+	}
+	for ; i < n; i++ {
+		if slice[i] == value {
+			count++
+		}
+	}
+	return count
+}
+
 func BaseContains_avx2(slice []float32, value float32) bool {
 	return BaseFind_avx2(slice, value) >= 0
 }
@@ -202,4 +292,12 @@ func BaseContains_avx2_Int32(slice []int32, value int32) bool {
 
 func BaseContains_avx2_Int64(slice []int64, value int64) bool {
 	return BaseFind_avx2_Int64(slice, value) >= 0
+}
+
+func BaseContains_avx2_Uint32(slice []uint32, value uint32) bool {
+	return BaseFind_avx2_Uint32(slice, value) >= 0
+}
+
+func BaseContains_avx2_Uint64(slice []uint64, value uint64) bool {
+	return BaseFind_avx2_Uint64(slice, value) >= 0
 }

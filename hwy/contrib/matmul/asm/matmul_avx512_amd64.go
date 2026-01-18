@@ -3,7 +3,7 @@
 // versions:
 // 	clang   21.1.8
 // 	objdump 2.45.1
-// flags: -mavx512f -mavx512fp16 -mavx512bf16 -O3
+// flags: -mavx512f -mavx512fp16 -mavx512bf16 -mavx512vl -O3
 // source: ../c/matmul_avx512_amd64.c
 
 package asm

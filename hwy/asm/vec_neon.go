@@ -1363,7 +1363,7 @@ func (m BoolMask32x2) GetBit(i int) bool {
 
 // FindFirstTrue returns the index of the first true lane in the mask, or -1 if none.
 // For Int32x4 masks, a non-zero value (typically -1/0xFFFFFFFF) indicates true.
-func FindFirstTrue[T Int32x4 | Int64x2](mask T) int {
+func FindFirstTrue[T Int32x4 | Int64x2 | Uint32x4 | Uint64x2](mask T) int {
 	switch m := any(mask).(type) {
 	case Int32x4:
 		a := (*[4]int32)(unsafe.Pointer(&m))
@@ -1379,13 +1379,27 @@ func FindFirstTrue[T Int32x4 | Int64x2](mask T) int {
 				return i
 			}
 		}
+	case Uint32x4:
+		a := (*[4]uint32)(unsafe.Pointer(&m))
+		for i := range 4 {
+			if a[i] != 0 {
+				return i
+			}
+		}
+	case Uint64x2:
+		a := (*[2]uint64)(unsafe.Pointer(&m))
+		for i := range 2 {
+			if a[i] != 0 {
+				return i
+			}
+		}
 	}
 	return -1
 }
 
 // CountTrue returns the number of true lanes in the mask.
 // For integer masks, a non-zero value indicates true.
-func CountTrue[T Int32x4 | Int64x2](mask T) int {
+func CountTrue[T Int32x4 | Int64x2 | Uint32x4 | Uint64x2](mask T) int {
 	switch m := any(mask).(type) {
 	case Int32x4:
 		return int(counttrue_i32x4([16]byte(m)))
@@ -1398,29 +1412,50 @@ func CountTrue[T Int32x4 | Int64x2](mask T) int {
 			}
 		}
 		return count
+	case Uint32x4:
+		return int(counttrue_i32x4([16]byte(m)))
+	case Uint64x2:
+		a := (*[2]uint64)(unsafe.Pointer(&m))
+		count := 0
+		for i := range 2 {
+			if a[i] != 0 {
+				count++
+			}
+		}
+		return count
 	}
 	return 0
 }
 
 // AllTrue returns true if all lanes in the mask are true.
-func AllTrue[T Int32x4 | Int64x2](mask T) bool {
+func AllTrue[T Int32x4 | Int64x2 | Uint32x4 | Uint64x2](mask T) bool {
 	switch m := any(mask).(type) {
 	case Int32x4:
 		return alltrue_i32x4([16]byte(m)) != 0
 	case Int64x2:
 		a := (*[2]int64)(unsafe.Pointer(&m))
 		return a[0] != 0 && a[1] != 0
+	case Uint32x4:
+		return alltrue_i32x4([16]byte(m)) != 0
+	case Uint64x2:
+		a := (*[2]uint64)(unsafe.Pointer(&m))
+		return a[0] != 0 && a[1] != 0
 	}
 	return false
 }
 
 // AllFalse returns true if all lanes in the mask are false.
-func AllFalse[T Int32x4 | Int64x2](mask T) bool {
+func AllFalse[T Int32x4 | Int64x2 | Uint32x4 | Uint64x2](mask T) bool {
 	switch m := any(mask).(type) {
 	case Int32x4:
 		return anytrue_i32x4([16]byte(m)) == 0
 	case Int64x2:
 		a := (*[2]int64)(unsafe.Pointer(&m))
+		return a[0] == 0 && a[1] == 0
+	case Uint32x4:
+		return anytrue_i32x4([16]byte(m)) == 0
+	case Uint64x2:
+		a := (*[2]uint64)(unsafe.Pointer(&m))
 		return a[0] == 0 && a[1] == 0
 	}
 	return false
@@ -1697,6 +1732,41 @@ func CompressStoreI64x2(v Int64x2, mask Int64x2, dst []int64) int {
 	return count
 }
 
+// CompressStoreU32x4 compresses uint32 elements and stores to dst.
+// Returns number of elements stored.
+// Uses lookup table for efficient gathering without branches.
+func CompressStoreU32x4(v Uint32x4, mask Int32x4, dst []uint32) int {
+	idx := maskToIndex4(mask)
+	count := compressCountTable[idx]
+	perm := &compressTableF32[idx]
+
+	u := (*[4]uint32)(unsafe.Pointer(&v))
+	// Gather elements using byte offsets
+	// Each byte offset / 4 gives the lane index
+	for i := range count {
+		dst[i] = u[perm[i]>>2]
+	}
+
+	return count
+}
+
+// CompressStoreU64x2 compresses uint64 elements and stores to dst.
+// Returns number of elements stored.
+func CompressStoreU64x2(v Uint64x2, mask Int64x2, dst []uint64) int {
+	a := (*[2]uint64)(unsafe.Pointer(&v))
+	m := (*[2]int64)(unsafe.Pointer(&mask))
+	count := 0
+	for i := range 2 {
+		if m[i] != 0 {
+			if count < len(dst) {
+				dst[count] = a[i]
+			}
+			count++
+		}
+	}
+	return count
+}
+
 // ===== FirstN functions =====
 // These create masks with the first n lanes set to true (-1).
 
@@ -1735,6 +1805,16 @@ func CompressStoreInt32(v Int32x4, mask Int32x4, dst []int32) int {
 // CompressStoreInt64 compresses and stores int64 elements.
 func CompressStoreInt64(v Int64x2, mask Int64x2, dst []int64) int {
 	return CompressStoreI64x2(v, mask, dst)
+}
+
+// CompressStoreUint32 compresses and stores uint32 elements.
+func CompressStoreUint32(v Uint32x4, mask Int32x4, dst []uint32) int {
+	return CompressStoreU32x4(v, mask, dst)
+}
+
+// CompressStoreUint64 compresses and stores uint64 elements.
+func CompressStoreUint64(v Uint64x2, mask Int64x2, dst []uint64) int {
+	return CompressStoreU64x2(v, mask, dst)
 }
 
 // FirstN returns a mask with the first n lanes set to true (for float32).
@@ -1822,6 +1902,17 @@ func AllTrueValFloat64(mask Int64x2) bool {
 	return m[0] != 0 && m[1] != 0
 }
 
+// AllTrueValUint32 returns true if all lanes in the mask are true (for uint32).
+func AllTrueValUint32(mask Uint32x4) bool {
+	return alltrue_i32x4([16]byte(mask)) != 0
+}
+
+// AllTrueValUint64 returns true if all lanes in the mask are true (for uint64).
+func AllTrueValUint64(mask Uint64x2) bool {
+	m := (*[2]uint64)(unsafe.Pointer(&mask))
+	return m[0] != 0 && m[1] != 0
+}
+
 // AllFalseVal returns true if all lanes in the mask are false (for float32).
 func AllFalseVal(mask Int32x4) bool {
 	return anytrue_i32x4([16]byte(mask)) == 0
@@ -1830,6 +1921,17 @@ func AllFalseVal(mask Int32x4) bool {
 // AllFalseValFloat64 returns true if all lanes in the mask are false (for float64).
 func AllFalseValFloat64(mask Int64x2) bool {
 	m := (*[2]int64)(unsafe.Pointer(&mask))
+	return m[0] == 0 && m[1] == 0
+}
+
+// AllFalseValUint32 returns true if all lanes in the mask are false (for uint32).
+func AllFalseValUint32(mask Uint32x4) bool {
+	return anytrue_i32x4([16]byte(mask)) == 0
+}
+
+// AllFalseValUint64 returns true if all lanes in the mask are false (for uint64).
+func AllFalseValUint64(mask Uint64x2) bool {
+	m := (*[2]uint64)(unsafe.Pointer(&mask))
 	return m[0] == 0 && m[1] == 0
 }
 

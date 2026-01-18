@@ -137,3 +137,69 @@ func BaseCopyIf_fallback_Int64(src []int64, dst []int64, pred func(hwy.Vec[int64
 	}
 	return dstIdx
 }
+
+func BaseCopyIf_fallback_Uint32(src []uint32, dst []uint32, pred func(hwy.Vec[uint32]) hwy.Mask[uint32]) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := hwy.MaxLanes[uint32]()
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := hwy.Load(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := make([]uint32, lanes)
+		copy(buf, src[i:i+remaining])
+		v := hwy.Load(buf)
+		mask := pred(v)
+		tailMask := hwy.FirstN[uint32](remaining)
+		mask = hwy.MaskAnd(mask, tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}
+
+func BaseCopyIf_fallback_Uint64(src []uint64, dst []uint64, pred func(hwy.Vec[uint64]) hwy.Mask[uint64]) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := hwy.MaxLanes[uint64]()
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := hwy.Load(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := make([]uint64, lanes)
+		copy(buf, src[i:i+remaining])
+		v := hwy.Load(buf)
+		mask := pred(v)
+		tailMask := hwy.FirstN[uint64](remaining)
+		mask = hwy.MaskAnd(mask, tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}

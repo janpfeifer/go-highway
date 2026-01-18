@@ -14,34 +14,50 @@ var FindFloat32 func(slice []float32, value float32) int
 var FindFloat64 func(slice []float64, value float64) int
 var FindInt32 func(slice []int32, value int32) int
 var FindInt64 func(slice []int64, value int64) int
+var FindUint32 func(slice []uint32, value uint32) int
+var FindUint64 func(slice []uint64, value uint64) int
 var CountFloat32 func(slice []float32, value float32) int
 var CountFloat64 func(slice []float64, value float64) int
 var CountInt32 func(slice []int32, value int32) int
 var CountInt64 func(slice []int64, value int64) int
+var CountUint32 func(slice []uint32, value uint32) int
+var CountUint64 func(slice []uint64, value uint64) int
 var ContainsFloat32 func(slice []float32, value float32) bool
 var ContainsFloat64 func(slice []float64, value float64) bool
 var ContainsInt32 func(slice []int32, value int32) bool
 var ContainsInt64 func(slice []int64, value int64) bool
+var ContainsUint32 func(slice []uint32, value uint32) bool
+var ContainsUint64 func(slice []uint64, value uint64) bool
 var AllFloat32 func(slice []float32, pred Predicate[float32]) bool
 var AllFloat64 func(slice []float64, pred Predicate[float64]) bool
 var AllInt32 func(slice []int32, pred Predicate[int32]) bool
 var AllInt64 func(slice []int64, pred Predicate[int64]) bool
+var AllUint32 func(slice []uint32, pred Predicate[uint32]) bool
+var AllUint64 func(slice []uint64, pred Predicate[uint64]) bool
 var AnyFloat32 func(slice []float32, pred Predicate[float32]) bool
 var AnyFloat64 func(slice []float64, pred Predicate[float64]) bool
 var AnyInt32 func(slice []int32, pred Predicate[int32]) bool
 var AnyInt64 func(slice []int64, pred Predicate[int64]) bool
+var AnyUint32 func(slice []uint32, pred Predicate[uint32]) bool
+var AnyUint64 func(slice []uint64, pred Predicate[uint64]) bool
 var NoneFloat32 func(slice []float32, pred Predicate[float32]) bool
 var NoneFloat64 func(slice []float64, pred Predicate[float64]) bool
 var NoneInt32 func(slice []int32, pred Predicate[int32]) bool
 var NoneInt64 func(slice []int64, pred Predicate[int64]) bool
+var NoneUint32 func(slice []uint32, pred Predicate[uint32]) bool
+var NoneUint64 func(slice []uint64, pred Predicate[uint64]) bool
 var FindIfFloat32 func(slice []float32, pred Predicate[float32]) int
 var FindIfFloat64 func(slice []float64, pred Predicate[float64]) int
 var FindIfInt32 func(slice []int32, pred Predicate[int32]) int
 var FindIfInt64 func(slice []int64, pred Predicate[int64]) int
+var FindIfUint32 func(slice []uint32, pred Predicate[uint32]) int
+var FindIfUint64 func(slice []uint64, pred Predicate[uint64]) int
 var CountIfFloat32 func(slice []float32, pred Predicate[float32]) int
 var CountIfFloat64 func(slice []float64, pred Predicate[float64]) int
 var CountIfInt32 func(slice []int32, pred Predicate[int32]) int
 var CountIfInt64 func(slice []int64, pred Predicate[int64]) int
+var CountIfUint32 func(slice []uint32, pred Predicate[uint32]) int
+var CountIfUint64 func(slice []uint64, pred Predicate[uint64]) int
 
 // Find is the generic API that dispatches to the appropriate SIMD implementation.
 func Find[T hwy.Lanes](slice []T, value T) int {
@@ -54,6 +70,10 @@ func Find[T hwy.Lanes](slice []T, value T) int {
 		return FindInt32(any(slice).([]int32), any(value).(int32))
 	case []int64:
 		return FindInt64(any(slice).([]int64), any(value).(int64))
+	case []uint32:
+		return FindUint32(any(slice).([]uint32), any(value).(uint32))
+	case []uint64:
+		return FindUint64(any(slice).([]uint64), any(value).(uint64))
 	}
 	panic("unreachable")
 }
@@ -69,6 +89,10 @@ func Count[T hwy.Lanes](slice []T, value T) int {
 		return CountInt32(any(slice).([]int32), any(value).(int32))
 	case []int64:
 		return CountInt64(any(slice).([]int64), any(value).(int64))
+	case []uint32:
+		return CountUint32(any(slice).([]uint32), any(value).(uint32))
+	case []uint64:
+		return CountUint64(any(slice).([]uint64), any(value).(uint64))
 	}
 	panic("unreachable")
 }
@@ -84,6 +108,10 @@ func Contains[T hwy.Lanes](slice []T, value T) bool {
 		return ContainsInt32(any(slice).([]int32), any(value).(int32))
 	case []int64:
 		return ContainsInt64(any(slice).([]int64), any(value).(int64))
+	case []uint32:
+		return ContainsUint32(any(slice).([]uint32), any(value).(uint32))
+	case []uint64:
+		return ContainsUint64(any(slice).([]uint64), any(value).(uint64))
 	}
 	panic("unreachable")
 }
@@ -99,6 +127,10 @@ func AllP[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 		return AllInt32(any(slice).([]int32), any(pred).(Predicate[int32]))
 	case []int64:
 		return AllInt64(any(slice).([]int64), any(pred).(Predicate[int64]))
+	case []uint32:
+		return AllUint32(any(slice).([]uint32), any(pred).(Predicate[uint32]))
+	case []uint64:
+		return AllUint64(any(slice).([]uint64), any(pred).(Predicate[uint64]))
 	}
 	panic("unreachable")
 }
@@ -114,6 +146,10 @@ func AnyP[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 		return AnyInt32(any(slice).([]int32), any(pred).(Predicate[int32]))
 	case []int64:
 		return AnyInt64(any(slice).([]int64), any(pred).(Predicate[int64]))
+	case []uint32:
+		return AnyUint32(any(slice).([]uint32), any(pred).(Predicate[uint32]))
+	case []uint64:
+		return AnyUint64(any(slice).([]uint64), any(pred).(Predicate[uint64]))
 	}
 	panic("unreachable")
 }
@@ -129,6 +165,10 @@ func NoneP[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 		return NoneInt32(any(slice).([]int32), any(pred).(Predicate[int32]))
 	case []int64:
 		return NoneInt64(any(slice).([]int64), any(pred).(Predicate[int64]))
+	case []uint32:
+		return NoneUint32(any(slice).([]uint32), any(pred).(Predicate[uint32]))
+	case []uint64:
+		return NoneUint64(any(slice).([]uint64), any(pred).(Predicate[uint64]))
 	}
 	panic("unreachable")
 }
@@ -144,6 +184,10 @@ func FindIfP[T hwy.Lanes, P Predicate[T]](slice []T, pred P) int {
 		return FindIfInt32(any(slice).([]int32), any(pred).(Predicate[int32]))
 	case []int64:
 		return FindIfInt64(any(slice).([]int64), any(pred).(Predicate[int64]))
+	case []uint32:
+		return FindIfUint32(any(slice).([]uint32), any(pred).(Predicate[uint32]))
+	case []uint64:
+		return FindIfUint64(any(slice).([]uint64), any(pred).(Predicate[uint64]))
 	}
 	panic("unreachable")
 }
@@ -159,6 +203,10 @@ func CountIfP[T hwy.Lanes, P Predicate[T]](slice []T, pred P) int {
 		return CountIfInt32(any(slice).([]int32), any(pred).(Predicate[int32]))
 	case []int64:
 		return CountIfInt64(any(slice).([]int64), any(pred).(Predicate[int64]))
+	case []uint32:
+		return CountIfUint32(any(slice).([]uint32), any(pred).(Predicate[uint32]))
+	case []uint64:
+		return CountIfUint64(any(slice).([]uint64), any(pred).(Predicate[uint64]))
 	}
 	panic("unreachable")
 }
@@ -184,34 +232,50 @@ func initFindAVX2() {
 	FindFloat64 = BaseFind_avx2_Float64
 	FindInt32 = BaseFind_avx2_Int32
 	FindInt64 = BaseFind_avx2_Int64
+	FindUint32 = BaseFind_avx2_Uint32
+	FindUint64 = BaseFind_avx2_Uint64
 	CountFloat32 = BaseCount_avx2
 	CountFloat64 = BaseCount_avx2_Float64
 	CountInt32 = BaseCount_avx2_Int32
 	CountInt64 = BaseCount_avx2_Int64
+	CountUint32 = BaseCount_avx2_Uint32
+	CountUint64 = BaseCount_avx2_Uint64
 	ContainsFloat32 = BaseContains_avx2
 	ContainsFloat64 = BaseContains_avx2_Float64
 	ContainsInt32 = BaseContains_avx2_Int32
 	ContainsInt64 = BaseContains_avx2_Int64
+	ContainsUint32 = BaseContains_avx2_Uint32
+	ContainsUint64 = BaseContains_avx2_Uint64
 	AllFloat32 = BaseAll_fallback
 	AllFloat64 = BaseAll_fallback_Float64
 	AllInt32 = BaseAll_fallback_Int32
 	AllInt64 = BaseAll_fallback_Int64
+	AllUint32 = BaseAll_fallback_Uint32
+	AllUint64 = BaseAll_fallback_Uint64
 	AnyFloat32 = BaseAny_fallback
 	AnyFloat64 = BaseAny_fallback_Float64
 	AnyInt32 = BaseAny_fallback_Int32
 	AnyInt64 = BaseAny_fallback_Int64
+	AnyUint32 = BaseAny_fallback_Uint32
+	AnyUint64 = BaseAny_fallback_Uint64
 	NoneFloat32 = BaseNone_fallback
 	NoneFloat64 = BaseNone_fallback_Float64
 	NoneInt32 = BaseNone_fallback_Int32
 	NoneInt64 = BaseNone_fallback_Int64
+	NoneUint32 = BaseNone_fallback_Uint32
+	NoneUint64 = BaseNone_fallback_Uint64
 	FindIfFloat32 = BaseFindIf_fallback
 	FindIfFloat64 = BaseFindIf_fallback_Float64
 	FindIfInt32 = BaseFindIf_fallback_Int32
 	FindIfInt64 = BaseFindIf_fallback_Int64
+	FindIfUint32 = BaseFindIf_fallback_Uint32
+	FindIfUint64 = BaseFindIf_fallback_Uint64
 	CountIfFloat32 = BaseCountIf_fallback
 	CountIfFloat64 = BaseCountIf_fallback_Float64
 	CountIfInt32 = BaseCountIf_fallback_Int32
 	CountIfInt64 = BaseCountIf_fallback_Int64
+	CountIfUint32 = BaseCountIf_fallback_Uint32
+	CountIfUint64 = BaseCountIf_fallback_Uint64
 }
 
 func initFindAVX512() {
@@ -219,34 +283,50 @@ func initFindAVX512() {
 	FindFloat64 = BaseFind_avx512_Float64
 	FindInt32 = BaseFind_avx512_Int32
 	FindInt64 = BaseFind_avx512_Int64
+	FindUint32 = BaseFind_avx512_Uint32
+	FindUint64 = BaseFind_avx512_Uint64
 	CountFloat32 = BaseCount_avx512
 	CountFloat64 = BaseCount_avx512_Float64
 	CountInt32 = BaseCount_avx512_Int32
 	CountInt64 = BaseCount_avx512_Int64
+	CountUint32 = BaseCount_avx512_Uint32
+	CountUint64 = BaseCount_avx512_Uint64
 	ContainsFloat32 = BaseContains_avx512
 	ContainsFloat64 = BaseContains_avx512_Float64
 	ContainsInt32 = BaseContains_avx512_Int32
 	ContainsInt64 = BaseContains_avx512_Int64
+	ContainsUint32 = BaseContains_avx512_Uint32
+	ContainsUint64 = BaseContains_avx512_Uint64
 	AllFloat32 = BaseAll_fallback
 	AllFloat64 = BaseAll_fallback_Float64
 	AllInt32 = BaseAll_fallback_Int32
 	AllInt64 = BaseAll_fallback_Int64
+	AllUint32 = BaseAll_fallback_Uint32
+	AllUint64 = BaseAll_fallback_Uint64
 	AnyFloat32 = BaseAny_fallback
 	AnyFloat64 = BaseAny_fallback_Float64
 	AnyInt32 = BaseAny_fallback_Int32
 	AnyInt64 = BaseAny_fallback_Int64
+	AnyUint32 = BaseAny_fallback_Uint32
+	AnyUint64 = BaseAny_fallback_Uint64
 	NoneFloat32 = BaseNone_fallback
 	NoneFloat64 = BaseNone_fallback_Float64
 	NoneInt32 = BaseNone_fallback_Int32
 	NoneInt64 = BaseNone_fallback_Int64
+	NoneUint32 = BaseNone_fallback_Uint32
+	NoneUint64 = BaseNone_fallback_Uint64
 	FindIfFloat32 = BaseFindIf_fallback
 	FindIfFloat64 = BaseFindIf_fallback_Float64
 	FindIfInt32 = BaseFindIf_fallback_Int32
 	FindIfInt64 = BaseFindIf_fallback_Int64
+	FindIfUint32 = BaseFindIf_fallback_Uint32
+	FindIfUint64 = BaseFindIf_fallback_Uint64
 	CountIfFloat32 = BaseCountIf_fallback
 	CountIfFloat64 = BaseCountIf_fallback_Float64
 	CountIfInt32 = BaseCountIf_fallback_Int32
 	CountIfInt64 = BaseCountIf_fallback_Int64
+	CountIfUint32 = BaseCountIf_fallback_Uint32
+	CountIfUint64 = BaseCountIf_fallback_Uint64
 }
 
 func initFindFallback() {
@@ -254,32 +334,48 @@ func initFindFallback() {
 	FindFloat64 = BaseFind_fallback_Float64
 	FindInt32 = BaseFind_fallback_Int32
 	FindInt64 = BaseFind_fallback_Int64
+	FindUint32 = BaseFind_fallback_Uint32
+	FindUint64 = BaseFind_fallback_Uint64
 	CountFloat32 = BaseCount_fallback
 	CountFloat64 = BaseCount_fallback_Float64
 	CountInt32 = BaseCount_fallback_Int32
 	CountInt64 = BaseCount_fallback_Int64
+	CountUint32 = BaseCount_fallback_Uint32
+	CountUint64 = BaseCount_fallback_Uint64
 	ContainsFloat32 = BaseContains_fallback
 	ContainsFloat64 = BaseContains_fallback_Float64
 	ContainsInt32 = BaseContains_fallback_Int32
 	ContainsInt64 = BaseContains_fallback_Int64
+	ContainsUint32 = BaseContains_fallback_Uint32
+	ContainsUint64 = BaseContains_fallback_Uint64
 	AllFloat32 = BaseAll_fallback
 	AllFloat64 = BaseAll_fallback_Float64
 	AllInt32 = BaseAll_fallback_Int32
 	AllInt64 = BaseAll_fallback_Int64
+	AllUint32 = BaseAll_fallback_Uint32
+	AllUint64 = BaseAll_fallback_Uint64
 	AnyFloat32 = BaseAny_fallback
 	AnyFloat64 = BaseAny_fallback_Float64
 	AnyInt32 = BaseAny_fallback_Int32
 	AnyInt64 = BaseAny_fallback_Int64
+	AnyUint32 = BaseAny_fallback_Uint32
+	AnyUint64 = BaseAny_fallback_Uint64
 	NoneFloat32 = BaseNone_fallback
 	NoneFloat64 = BaseNone_fallback_Float64
 	NoneInt32 = BaseNone_fallback_Int32
 	NoneInt64 = BaseNone_fallback_Int64
+	NoneUint32 = BaseNone_fallback_Uint32
+	NoneUint64 = BaseNone_fallback_Uint64
 	FindIfFloat32 = BaseFindIf_fallback
 	FindIfFloat64 = BaseFindIf_fallback_Float64
 	FindIfInt32 = BaseFindIf_fallback_Int32
 	FindIfInt64 = BaseFindIf_fallback_Int64
+	FindIfUint32 = BaseFindIf_fallback_Uint32
+	FindIfUint64 = BaseFindIf_fallback_Uint64
 	CountIfFloat32 = BaseCountIf_fallback
 	CountIfFloat64 = BaseCountIf_fallback_Float64
 	CountIfInt32 = BaseCountIf_fallback_Int32
 	CountIfInt64 = BaseCountIf_fallback_Int64
+	CountIfUint32 = BaseCountIf_fallback_Uint32
+	CountIfUint64 = BaseCountIf_fallback_Uint64
 }

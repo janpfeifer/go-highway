@@ -166,7 +166,7 @@ func BaseMin_avx2(v []float32) float32 {
 		va := archsimd.LoadFloat32x8Slice(v[i:])
 		minVec = minVec.Min(va)
 	}
-	result := minVec.ReduceMin()
+	result := hwy.ReduceMin_AVX2_F32x8(minVec)
 	for ; i < len(v); i++ {
 		if v[i] < result {
 			result = v[i]
@@ -195,7 +195,7 @@ func BaseMin_avx2_Float64(v []float64) float64 {
 		va := archsimd.LoadFloat64x4Slice(v[i:])
 		minVec = minVec.Min(va)
 	}
-	result := minVec.ReduceMin()
+	result := hwy.ReduceMin_AVX2_F64x4(minVec)
 	for ; i < len(v); i++ {
 		if v[i] < result {
 			result = v[i]
@@ -224,7 +224,7 @@ func BaseMax_avx2(v []float32) float32 {
 		va := archsimd.LoadFloat32x8Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX2_F32x8(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -253,7 +253,7 @@ func BaseMax_avx2_Float64(v []float64) float64 {
 		va := archsimd.LoadFloat64x4Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX2_F64x4(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -282,7 +282,7 @@ func BaseMax_avx2_Int32(v []int32) int32 {
 		va := archsimd.LoadInt32x8Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX2_I32x8(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -311,7 +311,7 @@ func BaseMax_avx2_Int64(v []int64) int64 {
 		va := archsimd.LoadInt64x4Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX2_I64x4(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -482,8 +482,8 @@ func BaseMinMax_avx2(v []float32) (min float32, max float32) {
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
 	}
-	min = minVec.ReduceMin()
-	max = maxVec.ReduceMax()
+	min = hwy.ReduceMin_AVX2_F32x8(minVec)
+	max = hwy.ReduceMax_AVX2_F32x8(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] < min {
 			min = v[i]
@@ -521,8 +521,8 @@ func BaseMinMax_avx2_Float64(v []float64) (min float64, max float64) {
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
 	}
-	min = minVec.ReduceMin()
-	max = maxVec.ReduceMax()
+	min = hwy.ReduceMin_AVX2_F64x4(minVec)
+	max = hwy.ReduceMax_AVX2_F64x4(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] < min {
 			min = v[i]

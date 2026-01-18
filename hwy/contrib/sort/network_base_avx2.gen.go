@@ -92,6 +92,48 @@ func BaseSortSmall_avx2_Int64(data []int64) {
 	InsertionSortSmall(data)
 }
 
+func BaseSortSmall_avx2_Uint32(data []uint32) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+	if n <= 4 {
+		InsertionSortSmall(data)
+		return
+	}
+	lanes := 8
+	if n <= lanes {
+		SortSingleVector(data)
+		return
+	}
+	if n <= lanes*2 {
+		SortTwoVectors(data)
+		return
+	}
+	InsertionSortSmall(data)
+}
+
+func BaseSortSmall_avx2_Uint64(data []uint64) {
+	n := len(data)
+	if n <= 1 {
+		return
+	}
+	if n <= 4 {
+		InsertionSortSmall(data)
+		return
+	}
+	lanes := 4
+	if n <= lanes {
+		SortSingleVector(data)
+		return
+	}
+	if n <= lanes*2 {
+		SortTwoVectors(data)
+		return
+	}
+	InsertionSortSmall(data)
+}
+
 func BaseIsSorted_avx2(data []float32) bool {
 	n := len(data)
 	if n <= 1 {
@@ -173,6 +215,52 @@ func BaseIsSorted_avx2_Int64(data []int64) bool {
 		v2 := archsimd.LoadInt64x4Slice(data[i+1:])
 		mask := v1.Greater(v2)
 		if hwy.FindFirstTrue_AVX2_I64x4(mask) >= 0 {
+			return false
+		}
+	}
+	for ; i < n-1; i++ {
+		if data[i] > data[i+1] {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseIsSorted_avx2_Uint32(data []uint32) bool {
+	n := len(data)
+	if n <= 1 {
+		return true
+	}
+	lanes := 8
+	i := 0
+	for ; i+lanes < n; i += lanes {
+		v1 := archsimd.LoadUint32x8Slice(data[i:])
+		v2 := archsimd.LoadUint32x8Slice(data[i+1:])
+		mask := v1.Greater(v2)
+		if hwy.FindFirstTrue_AVX2_Uint32x8(mask) >= 0 {
+			return false
+		}
+	}
+	for ; i < n-1; i++ {
+		if data[i] > data[i+1] {
+			return false
+		}
+	}
+	return true
+}
+
+func BaseIsSorted_avx2_Uint64(data []uint64) bool {
+	n := len(data)
+	if n <= 1 {
+		return true
+	}
+	lanes := 4
+	i := 0
+	for ; i+lanes < n; i += lanes {
+		v1 := archsimd.LoadUint64x4Slice(data[i:])
+		v2 := archsimd.LoadUint64x4Slice(data[i+1:])
+		mask := v1.Greater(v2)
+		if hwy.FindFirstTrue_AVX2_Uint64x4(mask) >= 0 {
 			return false
 		}
 	}

@@ -478,6 +478,116 @@ func FindLastTrue_AVX512_I64x8(mask archsimd.Mask64x8) int {
 }
 
 // ============================================================================
+// Unsigned integer wrappers (use same masks as signed)
+// ============================================================================
+
+// CompressStore_AVX512_Uint32x16 compresses and stores directly to slice.
+func CompressStore_AVX512_Uint32x16(v archsimd.Uint32x16, mask archsimd.Mask32x16, dst []uint32) int {
+	var data [16]uint32
+	v.StoreSlice(data[:])
+
+	bits := mask.ToBits()
+	count := 0
+	for i := 0; i < 16; i++ {
+		if (bits & (1 << i)) != 0 {
+			if count < len(dst) {
+				dst[count] = data[i]
+			}
+			count++
+		}
+	}
+	return count
+}
+
+// CompressStore_AVX512_Uint64x8 compresses and stores directly to slice.
+func CompressStore_AVX512_Uint64x8(v archsimd.Uint64x8, mask archsimd.Mask64x8, dst []uint64) int {
+	var data [8]uint64
+	v.StoreSlice(data[:])
+
+	bits := mask.ToBits()
+	count := 0
+	for i := 0; i < 8; i++ {
+		if (bits & (1 << i)) != 0 {
+			if count < len(dst) {
+				dst[count] = data[i]
+			}
+			count++
+		}
+	}
+	return count
+}
+
+// CountTrue_AVX512_Uint32x16 counts true lanes in mask.
+func CountTrue_AVX512_Uint32x16(mask archsimd.Mask32x16) int {
+	return CountTrue_AVX512_F32x16(mask)
+}
+
+// CountTrue_AVX512_Uint64x8 counts true lanes in mask.
+func CountTrue_AVX512_Uint64x8(mask archsimd.Mask64x8) int {
+	return CountTrue_AVX512_F64x8(mask)
+}
+
+// FirstN_AVX512_Uint32x16 creates a mask with the first n lanes set to true.
+func FirstN_AVX512_Uint32x16(n int) archsimd.Mask32x16 {
+	return FirstN_AVX512_F32x16(n)
+}
+
+// FirstN_AVX512_Uint64x8 creates a mask with the first n lanes set to true.
+func FirstN_AVX512_Uint64x8(n int) archsimd.Mask64x8 {
+	return FirstN_AVX512_F64x8(n)
+}
+
+// LastN_AVX512_Uint32x16 creates a mask with the last n lanes set to true.
+func LastN_AVX512_Uint32x16(n int) archsimd.Mask32x16 {
+	return LastN_AVX512_F32x16(n)
+}
+
+// LastN_AVX512_Uint64x8 creates a mask with the last n lanes set to true.
+func LastN_AVX512_Uint64x8(n int) archsimd.Mask64x8 {
+	return LastN_AVX512_F64x8(n)
+}
+
+// AllTrue_AVX512_Uint32x16 returns true if all lanes are true.
+func AllTrue_AVX512_Uint32x16(mask archsimd.Mask32x16) bool {
+	return AllTrue_AVX512_F32x16(mask)
+}
+
+// AllTrue_AVX512_Uint64x8 returns true if all lanes are true.
+func AllTrue_AVX512_Uint64x8(mask archsimd.Mask64x8) bool {
+	return AllTrue_AVX512_F64x8(mask)
+}
+
+// AllFalse_AVX512_Uint32x16 returns true if all lanes are false.
+func AllFalse_AVX512_Uint32x16(mask archsimd.Mask32x16) bool {
+	return AllFalse_AVX512_F32x16(mask)
+}
+
+// AllFalse_AVX512_Uint64x8 returns true if all lanes are false.
+func AllFalse_AVX512_Uint64x8(mask archsimd.Mask64x8) bool {
+	return AllFalse_AVX512_F64x8(mask)
+}
+
+// FindFirstTrue_AVX512_Uint32x16 returns index of first true lane, or -1 if none.
+func FindFirstTrue_AVX512_Uint32x16(mask archsimd.Mask32x16) int {
+	return FindFirstTrue_AVX512_F32x16(mask)
+}
+
+// FindFirstTrue_AVX512_Uint64x8 returns index of first true lane, or -1 if none.
+func FindFirstTrue_AVX512_Uint64x8(mask archsimd.Mask64x8) int {
+	return FindFirstTrue_AVX512_F64x8(mask)
+}
+
+// FindLastTrue_AVX512_Uint32x16 returns index of last true lane, or -1 if none.
+func FindLastTrue_AVX512_Uint32x16(mask archsimd.Mask32x16) int {
+	return FindLastTrue_AVX512_F32x16(mask)
+}
+
+// FindLastTrue_AVX512_Uint64x8 returns index of last true lane, or -1 if none.
+func FindLastTrue_AVX512_Uint64x8(mask archsimd.Mask64x8) int {
+	return FindLastTrue_AVX512_F64x8(mask)
+}
+
+// ============================================================================
 // IfThenElse wrappers
 // ============================================================================
 
@@ -624,4 +734,86 @@ func And_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 // And_AVX512_F64x8 returns bitwise AND of two vectors.
 func And_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	return a.AsInt64x8().And(b.AsInt64x8()).AsFloat64x8()
+}
+
+// ============================================================================
+// Reduction operations
+// ============================================================================
+
+// ReduceMin_AVX512_F32x16 returns the minimum element of the vector.
+func ReduceMin_AVX512_F32x16(v archsimd.Float32x16) float32 {
+	var data [16]float32
+	v.StoreSlice(data[:])
+	min := data[0]
+	for i := 1; i < 16; i++ {
+		if data[i] < min {
+			min = data[i]
+		}
+	}
+	return min
+}
+
+// ReduceMin_AVX512_F64x8 returns the minimum element of the vector.
+func ReduceMin_AVX512_F64x8(v archsimd.Float64x8) float64 {
+	var data [8]float64
+	v.StoreSlice(data[:])
+	min := data[0]
+	for i := 1; i < 8; i++ {
+		if data[i] < min {
+			min = data[i]
+		}
+	}
+	return min
+}
+
+// ReduceMax_AVX512_F32x16 returns the maximum element of the vector.
+func ReduceMax_AVX512_F32x16(v archsimd.Float32x16) float32 {
+	var data [16]float32
+	v.StoreSlice(data[:])
+	max := data[0]
+	for i := 1; i < 16; i++ {
+		if data[i] > max {
+			max = data[i]
+		}
+	}
+	return max
+}
+
+// ReduceMax_AVX512_F64x8 returns the maximum element of the vector.
+func ReduceMax_AVX512_F64x8(v archsimd.Float64x8) float64 {
+	var data [8]float64
+	v.StoreSlice(data[:])
+	max := data[0]
+	for i := 1; i < 8; i++ {
+		if data[i] > max {
+			max = data[i]
+		}
+	}
+	return max
+}
+
+// ReduceMax_AVX512_I32x16 returns the maximum element of the vector.
+func ReduceMax_AVX512_I32x16(v archsimd.Int32x16) int32 {
+	var data [16]int32
+	v.StoreSlice(data[:])
+	max := data[0]
+	for i := 1; i < 16; i++ {
+		if data[i] > max {
+			max = data[i]
+		}
+	}
+	return max
+}
+
+// ReduceMax_AVX512_I64x8 returns the maximum element of the vector.
+func ReduceMax_AVX512_I64x8(v archsimd.Int64x8) int64 {
+	var data [8]int64
+	v.StoreSlice(data[:])
+	max := data[0]
+	for i := 1; i < 8; i++ {
+		if data[i] > max {
+			max = data[i]
+		}
+	}
+	return max
 }

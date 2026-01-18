@@ -4,7 +4,7 @@
 // 	clang   21.1.8
 // 	objdump 2.45.1
 // flags: -O3
-// source: vec_neon_arm64.c
+// source: ../c/vec_neon_arm64.c
 
 package asm
 

@@ -139,3 +139,69 @@ func BaseCopyIf_avx2_Int64(src []int64, dst []int64, pred func(archsimd.Int64x4)
 	}
 	return dstIdx
 }
+
+func BaseCopyIf_avx2_Uint32(src []uint32, dst []uint32, pred func(archsimd.Uint32x8) archsimd.Mask32x8) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := 8
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := archsimd.LoadUint32x8Slice(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX2_Uint32x8(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := [8]uint32{}
+		copy(buf[:], src[i:i+remaining])
+		v := archsimd.LoadUint32x8Slice(buf[:])
+		mask := pred(v)
+		tailMask := hwy.FirstN_AVX2_Uint32x8(remaining)
+		mask = mask.And(tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX2_Uint32x8(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}
+
+func BaseCopyIf_avx2_Uint64(src []uint64, dst []uint64, pred func(archsimd.Uint64x4) archsimd.Mask64x4) int {
+	n := len(src)
+	dstLen := len(dst)
+	if n == 0 || dstLen == 0 {
+		return 0
+	}
+	lanes := 4
+	dstIdx := 0
+	i := 0
+	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
+		v := archsimd.LoadUint64x4Slice(src[i:])
+		mask := pred(v)
+		remaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX2_Uint64x4(v, mask, dst[dstIdx:]), remaining)
+		dstIdx += count
+		if dstIdx >= dstLen {
+			break
+		}
+	}
+	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
+		buf := [4]uint64{}
+		copy(buf[:], src[i:i+remaining])
+		v := archsimd.LoadUint64x4Slice(buf[:])
+		mask := pred(v)
+		tailMask := hwy.FirstN_AVX2_Uint64x4(remaining)
+		mask = mask.And(tailMask)
+		dstRemaining := dstLen - dstIdx
+		count := min(hwy.CompressStore_AVX2_Uint64x4(v, mask, dst[dstIdx:]), dstRemaining)
+		dstIdx += count
+	}
+	return dstIdx
+}

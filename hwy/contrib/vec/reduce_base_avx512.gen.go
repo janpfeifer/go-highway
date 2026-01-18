@@ -166,7 +166,7 @@ func BaseMin_avx512(v []float32) float32 {
 		va := archsimd.LoadFloat32x16Slice(v[i:])
 		minVec = minVec.Min(va)
 	}
-	result := minVec.ReduceMin()
+	result := hwy.ReduceMin_AVX512_F32x16(minVec)
 	for ; i < len(v); i++ {
 		if v[i] < result {
 			result = v[i]
@@ -195,7 +195,7 @@ func BaseMin_avx512_Float64(v []float64) float64 {
 		va := archsimd.LoadFloat64x8Slice(v[i:])
 		minVec = minVec.Min(va)
 	}
-	result := minVec.ReduceMin()
+	result := hwy.ReduceMin_AVX512_F64x8(minVec)
 	for ; i < len(v); i++ {
 		if v[i] < result {
 			result = v[i]
@@ -224,7 +224,7 @@ func BaseMax_avx512(v []float32) float32 {
 		va := archsimd.LoadFloat32x16Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX512_F32x16(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -253,7 +253,7 @@ func BaseMax_avx512_Float64(v []float64) float64 {
 		va := archsimd.LoadFloat64x8Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX512_F64x8(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -282,7 +282,7 @@ func BaseMax_avx512_Int32(v []int32) int32 {
 		va := archsimd.LoadInt32x16Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX512_I32x16(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -311,7 +311,7 @@ func BaseMax_avx512_Int64(v []int64) int64 {
 		va := archsimd.LoadInt64x8Slice(v[i:])
 		maxVec = maxVec.Max(va)
 	}
-	result := maxVec.ReduceMax()
+	result := hwy.ReduceMax_AVX512_I64x8(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] > result {
 			result = v[i]
@@ -482,8 +482,8 @@ func BaseMinMax_avx512(v []float32) (min float32, max float32) {
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
 	}
-	min = minVec.ReduceMin()
-	max = maxVec.ReduceMax()
+	min = hwy.ReduceMin_AVX512_F32x16(minVec)
+	max = hwy.ReduceMax_AVX512_F32x16(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] < min {
 			min = v[i]
@@ -521,8 +521,8 @@ func BaseMinMax_avx512_Float64(v []float64) (min float64, max float64) {
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
 	}
-	min = minVec.ReduceMin()
-	max = maxVec.ReduceMax()
+	min = hwy.ReduceMin_AVX512_F64x8(minVec)
+	max = hwy.ReduceMax_AVX512_F64x8(maxVec)
 	for ; i < len(v); i++ {
 		if v[i] < min {
 			min = v[i]
