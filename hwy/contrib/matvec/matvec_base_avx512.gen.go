@@ -87,11 +87,7 @@ func BaseMatVec_avx512(m []float32, rows int, cols int, v []float32, result []fl
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}
-		acc := func() float32 {
-			var _simd_temp [16]float32
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7] + _simd_temp[8] + _simd_temp[9] + _simd_temp[10] + _simd_temp[11] + _simd_temp[12] + _simd_temp[13] + _simd_temp[14] + _simd_temp[15]
-		}()
+		acc := hwy.ReduceSum_AVX512_F32x16(sum)
 		for ; j < cols; j++ {
 			acc += row[j] * v[j]
 		}
@@ -120,11 +116,7 @@ func BaseMatVec_avx512_Float64(m []float64, rows int, cols int, v []float64, res
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}
-		acc := func() float64 {
-			var _simd_temp [8]float64
-			sum.StoreSlice(_simd_temp[:])
-			return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-		}()
+		acc := hwy.ReduceSum_AVX512_F64x8(sum)
 		for ; j < cols; j++ {
 			acc += row[j] * v[j]
 		}

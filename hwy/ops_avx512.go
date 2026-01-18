@@ -10,6 +10,23 @@ import (
 // archsimd vector types. These are core ops (direct hardware instructions),
 // not transcendental functions which belong in contrib/math.
 
+// ReduceSum_AVX512_F32x16 returns the sum of all 16 float32 elements.
+func ReduceSum_AVX512_F32x16(v archsimd.Float32x16) float32 {
+	// Reduce 16 -> 8 using AVX2 function
+	lo := v.GetLo() // Float32x8
+	hi := v.GetHi() // Float32x8
+	sum8 := lo.Add(hi)
+	return ReduceSum_AVX2_F32x8(sum8)
+}
+
+// ReduceSum_AVX512_F64x8 returns the sum of all 8 float64 elements.
+func ReduceSum_AVX512_F64x8(v archsimd.Float64x8) float64 {
+	lo := v.GetLo() // Float64x4
+	hi := v.GetHi() // Float64x4
+	sum4 := lo.Add(hi)
+	return ReduceSum_AVX2_F64x4(sum4)
+}
+
 // Sqrt_AVX512_F32x16 computes sqrt(x) for a single Float32x16 vector.
 // Uses the hardware VSQRTPS instruction which provides correctly rounded results.
 func Sqrt_AVX512_F32x16(x archsimd.Float32x16) archsimd.Float32x16 {
@@ -56,4 +73,68 @@ func GetLane_AVX512_Uint64x8(v archsimd.Uint64x8, lane int) uint64 {
 		return GetLane_AVX2_Uint64x4(v.GetLo(), lane)
 	}
 	return GetLane_AVX2_Uint64x4(v.GetHi(), lane-4)
+}
+
+// ===== Load4 wrappers for 4x loop unrolling =====
+// Unlike NEON which has a single ld1 {v0,v1,v2,v3} instruction,
+// AVX-512 loads are already 512-bit, so we simply perform 4 separate loads.
+
+// Load4_AVX512_F32x16 loads 4 consecutive Float32x16 vectors (64 floats = 256 bytes).
+func Load4_AVX512_F32x16(s []float32) (archsimd.Float32x16, archsimd.Float32x16, archsimd.Float32x16, archsimd.Float32x16) {
+	v0 := archsimd.LoadFloat32x16Slice(s)
+	v1 := archsimd.LoadFloat32x16Slice(s[16:])
+	v2 := archsimd.LoadFloat32x16Slice(s[32:])
+	v3 := archsimd.LoadFloat32x16Slice(s[48:])
+	return v0, v1, v2, v3
+}
+
+// Load4_AVX512_F64x8 loads 4 consecutive Float64x8 vectors (32 doubles = 256 bytes).
+func Load4_AVX512_F64x8(s []float64) (archsimd.Float64x8, archsimd.Float64x8, archsimd.Float64x8, archsimd.Float64x8) {
+	v0 := archsimd.LoadFloat64x8Slice(s)
+	v1 := archsimd.LoadFloat64x8Slice(s[8:])
+	v2 := archsimd.LoadFloat64x8Slice(s[16:])
+	v3 := archsimd.LoadFloat64x8Slice(s[24:])
+	return v0, v1, v2, v3
+}
+
+// Load4_AVX512_I32x16 loads 4 consecutive Int32x16 vectors (64 ints = 256 bytes).
+func Load4_AVX512_I32x16(s []int32) (archsimd.Int32x16, archsimd.Int32x16, archsimd.Int32x16, archsimd.Int32x16) {
+	v0 := archsimd.LoadInt32x16Slice(s)
+	v1 := archsimd.LoadInt32x16Slice(s[16:])
+	v2 := archsimd.LoadInt32x16Slice(s[32:])
+	v3 := archsimd.LoadInt32x16Slice(s[48:])
+	return v0, v1, v2, v3
+}
+
+// Load4_AVX512_I64x8 loads 4 consecutive Int64x8 vectors (32 longs = 256 bytes).
+func Load4_AVX512_I64x8(s []int64) (archsimd.Int64x8, archsimd.Int64x8, archsimd.Int64x8, archsimd.Int64x8) {
+	v0 := archsimd.LoadInt64x8Slice(s)
+	v1 := archsimd.LoadInt64x8Slice(s[8:])
+	v2 := archsimd.LoadInt64x8Slice(s[16:])
+	v3 := archsimd.LoadInt64x8Slice(s[24:])
+	return v0, v1, v2, v3
+}
+
+// Load4_AVX512_Uint32x16 loads 4 consecutive Uint32x16 vectors (64 uints = 256 bytes).
+func Load4_AVX512_Uint32x16(s []uint32) (archsimd.Uint32x16, archsimd.Uint32x16, archsimd.Uint32x16, archsimd.Uint32x16) {
+	v0 := archsimd.LoadUint32x16Slice(s)
+	v1 := archsimd.LoadUint32x16Slice(s[16:])
+	v2 := archsimd.LoadUint32x16Slice(s[32:])
+	v3 := archsimd.LoadUint32x16Slice(s[48:])
+	return v0, v1, v2, v3
+}
+
+// Load4_AVX512_Uint64x8 loads 4 consecutive Uint64x8 vectors (32 ulongs = 256 bytes).
+func Load4_AVX512_Uint64x8(s []uint64) (archsimd.Uint64x8, archsimd.Uint64x8, archsimd.Uint64x8, archsimd.Uint64x8) {
+	v0 := archsimd.LoadUint64x8Slice(s)
+	v1 := archsimd.LoadUint64x8Slice(s[8:])
+	v2 := archsimd.LoadUint64x8Slice(s[16:])
+	v3 := archsimd.LoadUint64x8Slice(s[24:])
+	return v0, v1, v2, v3
+}
+
+// Load4_AVX512_Vec loads 4 consecutive Vec vectors (for Float16/BFloat16).
+// Falls back to the generic hwy.Load4 implementation.
+func Load4_AVX512_Vec[T Lanes](s []T) (Vec[T], Vec[T], Vec[T], Vec[T]) {
+	return Load4(s)
 }

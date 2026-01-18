@@ -1395,18 +1395,52 @@ BB10_10:
 BB10_11:
 	RET
 
+TEXT ·load4_f16x8(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402400     // ld1.8h	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·store4_f16x8(SB), $0-72
+	MOVD ptr+0(FP), R0
+	MOVD v0_0+8(FP), R9
+	MOVD v0_8+16(FP), R10
+	VMOV R9, V0.D[0]
+	VMOV R10, V0.D[1]
+	MOVD v1_0+24(FP), R9
+	MOVD v1_8+32(FP), R10
+	VMOV R9, V1.D[0]
+	VMOV R10, V1.D[1]
+	MOVD v2_0+40(FP), R9
+	MOVD v2_8+48(FP), R10
+	VMOV R9, V2.D[0]
+	VMOV R10, V2.D[1]
+	MOVD v3_0+56(FP), R9
+	MOVD v3_8+64(FP), R10
+	VMOV R9, V3.D[0]
+	VMOV R10, V3.D[1]
+	WORD $0x4c002400      // st1.8h	{ v0, v1, v2, v3 }, [x0]
+	RET
+
 TEXT ·sqrt_f16_neon(SB), $0-24
 	MOVD a+0(FP), R0
 	MOVD result+8(FP), R1
 	MOVD len+16(FP), R2
 	WORD $0xf9400048      // ldr	x8, [x2]
 	WORD $0xf100811f      // cmp	x8, #32
-	BLT  BB11_5
+	BLT  BB13_5
 	WORD $0x91008029      // add	x9, x1, #32
 	WORD $0x9100800b      // add	x11, x0, #32
 	WORD $0x528003ea      // mov	w10, #31                        ; =0x1f
 
-BB11_2:
+BB13_2:
 	WORD $0xad7f0560 // ldp	q0, q1, [x11, #-32]
 	WORD $0xacc20d62 // ldp	q2, q3, [x11], #64
 	WORD $0x6ef9f800 // fsqrt.8h	v0, v0
@@ -1417,28 +1451,28 @@ BB11_2:
 	WORD $0xac820520 // stp	q0, q1, [x9], #64
 	WORD $0x9100814a // add	x10, x10, #32
 	WORD $0xeb08015f // cmp	x10, x8
-	BLT  BB11_2
+	BLT  BB13_2
 	WORD $0xd1007d49 // sub	x9, x10, #31
 	WORD $0xb240092a // orr	x10, x9, #0x7
 	WORD $0xeb08015f // cmp	x10, x8
-	BLT  BB11_6
+	BLT  BB13_6
 
-BB11_4:
+BB13_4:
 	WORD $0xaa0903ec // mov	x12, x9
-	B    BB11_8
+	B    BB13_8
 
-BB11_5:
+BB13_5:
 	WORD $0xd2800009 // mov	x9, #0                          ; =0x0
 	WORD $0xb240092a // orr	x10, x9, #0x7
 	WORD $0xeb08015f // cmp	x10, x8
-	BGE  BB11_4
+	BGE  BB13_4
 
-BB11_6:
+BB13_6:
 	WORD $0xd37ff92b // lsl	x11, x9, #1
 	WORD $0x8b0b000a // add	x10, x0, x11
 	WORD $0x8b0b002b // add	x11, x1, x11
 
-BB11_7:
+BB13_7:
 	WORD $0x3cc10540 // ldr	q0, [x10], #16
 	WORD $0x6ef9f800 // fsqrt.8h	v0, v0
 	WORD $0x3c810560 // str	q0, [x11], #16
@@ -1446,16 +1480,16 @@ BB11_7:
 	WORD $0x91003d2d // add	x13, x9, #15
 	WORD $0xaa0c03e9 // mov	x9, x12
 	WORD $0xeb0801bf // cmp	x13, x8
-	BLT  BB11_7
+	BLT  BB13_7
 
-BB11_8:
+BB13_8:
 	WORD $0xeb0c0108 // subs	x8, x8, x12
-	BLE  BB11_11
+	BLE  BB13_11
 	WORD $0xd37ff98a // lsl	x10, x12, #1
 	WORD $0x8b0a0029 // add	x9, x1, x10
 	WORD $0x8b0a000a // add	x10, x0, x10
 
-BB11_10:
+BB13_10:
 	WORD $0x7c402540 // ldr	h0, [x10], #2
 	WORD $0x0e020400 // dup.4h	v0, v0[0]
 	WORD $0x0e217800 // fcvtl	v0.4s, v0.4h
@@ -1463,7 +1497,7 @@ BB11_10:
 	WORD $0x0e216800 // fcvtn	v0.4h, v0.4s
 	WORD $0x0d9f4120 // st1.h	{ v0 }[0], [x9], #2
 	WORD $0xf1000508 // subs	x8, x8, #1
-	BNE  BB11_10
+	BNE  BB13_10
 
-BB11_11:
+BB13_11:
 	RET

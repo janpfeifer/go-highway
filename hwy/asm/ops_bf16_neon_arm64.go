@@ -21,3 +21,9 @@ func dot_bf16_neon(a, b, acc, len unsafe.Pointer)
 
 //go:noescape
 func matmul_bf16_neon(a, b, c, m_ptr, n_ptr, k_ptr, lda_ptr, ldb_ptr, ldc_ptr unsafe.Pointer)
+
+//go:noescape
+func load4_bf16x8(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func store4_bf16x8(ptr unsafe.Pointer, v0, v1, v2, v3 [16]byte)

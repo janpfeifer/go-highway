@@ -11,16 +11,31 @@ func BaseDot_fallback_Float16(a []hwy.Float16, b []hwy.Float16) hwy.Float16 {
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := hwy.Zero[hwy.Float16]()
-	lanes := sum.NumLanes()
+	sum0 := hwy.Zero[hwy.Float16]()
+	sum1 := hwy.Zero[hwy.Float16]()
+	sum2 := hwy.Zero[hwy.Float16]()
+	sum3 := hwy.Zero[hwy.Float16]()
+	lanes := sum0.NumLanes()
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4(b[i:])
+		sum0 = hwy.MulAdd(va0, vb0, sum0)
+		sum1 = hwy.MulAdd(va1, vb1, sum1)
+		sum2 = hwy.MulAdd(va2, vb2, sum2)
+		sum3 = hwy.MulAdd(va3, vb3, sum3)
+	}
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
-		prod := hwy.Mul(va, vb)
-		sum = hwy.Add(sum, prod)
+		sum0 = hwy.MulAdd(va, vb, sum0)
+		i += lanes
 	}
-	result := hwy.ReduceSum(sum).Float32()
+	sum0 = hwy.Add(sum0, sum1)
+	sum2 = hwy.Add(sum2, sum3)
+	sum0 = hwy.Add(sum0, sum2)
+	result := hwy.ReduceSum(sum0).Float32()
 	for ; i < n; i++ {
 		result += a[i].Float32() * b[i].Float32()
 	}
@@ -32,16 +47,31 @@ func BaseDot_fallback_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16) hwy.BFloat16 
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := hwy.Zero[hwy.BFloat16]()
-	lanes := sum.NumLanes()
+	sum0 := hwy.Zero[hwy.BFloat16]()
+	sum1 := hwy.Zero[hwy.BFloat16]()
+	sum2 := hwy.Zero[hwy.BFloat16]()
+	sum3 := hwy.Zero[hwy.BFloat16]()
+	lanes := sum0.NumLanes()
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4(b[i:])
+		sum0 = hwy.MulAdd(va0, vb0, sum0)
+		sum1 = hwy.MulAdd(va1, vb1, sum1)
+		sum2 = hwy.MulAdd(va2, vb2, sum2)
+		sum3 = hwy.MulAdd(va3, vb3, sum3)
+	}
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
-		prod := hwy.Mul(va, vb)
-		sum = hwy.Add(sum, prod)
+		sum0 = hwy.MulAdd(va, vb, sum0)
+		i += lanes
 	}
-	result := hwy.ReduceSum(sum).Float32()
+	sum0 = hwy.Add(sum0, sum1)
+	sum2 = hwy.Add(sum2, sum3)
+	sum0 = hwy.Add(sum0, sum2)
+	result := hwy.ReduceSum(sum0).Float32()
 	for ; i < n; i++ {
 		result += a[i].Float32() * b[i].Float32()
 	}
@@ -53,16 +83,31 @@ func BaseDot_fallback(a []float32, b []float32) float32 {
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := hwy.Zero[float32]()
-	lanes := sum.NumLanes()
+	sum0 := hwy.Zero[float32]()
+	sum1 := hwy.Zero[float32]()
+	sum2 := hwy.Zero[float32]()
+	sum3 := hwy.Zero[float32]()
+	lanes := sum0.NumLanes()
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4(b[i:])
+		sum0 = hwy.MulAdd(va0, vb0, sum0)
+		sum1 = hwy.MulAdd(va1, vb1, sum1)
+		sum2 = hwy.MulAdd(va2, vb2, sum2)
+		sum3 = hwy.MulAdd(va3, vb3, sum3)
+	}
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
-		prod := hwy.Mul(va, vb)
-		sum = hwy.Add(sum, prod)
+		sum0 = hwy.MulAdd(va, vb, sum0)
+		i += lanes
 	}
-	result := hwy.ReduceSum(sum)
+	sum0 = hwy.Add(sum0, sum1)
+	sum2 = hwy.Add(sum2, sum3)
+	sum0 = hwy.Add(sum0, sum2)
+	result := hwy.ReduceSum(sum0)
 	for ; i < n; i++ {
 		result += a[i] * b[i]
 	}
@@ -74,16 +119,31 @@ func BaseDot_fallback_Float64(a []float64, b []float64) float64 {
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := hwy.Zero[float64]()
-	lanes := sum.NumLanes()
+	sum0 := hwy.Zero[float64]()
+	sum1 := hwy.Zero[float64]()
+	sum2 := hwy.Zero[float64]()
+	sum3 := hwy.Zero[float64]()
+	lanes := sum0.NumLanes()
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4(b[i:])
+		sum0 = hwy.MulAdd(va0, vb0, sum0)
+		sum1 = hwy.MulAdd(va1, vb1, sum1)
+		sum2 = hwy.MulAdd(va2, vb2, sum2)
+		sum3 = hwy.MulAdd(va3, vb3, sum3)
+	}
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
-		prod := hwy.Mul(va, vb)
-		sum = hwy.Add(sum, prod)
+		sum0 = hwy.MulAdd(va, vb, sum0)
+		i += lanes
 	}
-	result := hwy.ReduceSum(sum)
+	sum0 = hwy.Add(sum0, sum1)
+	sum2 = hwy.Add(sum2, sum3)
+	sum0 = hwy.Add(sum0, sum2)
+	result := hwy.ReduceSum(sum0)
 	for ; i < n; i++ {
 		result += a[i] * b[i]
 	}

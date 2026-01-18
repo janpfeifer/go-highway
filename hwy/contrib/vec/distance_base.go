@@ -28,21 +28,50 @@ func BaseL2SquaredDistance[T hwy.Floats](a, b []T) T {
 	}
 
 	n := min(len(a), len(b))
-	sum := hwy.Zero[T]()
-	lanes := sum.NumLanes()
 
-	// Process full vectors
+	// Use 4 accumulators for better instruction-level parallelism
+	sum0 := hwy.Zero[T]()
+	sum1 := hwy.Zero[T]()
+	sum2 := hwy.Zero[T]()
+	sum3 := hwy.Zero[T]()
+	lanes := sum0.NumLanes()
+
+	// Process 4 vectors at a time (4x loop unrolling)
+	// On ARM NEON, Load4 maps to a single ld1 {v0,v1,v2,v3} instruction
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		// Load 4 consecutive vectors from each slice
+		va0, va1, va2, va3 := hwy.Load4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4(b[i:])
+
+		// Compute differences
+		diff0 := hwy.Sub(va0, vb0)
+		diff1 := hwy.Sub(va1, vb1)
+		diff2 := hwy.Sub(va2, vb2)
+		diff3 := hwy.Sub(va3, vb3)
+
+		// Accumulate squared differences using FMA: sum += diff * diff
+		sum0 = hwy.MulAdd(diff0, diff0, sum0)
+		sum1 = hwy.MulAdd(diff1, diff1, sum1)
+		sum2 = hwy.MulAdd(diff2, diff2, sum2)
+		sum3 = hwy.MulAdd(diff3, diff3, sum3)
+	}
+
+	// Process remaining full vectors (1 at a time)
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
 		diff := hwy.Sub(va, vb)
-		diffSq := hwy.Mul(diff, diff)
-		sum = hwy.Add(sum, diffSq)
+		sum0 = hwy.MulAdd(diff, diff, sum0)
+		i += lanes
 	}
 
-	// Reduce vector sum to scalar
-	result := hwy.ReduceSum(sum)
+	// Combine accumulators and reduce to scalar
+	sum0 = hwy.Add(sum0, sum1)
+	sum2 = hwy.Add(sum2, sum3)
+	sum0 = hwy.Add(sum0, sum2)
+	result := hwy.ReduceSum(sum0)
 
 	// Handle tail elements with scalar code
 	for ; i < n; i++ {

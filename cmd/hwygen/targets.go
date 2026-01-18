@@ -40,6 +40,7 @@ func AVX2Target() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
 			"Load":      {Name: "Load", IsMethod: false},      // archsimd.LoadFloat32x8Slice
+			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4_AVX2_Float32 - 4 separate loads
 			"Store":     {Name: "Store", IsMethod: true},      // v.StoreSlice
 			"Set":       {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8
 			"Const":     {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8 (same as Set)
@@ -105,8 +106,8 @@ func AVX2Target() Target {
 			"ShiftRight":    {Name: "ShiftAllRight", IsMethod: true}, // Alias for ShiftAllRight
 
 			// ===== Reductions =====
-			// archsimd doesn't have ReduceMin/ReduceMax methods. Using hwy wrappers.
-			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
+			// archsimd doesn't have ReduceSum/ReduceMin/ReduceMax methods. Using hwy wrappers.
+			"ReduceSum": {Package: "hwy", Name: "ReduceSum", IsMethod: false},
 			"ReduceMin": {Package: "hwy", Name: "ReduceMin", IsMethod: false},
 			"ReduceMax": {Package: "hwy", Name: "ReduceMax", IsMethod: false},
 
@@ -233,6 +234,7 @@ func AVX512Target() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
 			"Load":      {Name: "Load", IsMethod: false},
+			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4_AVX512_Float32 - 4 separate loads
 			"Store":     {Name: "Store", IsMethod: true},
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
@@ -299,8 +301,8 @@ func AVX512Target() Target {
 			"ShiftRight":    {Name: "ShiftAllRight", IsMethod: true}, // Alias for ShiftAllRight
 
 			// ===== Reductions =====
-			// archsimd doesn't have ReduceMin/ReduceMax methods. Using hwy wrappers.
-			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
+			// archsimd doesn't have ReduceSum/ReduceMin/ReduceMax methods. Using hwy wrappers.
+			"ReduceSum": {Package: "hwy", Name: "ReduceSum", IsMethod: false},
 			"ReduceMin": {Package: "hwy", Name: "ReduceMin", IsMethod: false},
 			"ReduceMax": {Package: "hwy", Name: "ReduceMax", IsMethod: false},
 
@@ -428,6 +430,7 @@ func FallbackTarget() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations - use hwy package =====
 			"Load":      {Package: "hwy", Name: "Load", IsMethod: false},
+			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4 fallback (4 separate loads)
 			"Store":     {Package: "hwy", Name: "Store", IsMethod: false},
 			"Set":       {Package: "hwy", Name: "Set", IsMethod: false},
 			"Zero":      {Package: "hwy", Name: "Zero", IsMethod: false},
@@ -612,6 +615,7 @@ func NEONTarget() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
 			"Load":      {Name: "Load", IsMethod: false},
+			"Load4":     {Name: "Load4", IsMethod: false}, // asm.Load4Float32x4Slice - single ld1 instruction
 			"Store":     {Name: "Store", IsMethod: true},
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set

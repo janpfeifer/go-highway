@@ -2077,3 +2077,107 @@ TEXT ·sel_u64x2(SB), $0-64
 	MOVD R9, result_0+48(FP)
 	MOVD R10, result_8+56(FP)
 	RET
+
+TEXT ·load4_f32x4(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402800     // ld1.4s	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_f64x2(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402c00     // ld1.2d	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_i32x4(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402800     // ld1.4s	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_i64x2(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402c00     // ld1.2d	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_u32x4(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402800     // ld1.4s	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_u64x2(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402c00     // ld1.2d	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_u8x16(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402000     // ld1.16b	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET
+
+TEXT ·load4_u16x8(SB), $0-40
+	MOVD ptr+0(FP), R0
+	MOVD out0+8(FP), R1
+	MOVD out1+16(FP), R2
+	MOVD out2+24(FP), R3
+	MOVD out3+32(FP), R4
+	WORD $0x4c402400     // ld1.8h	{ v0, v1, v2, v3 }, [x0]
+	WORD $0x3d800020     // str	q0, [x1]
+	WORD $0x3d800041     // str	q1, [x2]
+	WORD $0x3d800062     // str	q2, [x3]
+	WORD $0x3d800083     // str	q3, [x4]
+	RET

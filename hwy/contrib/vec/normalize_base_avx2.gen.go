@@ -97,11 +97,7 @@ func BaseNormalize_avx2(dst []float32) {
 	if i < len(dst) {
 		BaseNormalize_fallback(dst[i:len(dst)])
 	}
-	squaredNorm := func() float32 {
-		var _simd_temp [8]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-	}()
+	squaredNorm := hwy.ReduceSum_AVX2_F32x8(sum)
 	for ; i < len(dst); i++ {
 		squaredNorm += dst[i] * dst[i]
 	}
@@ -137,11 +133,7 @@ func BaseNormalize_avx2_Float64(dst []float64) {
 	if i < len(dst) {
 		BaseNormalize_fallback_Float64(dst[i:len(dst)])
 	}
-	squaredNorm := func() float64 {
-		var _simd_temp [4]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-	}()
+	squaredNorm := hwy.ReduceSum_AVX2_F64x4(sum)
 	for ; i < len(dst); i++ {
 		squaredNorm += dst[i] * dst[i]
 	}
@@ -254,11 +246,7 @@ func BaseNormalizeTo_avx2(dst []float32, src []float32) {
 	if i < n {
 		BaseNormalizeTo_fallback(dst[i:n], src[i:n])
 	}
-	squaredNorm := func() float32 {
-		var _simd_temp [8]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-	}()
+	squaredNorm := hwy.ReduceSum_AVX2_F32x8(sum)
 	for ; i < n; i++ {
 		squaredNorm += src[i] * src[i]
 	}
@@ -296,11 +284,7 @@ func BaseNormalizeTo_avx2_Float64(dst []float64, src []float64) {
 	if i < n {
 		BaseNormalizeTo_fallback_Float64(dst[i:n], src[i:n])
 	}
-	squaredNorm := func() float64 {
-		var _simd_temp [4]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-	}()
+	squaredNorm := hwy.ReduceSum_AVX2_F64x4(sum)
 	for ; i < n; i++ {
 		squaredNorm += src[i] * src[i]
 	}

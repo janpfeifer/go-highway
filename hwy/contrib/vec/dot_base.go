@@ -24,20 +24,43 @@ func BaseDot[T hwy.Floats](a, b []T) T {
 	}
 
 	n := min(len(a), len(b))
-	sum := hwy.Zero[T]()
-	lanes := sum.NumLanes()
 
-	// Process full vectors
+	// Use 4 accumulators for better instruction-level parallelism
+	sum0 := hwy.Zero[T]()
+	sum1 := hwy.Zero[T]()
+	sum2 := hwy.Zero[T]()
+	sum3 := hwy.Zero[T]()
+	lanes := sum0.NumLanes()
+
+	// Process 4 vectors at a time (4x loop unrolling)
+	// On ARM NEON, Load4 maps to a single ld1 {v0,v1,v2,v3} instruction
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
-		prod := hwy.Mul(va, vb)
-		sum = hwy.Add(sum, prod)
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		// Load 4 consecutive vectors from each slice
+		va0, va1, va2, va3 := hwy.Load4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4(b[i:])
+
+		// Accumulate products using FMA: sum += a * b
+		sum0 = hwy.MulAdd(va0, vb0, sum0)
+		sum1 = hwy.MulAdd(va1, vb1, sum1)
+		sum2 = hwy.MulAdd(va2, vb2, sum2)
+		sum3 = hwy.MulAdd(va3, vb3, sum3)
 	}
 
-	// Reduce vector sum to scalar
-	result := hwy.ReduceSum(sum)
+	// Process remaining full vectors (1 at a time)
+	for i+lanes <= n {
+		va := hwy.Load(a[i:])
+		vb := hwy.Load(b[i:])
+		sum0 = hwy.MulAdd(va, vb, sum0)
+		i += lanes
+	}
+
+	// Combine accumulators and reduce to scalar
+	sum0 = hwy.Add(sum0, sum1)
+	sum2 = hwy.Add(sum2, sum3)
+	sum0 = hwy.Add(sum0, sum2)
+	result := hwy.ReduceSum(sum0)
 
 	// Handle tail elements with scalar code
 	for ; i < n; i++ {

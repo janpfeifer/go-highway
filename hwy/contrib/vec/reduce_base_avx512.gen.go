@@ -55,11 +55,7 @@ func BaseSum_avx512(v []float32) float32 {
 		va := archsimd.LoadFloat32x16Slice(v[i:])
 		sum = sum.Add(va)
 	}
-	result := func() float32 {
-		var _simd_temp [16]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7] + _simd_temp[8] + _simd_temp[9] + _simd_temp[10] + _simd_temp[11] + _simd_temp[12] + _simd_temp[13] + _simd_temp[14] + _simd_temp[15]
-	}()
+	result := hwy.ReduceSum_AVX512_F32x16(sum)
 	for ; i < len(v); i++ {
 		result += v[i]
 	}
@@ -77,11 +73,7 @@ func BaseSum_avx512_Float64(v []float64) float64 {
 		va := archsimd.LoadFloat64x8Slice(v[i:])
 		sum = sum.Add(va)
 	}
-	result := func() float64 {
-		var _simd_temp [8]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-	}()
+	result := hwy.ReduceSum_AVX512_F64x8(sum)
 	for ; i < len(v); i++ {
 		result += v[i]
 	}

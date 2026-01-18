@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"slices"
 	"strings"
 )
 
@@ -788,11 +789,8 @@ func (pc *ParsedCondition) Evaluate(targetName, elemType string) bool {
 		// Check if the element type belongs to this category
 		typeSuffix := GetTypeSuffix(elemType)
 		if types, ok := categoryTypes[pc.Value]; ok {
-			for _, t := range types {
-				if t == typeSuffix {
-					result = true
-					break
-				}
+			if slices.Contains(types, typeSuffix) {
+				result = true
 			}
 		}
 	} else {

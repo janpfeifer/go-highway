@@ -8,6 +8,8 @@
 
 package asm
 
+import "unsafe"
+
 //go:noescape
 func add_f32x4(a, b [16]byte) (result [16]byte)
 
@@ -427,3 +429,27 @@ func xor_u64x2(a, b [16]byte) (result [16]byte)
 
 //go:noescape
 func sel_u64x2(mask, yes, no [16]byte) (result [16]byte)
+
+//go:noescape
+func load4_f32x4(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_f64x2(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_i32x4(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_i64x2(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_u32x4(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_u64x2(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_u8x16(ptr, out0, out1, out2, out3 unsafe.Pointer)
+
+//go:noescape
+func load4_u16x8(ptr, out0, out1, out2, out3 unsafe.Pointer)

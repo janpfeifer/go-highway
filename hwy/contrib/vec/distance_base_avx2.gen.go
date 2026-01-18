@@ -14,17 +14,36 @@ func BaseL2SquaredDistance_avx2_Float16(a []hwy.Float16, b []hwy.Float16) hwy.Fl
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := hwy.Zero[hwy.Float16]()
+	sum0 := hwy.Zero[hwy.Float16]()
+	sum1 := hwy.Zero[hwy.Float16]()
+	sum2 := hwy.Zero[hwy.Float16]()
+	sum3 := hwy.Zero[hwy.Float16]()
 	lanes := 16
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4_AVX2_Vec(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4_AVX2_Vec(b[i:])
+		diff0 := hwy.SubF16(va0, vb0)
+		diff1 := hwy.SubF16(va1, vb1)
+		diff2 := hwy.SubF16(va2, vb2)
+		diff3 := hwy.SubF16(va3, vb3)
+		sum0 = hwy.FMAF16(diff0, diff0, sum0)
+		sum1 = hwy.FMAF16(diff1, diff1, sum1)
+		sum2 = hwy.FMAF16(diff2, diff2, sum2)
+		sum3 = hwy.FMAF16(diff3, diff3, sum3)
+	}
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
 		diff := hwy.SubF16(va, vb)
-		diffSq := hwy.MulF16(diff, diff)
-		sum = hwy.AddF16(sum, diffSq)
+		sum0 = hwy.FMAF16(diff, diff, sum0)
+		i += lanes
 	}
-	result := hwy.ReduceSumF16(sum)
+	sum0 = hwy.AddF16(sum0, sum1)
+	sum2 = hwy.AddF16(sum2, sum3)
+	sum0 = hwy.AddF16(sum0, sum2)
+	result := hwy.ReduceSumF16(sum0)
 	for ; i < n; i++ {
 		d := a[i].Float32() - b[i].Float32()
 		result += d * d
@@ -37,17 +56,36 @@ func BaseL2SquaredDistance_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16) hwy
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := hwy.Zero[hwy.BFloat16]()
+	sum0 := hwy.Zero[hwy.BFloat16]()
+	sum1 := hwy.Zero[hwy.BFloat16]()
+	sum2 := hwy.Zero[hwy.BFloat16]()
+	sum3 := hwy.Zero[hwy.BFloat16]()
 	lanes := 16
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4_AVX2_Vec(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4_AVX2_Vec(b[i:])
+		diff0 := hwy.SubBF16(va0, vb0)
+		diff1 := hwy.SubBF16(va1, vb1)
+		diff2 := hwy.SubBF16(va2, vb2)
+		diff3 := hwy.SubBF16(va3, vb3)
+		sum0 = hwy.FMABF16(diff0, diff0, sum0)
+		sum1 = hwy.FMABF16(diff1, diff1, sum1)
+		sum2 = hwy.FMABF16(diff2, diff2, sum2)
+		sum3 = hwy.FMABF16(diff3, diff3, sum3)
+	}
+	for i+lanes <= n {
 		va := hwy.Load(a[i:])
 		vb := hwy.Load(b[i:])
 		diff := hwy.SubBF16(va, vb)
-		diffSq := hwy.MulBF16(diff, diff)
-		sum = hwy.AddBF16(sum, diffSq)
+		sum0 = hwy.FMABF16(diff, diff, sum0)
+		i += lanes
 	}
-	result := hwy.ReduceSumBF16(sum)
+	sum0 = hwy.AddBF16(sum0, sum1)
+	sum2 = hwy.AddBF16(sum2, sum3)
+	sum0 = hwy.AddBF16(sum0, sum2)
+	result := hwy.ReduceSumBF16(sum0)
 	for ; i < n; i++ {
 		d := a[i].Float32() - b[i].Float32()
 		result += d * d
@@ -60,21 +98,36 @@ func BaseL2SquaredDistance_avx2(a []float32, b []float32) float32 {
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := archsimd.BroadcastFloat32x8(0)
+	sum0 := archsimd.BroadcastFloat32x8(0)
+	sum1 := archsimd.BroadcastFloat32x8(0)
+	sum2 := archsimd.BroadcastFloat32x8(0)
+	sum3 := archsimd.BroadcastFloat32x8(0)
 	lanes := 8
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4_AVX2_F32x8(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4_AVX2_F32x8(b[i:])
+		diff0 := va0.Sub(vb0)
+		diff1 := va1.Sub(vb1)
+		diff2 := va2.Sub(vb2)
+		diff3 := va3.Sub(vb3)
+		sum0 = diff0.MulAdd(diff0, sum0)
+		sum1 = diff1.MulAdd(diff1, sum1)
+		sum2 = diff2.MulAdd(diff2, sum2)
+		sum3 = diff3.MulAdd(diff3, sum3)
+	}
+	for i+lanes <= n {
 		va := archsimd.LoadFloat32x8Slice(a[i:])
 		vb := archsimd.LoadFloat32x8Slice(b[i:])
 		diff := va.Sub(vb)
-		diffSq := diff.Mul(diff)
-		sum = sum.Add(diffSq)
+		sum0 = diff.MulAdd(diff, sum0)
+		i += lanes
 	}
-	result := func() float32 {
-		var _simd_temp [8]float32
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3] + _simd_temp[4] + _simd_temp[5] + _simd_temp[6] + _simd_temp[7]
-	}()
+	sum0 = sum0.Add(sum1)
+	sum2 = sum2.Add(sum3)
+	sum0 = sum0.Add(sum2)
+	result := hwy.ReduceSum_AVX2_F32x8(sum0)
 	for ; i < n; i++ {
 		d := a[i] - b[i]
 		result += d * d
@@ -87,21 +140,36 @@ func BaseL2SquaredDistance_avx2_Float64(a []float64, b []float64) float64 {
 		return 0
 	}
 	n := min(len(a), len(b))
-	sum := archsimd.BroadcastFloat64x4(0)
+	sum0 := archsimd.BroadcastFloat64x4(0)
+	sum1 := archsimd.BroadcastFloat64x4(0)
+	sum2 := archsimd.BroadcastFloat64x4(0)
+	sum3 := archsimd.BroadcastFloat64x4(0)
 	lanes := 4
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
+	stride := lanes * 4
+	for i = 0; i+stride <= n; i += stride {
+		va0, va1, va2, va3 := hwy.Load4_AVX2_F64x4(a[i:])
+		vb0, vb1, vb2, vb3 := hwy.Load4_AVX2_F64x4(b[i:])
+		diff0 := va0.Sub(vb0)
+		diff1 := va1.Sub(vb1)
+		diff2 := va2.Sub(vb2)
+		diff3 := va3.Sub(vb3)
+		sum0 = diff0.MulAdd(diff0, sum0)
+		sum1 = diff1.MulAdd(diff1, sum1)
+		sum2 = diff2.MulAdd(diff2, sum2)
+		sum3 = diff3.MulAdd(diff3, sum3)
+	}
+	for i+lanes <= n {
 		va := archsimd.LoadFloat64x4Slice(a[i:])
 		vb := archsimd.LoadFloat64x4Slice(b[i:])
 		diff := va.Sub(vb)
-		diffSq := diff.Mul(diff)
-		sum = sum.Add(diffSq)
+		sum0 = diff.MulAdd(diff, sum0)
+		i += lanes
 	}
-	result := func() float64 {
-		var _simd_temp [4]float64
-		sum.StoreSlice(_simd_temp[:])
-		return _simd_temp[0] + _simd_temp[1] + _simd_temp[2] + _simd_temp[3]
-	}()
+	sum0 = sum0.Add(sum1)
+	sum2 = sum2.Add(sum3)
+	sum0 = sum0.Add(sum2)
+	result := hwy.ReduceSum_AVX2_F64x4(sum0)
 	for ; i < n; i++ {
 		d := a[i] - b[i]
 		result += d * d
