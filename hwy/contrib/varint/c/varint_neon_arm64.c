@@ -606,7 +606,26 @@ void decode_streamvbyte32_batch(
         int64_t len2 = ((ctrl >> 4) & 0x3) + 1;
         int64_t len3 = ((ctrl >> 6) & 0x3) + 1;
 
-        // Load 16 bytes of data (may read past end but we check bounds above)
+        // SIMD path requires 16 bytes to be readable for vld1q_u8
+        // Fall back to scalar if we don't have enough buffer
+        if (data_pos + 16 > data_len) {
+            // Scalar decode for this group
+            int64_t pos = data_pos;
+            unsigned int v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+            for (int64_t i = 0; i < len0; i++) v0 |= ((unsigned int)data[pos++]) << (i * 8);
+            for (int64_t i = 0; i < len1; i++) v1 |= ((unsigned int)data[pos++]) << (i * 8);
+            for (int64_t i = 0; i < len2; i++) v2 |= ((unsigned int)data[pos++]) << (i * 8);
+            for (int64_t i = 0; i < len3; i++) v3 |= ((unsigned int)data[pos++]) << (i * 8);
+            values[val_pos + 0] = v0;
+            values[val_pos + 1] = v1;
+            values[val_pos + 2] = v2;
+            values[val_pos + 3] = v3;
+            data_pos = pos;
+            val_pos += 4;
+            continue;
+        }
+
+        // Load 16 bytes of data (safe because we checked bounds above)
         uint8x16_t input = vld1q_u8(data + data_pos);
 
         // Build shuffle mask dynamically based on control byte
