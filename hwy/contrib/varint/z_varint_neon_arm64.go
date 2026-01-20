@@ -60,7 +60,7 @@ func init() {
 	DecodeGroupVarint64 = asm.DecodeGroupVarint64
 
 	// Stream-VByte SIMD decode
-	// Note: Skip on Linux ARM64 due to frame pointer unwinding crash.
+	// Note: Skip GoAT assembly on Linux ARM64 due to frame pointer unwinding crash.
 	// The StreamVByte function uses all available registers, so clang uses
 	// x29/x30 as scratch registers. When Go's runtime sends an async preemption
 	// signal while x29 is corrupted, the frame pointer unwinder crashes.
@@ -69,7 +69,15 @@ func init() {
 	// function has no free registers available.
 	if runtime.GOOS != "linux" {
 		DecodeStreamVByte32Into = asm.DecodeStreamVByte32Into
+	} else {
+		// On Linux, use hwygen-generated NEON implementation instead.
+		// This uses the hwy/asm package (Go SIMD intrinsics) rather than
+		// GoAT-generated assembly, avoiding the frame pointer issue.
+		DecodeStreamVByte32Into = DecodeStreamVByte32IntoFloat32
 	}
+
+	// Also wire the allocating variant to SIMD
+	DecodeStreamVByte32 = DecodeStreamVByte32Float32
 }
 
 // wrapFindVarintEnds adapts the asm function signature.

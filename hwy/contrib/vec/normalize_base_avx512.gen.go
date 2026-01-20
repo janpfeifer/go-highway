@@ -31,9 +31,6 @@ func BaseNormalize_avx512_Float16(dst []hwy.Float16) {
 	if i < len(dst) {
 		BaseNormalize_fallback_Float16(dst[i:len(dst)])
 	}
-	for ; i < len(dst); i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() * scale)
-	}
 }
 
 func BaseNormalize_avx512_BFloat16(dst []hwy.BFloat16) {
@@ -57,9 +54,6 @@ func BaseNormalize_avx512_BFloat16(dst []hwy.BFloat16) {
 	}
 	if i < len(dst) {
 		BaseNormalize_fallback_BFloat16(dst[i:len(dst)])
-	}
-	for ; i < len(dst); i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() * scale)
 	}
 }
 
@@ -85,9 +79,6 @@ func BaseNormalize_avx512(dst []float32) {
 	if i < len(dst) {
 		BaseNormalize_fallback(dst[i:len(dst)])
 	}
-	for ; i < len(dst); i++ {
-		dst[i] *= scale
-	}
 }
 
 func BaseNormalize_avx512_Float64(dst []float64) {
@@ -111,9 +102,6 @@ func BaseNormalize_avx512_Float64(dst []float64) {
 	}
 	if i < len(dst) {
 		BaseNormalize_fallback_Float64(dst[i:len(dst)])
-	}
-	for ; i < len(dst); i++ {
-		dst[i] *= scale
 	}
 }
 

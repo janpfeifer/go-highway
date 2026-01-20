@@ -60,6 +60,11 @@ var (
 	// Returns (control bytes, data bytes)
 	EncodeStreamVByte32 func(values []uint32) (control, data []byte)
 
+	// EncodeStreamVByte32Into encodes uint32 values to Stream-VByte format,
+	// reusing the provided control and data buffers to avoid allocations.
+	// Returns the sliced control and data buffers with encoded data.
+	EncodeStreamVByte32Into func(values []uint32, controlBuf, dataBuf []byte) (control, data []byte)
+
 	// DecodeStreamVByte32 decodes uint32 values from Stream-VByte format
 	// n is the number of values to decode
 	DecodeStreamVByte32 func(control, data []byte, n int) []uint32
@@ -93,6 +98,7 @@ func init() {
 
 	// Stream-VByte
 	EncodeStreamVByte32 = BaseEncodeStreamVByte32
+	EncodeStreamVByte32Into = BaseEncodeStreamVByte32Into
 	DecodeStreamVByte32 = BaseDecodeStreamVByte32
 	DecodeStreamVByte32Into = BaseDecodeStreamVByte32Into
 	StreamVByte32DataLen = BaseStreamVByte32DataLen

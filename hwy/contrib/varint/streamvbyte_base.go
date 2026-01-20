@@ -174,6 +174,64 @@ func BaseEncodeStreamVByte32(values []uint32) (control, data []byte) {
 	return control, data
 }
 
+// BaseEncodeStreamVByte32Into encodes uint32 values to Stream-VByte format,
+// reusing the provided control and data buffers to avoid allocations.
+// Returns the sliced control and data buffers with encoded data.
+// If len(values) is not a multiple of 4, pads with zeros.
+func BaseEncodeStreamVByte32Into(values []uint32, controlBuf, dataBuf []byte) (control, data []byte) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+
+	// Calculate control bytes needed
+	numGroups := (len(values) + 3) / 4
+
+	// Ensure control buffer is large enough
+	if cap(controlBuf) < numGroups {
+		controlBuf = make([]byte, numGroups)
+	} else {
+		controlBuf = controlBuf[:numGroups]
+	}
+
+	// Reset data buffer
+	if cap(dataBuf) < len(values)*4 {
+		dataBuf = make([]byte, 0, len(values)*4)
+	} else {
+		dataBuf = dataBuf[:0]
+	}
+
+	for g := 0; g < numGroups; g++ {
+		var ctrl byte
+		baseIdx := g * 4
+
+		for i := 0; i < 4; i++ {
+			var v uint32
+			if baseIdx+i < len(values) {
+				v = values[baseIdx+i]
+			}
+			// else v = 0 (padding)
+
+			length := encodedLength(v)
+			ctrl |= byte(length-1) << (i * 2)
+
+			// Append value bytes (little-endian)
+			switch length {
+			case 1:
+				dataBuf = append(dataBuf, byte(v))
+			case 2:
+				dataBuf = append(dataBuf, byte(v), byte(v>>8))
+			case 3:
+				dataBuf = append(dataBuf, byte(v), byte(v>>8), byte(v>>16))
+			case 4:
+				dataBuf = append(dataBuf, byte(v), byte(v>>8), byte(v>>16), byte(v>>24))
+			}
+		}
+		controlBuf[g] = ctrl
+	}
+
+	return controlBuf, dataBuf
+}
+
 // BaseDecodeStreamVByte32 decodes uint32 values from Stream-VByte format.
 // control contains the control bytes, data contains the value bytes.
 // n is the number of values to decode (must be <= len(control)*4).

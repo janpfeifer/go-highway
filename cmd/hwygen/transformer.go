@@ -3088,6 +3088,8 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 //	for ; i < n; i++ { ... }
 //
 // where i is the iterator and n is the end variable from the SIMD loop.
+// Returns false if the loop body assigns to local variables (other than indexed
+// array elements), as these indicate state that the fallback cannot handle.
 func isScalarTailLoop(stmt ast.Stmt, iterator, end string) bool {
 	forStmt, ok := stmt.(*ast.ForStmt)
 	if !ok {
@@ -3111,9 +3113,8 @@ func isScalarTailLoop(stmt ast.Stmt, iterator, end string) bool {
 		return false
 	}
 
-	// Right side should be the end variable
-	rightIdent, ok := cond.Y.(*ast.Ident)
-	if !ok || rightIdent.Name != end {
+	// Right side should be the end variable (can be identifier like "n" or call like "len(dst)")
+	if exprToString(cond.Y) != end {
 		return false
 	}
 
@@ -3128,7 +3129,46 @@ func isScalarTailLoop(stmt ast.Stmt, iterator, end string) bool {
 		return false
 	}
 
+	// Check if the loop body assigns to local variables (not array elements).
+	// If so, this loop has state that the fallback cannot handle correctly.
+	// Example: "prev = src[i]" indicates state tracking that needs the manual loop.
+	if hasLocalVariableAssignment(forStmt.Body, iterator) {
+		return false
+	}
+
 	return true
+}
+
+// hasLocalVariableAssignment checks if a block contains assignments to local
+// variables (identifiers) rather than just indexed array/slice elements.
+// Assignments like "prev = src[i]" return true.
+// Assignments like "dst[i] = x" return false (these are array element assignments).
+func hasLocalVariableAssignment(body *ast.BlockStmt, iterator string) bool {
+	if body == nil {
+		return false
+	}
+
+	hasLocalAssign := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+
+		for _, lhs := range assign.Lhs {
+			// Check if this is an assignment to a plain identifier (not array index)
+			if ident, ok := lhs.(*ast.Ident); ok {
+				// Skip the iterator variable itself
+				if ident.Name != iterator {
+					hasLocalAssign = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+
+	return hasLocalAssign
 }
 
 // isSimdStyleLoop checks if a for loop appears to be a SIMD-style loop (as opposed

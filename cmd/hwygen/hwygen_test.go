@@ -587,6 +587,34 @@ func TestIsScalarTailLoop(t *testing.T) {
 			end:      "n",
 			want:     false,
 		},
+		{
+			name:     "scalar tail loop with len(dst) end",
+			code:     "for ; i < len(dst); i++ { dst[i] *= scale }",
+			iterator: "i",
+			end:      "len(dst)",
+			want:     true,
+		},
+		{
+			name:     "scalar tail loop with len(src) end",
+			code:     "for ; i < len(src); i++ { dst[i] = src[i] * scale }",
+			iterator: "i",
+			end:      "len(src)",
+			want:     true,
+		},
+		{
+			name:     "not a scalar tail - assigns to local variable",
+			code:     "for ; i < len(src); i++ { dst[i] = src[i] - prev; prev = src[i] }",
+			iterator: "i",
+			end:      "len(src)",
+			want:     false,
+		},
+		{
+			name:     "not a scalar tail - assigns to local variable only",
+			code:     "for ; i < n; i++ { sum += src[i] }",
+			iterator: "i",
+			end:      "n",
+			want:     false,
+		},
 	}
 
 	for _, tt := range tests {
