@@ -542,26 +542,6 @@ void decode_5uvarint64(
 // Stream-VByte SIMD Decoding
 // ============================================================================
 
-// Data length per control byte: sum of 4 value lengths (4-16 bytes)
-static const unsigned char streamvbyte_data_len[256] = {
-     4,  5,  6,  7,  5,  6,  7,  8,  6,  7,  8,  9,  7,  8,  9, 10,
-     5,  6,  7,  8,  6,  7,  8,  9,  7,  8,  9, 10,  8,  9, 10, 11,
-     6,  7,  8,  9,  7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12,
-     7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13,
-     5,  6,  7,  8,  6,  7,  8,  9,  7,  8,  9, 10,  8,  9, 10, 11,
-     6,  7,  8,  9,  7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12,
-     7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13,
-     8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14,
-     6,  7,  8,  9,  7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12,
-     7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13,
-     8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14,
-     9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14, 12, 13, 14, 15,
-     7,  8,  9, 10,  8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13,
-     8,  9, 10, 11,  9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14,
-     9, 10, 11, 12, 10, 11, 12, 13, 11, 12, 13, 14, 12, 13, 14, 15,
-    10, 11, 12, 13, 11, 12, 13, 14, 12, 13, 14, 15, 13, 14, 15, 16,
-};
-
 // decode_streamvbyte32_batch: Decode n values from Stream-VByte format
 // Uses NEON TBL instruction for shuffle-based decoding of 4 values at a time.
 //
@@ -594,17 +574,19 @@ void decode_streamvbyte32_batch(
 
     for (int64_t g = 0; g < num_groups; g++) {
         unsigned char ctrl = control[g];
-        int64_t group_len = streamvbyte_data_len[ctrl];
 
-        if (data_pos + group_len > data_len) {
-            break;
-        }
-
-        // Extract lengths from control byte
+        // Extract lengths from control byte (2 bits each, value is length-1)
         int64_t len0 = ((ctrl >> 0) & 0x3) + 1;
         int64_t len1 = ((ctrl >> 2) & 0x3) + 1;
         int64_t len2 = ((ctrl >> 4) & 0x3) + 1;
         int64_t len3 = ((ctrl >> 6) & 0x3) + 1;
+
+        // Total data bytes for this group (4-16 bytes)
+        int64_t group_len = len0 + len1 + len2 + len3;
+
+        if (data_pos + group_len > data_len) {
+            break;
+        }
 
         // SIMD path requires 16 bytes to be readable for vld1q_u8
         // Fall back to scalar if we don't have enough buffer

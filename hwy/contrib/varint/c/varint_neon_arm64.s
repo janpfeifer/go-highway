@@ -1545,218 +1545,203 @@ _decode_streamvbyte32_batch:            ; @decode_streamvbyte32_batch
 ; %bb.0:
 	str	xzr, [x6]
 	cmp	x1, #1
-	b.lt	LBB7_6
+	b.lt	LBB7_28
 ; %bb.1:
 	cmp	x3, #1
-	b.lt	LBB7_6
+	b.lt	LBB7_28
 ; %bb.2:
 	cmp	x5, #1
-	b.lt	LBB7_6
+	b.lt	LBB7_28
 ; %bb.3:
-	stp	x28, x27, [sp, #-96]!           ; 16-byte Folded Spill
+	stp	x28, x27, [sp, #-80]!           ; 16-byte Folded Spill
 	stp	x26, x25, [sp, #16]             ; 16-byte Folded Spill
 	stp	x24, x23, [sp, #32]             ; 16-byte Folded Spill
 	stp	x22, x21, [sp, #48]             ; 16-byte Folded Spill
 	stp	x20, x19, [sp, #64]             ; 16-byte Folded Spill
-	stp	x29, x30, [sp, #80]             ; 16-byte Folded Spill
 	lsr	x8, x5, #2
 	cmp	x8, x1
 	csel	x8, x8, x1, lo
 	cmp	x5, #4
-	b.hs	LBB7_7
+	b.hs	LBB7_5
 ; %bb.4:
-	mov	x15, #0                         ; =0x0
+	mov	x14, #0                         ; =0x0
+	b	LBB7_27
 LBB7_5:
-	str	x15, [x6]
-	ldp	x29, x30, [sp, #80]             ; 16-byte Folded Reload
-	ldp	x20, x19, [sp, #64]             ; 16-byte Folded Reload
-	ldp	x22, x21, [sp, #48]             ; 16-byte Folded Reload
-	ldp	x24, x23, [sp, #32]             ; 16-byte Folded Reload
-	ldp	x26, x25, [sp, #16]             ; 16-byte Folded Reload
-	ldp	x28, x27, [sp], #96             ; 16-byte Folded Reload
-LBB7_6:
-	ret
-LBB7_7:
-	mov	x15, #0                         ; =0x0
+	mov	x16, #0                         ; =0x0
 	add	x9, x2, #1
 	add	x10, x2, #2
 	add	x11, x2, #3
 	mov	w12, #-128                      ; =0xffffff80
 	mov	w13, #2                         ; =0x2
-Lloh22:
-	adrp	x14, _streamvbyte_data_len@PAGE
-Lloh23:
-	add	x14, x14, _streamvbyte_data_len@PAGEOFF
-	b	LBB7_9
-LBB7_8:                                 ;   in Loop: Header=BB7_9 Depth=1
-	ldr	q0, [x2, x15]
-	add	w15, w22, w5
-	add	w19, w15, w19
-	cmp	w21, #0
-	csinc	w22, w12, wzr, eq
-	cmp	w21, #1
-	csel	w23, w13, w12, hi
-	cmp	w21, #3
-	csel	w21, w21, w12, eq
+	b	LBB7_7
+LBB7_6:                                 ;   in Loop: Header=BB7_7 Depth=1
+	ldr	q0, [x2, x16]
+	cmp	w24, #0
+	csinc	w16, w12, wzr, eq
+	cmp	w24, #1
+	csel	w17, w13, w12, hi
+	cmp	w24, #3
+	csel	w19, w24, w12, eq
 	cmp	w20, #0
-	csinc	w24, w12, w5, eq
-	add	w25, w5, #2
+	csinc	w22, w12, w7, eq
+	add	w24, w7, #2
 	cmp	w20, #1
-	csel	w25, w25, w12, hi
-	add	w26, w5, #3
+	csel	w24, w24, w12, hi
+	add	w25, w7, #3
 	cmp	w20, #3
-	csel	w20, w26, w12, eq
-	cmp	w7, #0
-	csinc	w26, w12, w15, eq
-	add	w27, w15, #2
-	cmp	w7, #1
-	csel	w27, w27, w12, hi
-	add	w28, w15, #3
-	cmp	w7, #3
-	csel	w7, w28, w12, eq
-	cmp	w17, #64
-	csinc	w28, w12, w19, lo
-	sxtb	w17, w17
-	add	w30, w19, #2
-	cmp	w17, #0
-	csel	w17, w30, w12, lt
+	csel	w20, w25, w12, eq
+	cmp	w5, #0
+	csinc	w25, w12, w21, eq
+	add	w26, w21, #2
+	cmp	w5, #1
+	csel	w26, w26, w12, hi
+	add	w27, w21, #3
+	cmp	w5, #3
+	csel	w5, w27, w12, eq
+	cmp	w15, #64
+	csinc	w27, w12, w1, lo
+	sxtb	w15, w15
+	add	w28, w1, #2
+	cmp	w15, #0
+	csel	w15, w28, w12, lt
+	add	w28, w1, #3
+	cmp	w23, #3
+	csel	w23, w28, w12, eq
 	movi.2d	v1, #0000000000000000
-	mov.b	v1[1], w22
-	mov.b	v1[2], w23
-	mov.b	v1[3], w21
-	mov.b	v1[4], w5
-	mov.b	v1[5], w24
-	mov.b	v1[6], w25
+	mov.b	v1[1], w16
+	mov.b	v1[2], w17
+	mov.b	v1[3], w19
+	mov.b	v1[4], w7
+	mov.b	v1[5], w22
+	mov.b	v1[6], w24
 	mov.b	v1[7], w20
-	mov.b	v1[8], w15
-	mov.b	v1[9], w26
-	mov.b	v1[10], w27
-	mov.b	v1[11], w7
-	mov.b	v1[12], w19
-	add	w15, w19, #3
-	mov.b	v1[13], w28
-	mov.b	v1[14], w17
-	cmp	w16, #3
-	csel	w15, w15, w12, eq
-	mov.b	v1[15], w15
+	mov.b	v1[8], w21
+	mov.b	v1[9], w25
+	mov.b	v1[10], w26
+	mov.b	v1[11], w5
+	mov.b	v1[12], w1
+	mov.b	v1[13], w27
+	mov.b	v1[14], w15
+	mov.b	v1[15], w23
 	tbl.16b	v0, { v0 }, v1
 	str	q0, [x4], #16
-	mov	x15, x1
+	mov	x16, x14
 	subs	x8, x8, #1
-	b.eq	LBB7_5
-LBB7_9:                                 ; =>This Inner Loop Header: Depth=1
-	ldrb	w17, [x0], #1
-	ldrb	w16, [x14, x17]
-	add	x1, x15, x16
-	cmp	x1, x3
-	b.gt	LBB7_5
-; %bb.10:                               ;   in Loop: Header=BB7_9 Depth=1
-	and	w21, w17, #0x3
-	add	w5, w21, #1
-	ubfx	w20, w17, #2, #2
+	b.eq	LBB7_27
+LBB7_7:                                 ; =>This Inner Loop Header: Depth=1
+	ldrb	w15, [x0], #1
+	and	w24, w15, #0x3
+	add	w7, w24, #1
+	ubfx	w20, w15, #2, #2
 	add	w22, w20, #1
-	ubfx	w7, w17, #4, #2
-	add	w19, w7, #1
-	lsr	w16, w17, #6
-	add	x23, x15, #16
-	cmp	x23, x3
-	b.le	LBB7_8
-; %bb.11:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w1, [x2, x15]
-	cbz	w21, LBB7_15
-; %bb.12:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w21, [x9, x15]
+	ubfx	w5, w15, #4, #2
+	add	w19, w5, #1
+	lsr	x23, x15, #6
+	add	x17, x23, #1
+	add	w21, w22, w7
+	add	w1, w21, w19
+	add	x14, x16, x17
+	add	x14, x14, x1
+	cmp	x14, x3
+	b.gt	LBB7_26
+; %bb.8:                                ;   in Loop: Header=BB7_7 Depth=1
+	add	x25, x16, #16
+	cmp	x25, x3
+	b.le	LBB7_6
+; %bb.9:                                ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w1, [x2, x16]
+	cbz	w24, LBB7_13
+; %bb.10:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w21, [x9, x16]
 	orr	w1, w1, w21, lsl #8
-	cmp	w5, #2
-	b.eq	LBB7_15
-; %bb.13:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w21, [x10, x15]
+	cmp	w7, #2
+	b.eq	LBB7_13
+; %bb.11:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w21, [x10, x16]
 	orr	w1, w1, w21, lsl #16
-	cmp	w5, #3
-	b.eq	LBB7_15
-; %bb.14:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w5, [x11, x15]
-	orr	w1, w1, w5, lsl #24
-LBB7_15:                                ;   in Loop: Header=BB7_9 Depth=1
-	and	x21, x17, #0x3
-	add	x23, x15, x21
+	cmp	w7, #3
+	b.eq	LBB7_13
+; %bb.12:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w7, [x11, x16]
+	orr	w1, w1, w7, lsl #24
+LBB7_13:                                ;   in Loop: Header=BB7_7 Depth=1
+	and	x21, x15, #0x3
+	add	x23, x16, x21
 	add	x24, x23, #1
-	ldrb	w5, [x2, x24]
-	cbz	w20, LBB7_19
-; %bb.16:                               ;   in Loop: Header=BB7_9 Depth=1
+	ldrb	w7, [x2, x24]
+	cbz	w20, LBB7_17
+; %bb.14:                               ;   in Loop: Header=BB7_7 Depth=1
 	ldrb	w20, [x9, x24]
-	orr	w5, w5, w20, lsl #8
+	orr	w7, w7, w20, lsl #8
 	cmp	w22, #2
-	b.eq	LBB7_19
-; %bb.17:                               ;   in Loop: Header=BB7_9 Depth=1
+	b.eq	LBB7_17
+; %bb.15:                               ;   in Loop: Header=BB7_7 Depth=1
 	ldrb	w20, [x10, x24]
-	orr	w5, w5, w20, lsl #16
+	orr	w7, w7, w20, lsl #16
 	cmp	w22, #3
-	b.eq	LBB7_19
-; %bb.18:                               ;   in Loop: Header=BB7_9 Depth=1
+	b.eq	LBB7_17
+; %bb.16:                               ;   in Loop: Header=BB7_7 Depth=1
 	ldrb	w20, [x11, x24]
-	orr	w5, w5, w20, lsl #24
-LBB7_19:                                ;   in Loop: Header=BB7_9 Depth=1
-	ubfx	w22, w17, #2, #2
+	orr	w7, w7, w20, lsl #24
+LBB7_17:                                ;   in Loop: Header=BB7_7 Depth=1
+	ubfx	x22, x15, #2, #2
 	add	x20, x23, x22
 	add	x23, x20, #2
 	ldrb	w20, [x2, x23]
-	cbz	w7, LBB7_23
-; %bb.20:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w7, [x9, x23]
-	orr	w20, w20, w7, lsl #8
+	cbz	w5, LBB7_21
+; %bb.18:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w5, [x9, x23]
+	orr	w20, w20, w5, lsl #8
 	cmp	w19, #2
-	b.eq	LBB7_23
-; %bb.21:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w7, [x10, x23]
-	orr	w20, w20, w7, lsl #16
+	b.eq	LBB7_21
+; %bb.19:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w5, [x10, x23]
+	orr	w20, w20, w5, lsl #16
 	cmp	w19, #3
-	b.eq	LBB7_23
-; %bb.22:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w7, [x11, x23]
-	orr	w20, w20, w7, lsl #24
-LBB7_23:                                ;   in Loop: Header=BB7_9 Depth=1
-	add	x15, x15, x21
-	ubfx	w7, w17, #4, #2
-	add	x7, x7, x22
-	add	x15, x15, x7
-	add	x19, x15, #3
-	add	x15, x15, #4
-	ldrb	w7, [x2, x19]
-	cmp	w17, #64
-	b.lo	LBB7_28
-; %bb.24:                               ;   in Loop: Header=BB7_9 Depth=1
-	add	w16, w16, #1
-	add	x17, x19, #2
-	ldrb	w15, [x2, x15]
-	orr	w7, w7, w15, lsl #8
-	cmp	w16, #2
-	b.ne	LBB7_26
-; %bb.25:                               ;   in Loop: Header=BB7_9 Depth=1
-	mov	x15, x17
-	b	LBB7_28
-LBB7_26:                                ;   in Loop: Header=BB7_9 Depth=1
-	add	x15, x19, #3
-	ldrb	w17, [x2, x17]
-	orr	w7, w7, w17, lsl #16
-	cmp	w16, #3
-	b.eq	LBB7_28
-; %bb.27:                               ;   in Loop: Header=BB7_9 Depth=1
-	ldrb	w15, [x2, x15]
-	add	x16, x19, #4
-	orr	w7, w7, w15, lsl #24
-	mov	x15, x16
-LBB7_28:                                ;   in Loop: Header=BB7_9 Depth=1
-	stp	w1, w5, [x4]
-	stp	w20, w7, [x4, #8]
+	b.eq	LBB7_21
+; %bb.20:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w5, [x11, x23]
+	orr	w20, w20, w5, lsl #24
+LBB7_21:                                ;   in Loop: Header=BB7_7 Depth=1
+	add	x16, x16, x21
+	ubfx	x5, x15, #4, #2
+	add	x5, x5, x22
+	add	x16, x16, x5
+	add	x5, x16, #3
+	ldrb	w16, [x2, x5]
+	cmp	w15, #64
+	b.lo	LBB7_25
+; %bb.22:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w15, [x9, x5]
+	orr	w16, w16, w15, lsl #8
+	cmp	w17, #2
+	b.eq	LBB7_25
+; %bb.23:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w15, [x10, x5]
+	orr	w16, w16, w15, lsl #16
+	cmp	w17, #3
+	b.eq	LBB7_25
+; %bb.24:                               ;   in Loop: Header=BB7_7 Depth=1
+	ldrb	w15, [x11, x5]
+	orr	w16, w16, w15, lsl #24
+LBB7_25:                                ;   in Loop: Header=BB7_7 Depth=1
+	stp	w1, w7, [x4]
+	stp	w20, w16, [x4, #8]
 	add	x4, x4, #16
+	mov	x16, x14
 	subs	x8, x8, #1
-	b.ne	LBB7_9
-	b	LBB7_5
-	.loh AdrpAdd	Lloh22, Lloh23
+	b.ne	LBB7_7
+	b	LBB7_27
+LBB7_26:
+	mov	x14, x16
+LBB7_27:
+	str	x14, [x6]
+	ldp	x20, x19, [sp, #64]             ; 16-byte Folded Reload
+	ldp	x22, x21, [sp, #48]             ; 16-byte Folded Reload
+	ldp	x24, x23, [sp, #32]             ; 16-byte Folded Reload
+	ldp	x26, x25, [sp, #16]             ; 16-byte Folded Reload
+	ldp	x28, x27, [sp], #80             ; 16-byte Folded Reload
+LBB7_28:
+	ret
                                         ; -- End function
-	.section	__TEXT,__const
-_streamvbyte_data_len:                  ; @streamvbyte_data_len
-	.ascii	"\004\005\006\007\005\006\007\b\006\007\b\t\007\b\t\n\005\006\007\b\006\007\b\t\007\b\t\n\b\t\n\013\006\007\b\t\007\b\t\n\b\t\n\013\t\n\013\f\007\b\t\n\b\t\n\013\t\n\013\f\n\013\f\r\005\006\007\b\006\007\b\t\007\b\t\n\b\t\n\013\006\007\b\t\007\b\t\n\b\t\n\013\t\n\013\f\007\b\t\n\b\t\n\013\t\n\013\f\n\013\f\r\b\t\n\013\t\n\013\f\n\013\f\r\013\f\r\016\006\007\b\t\007\b\t\n\b\t\n\013\t\n\013\f\007\b\t\n\b\t\n\013\t\n\013\f\n\013\f\r\b\t\n\013\t\n\013\f\n\013\f\r\013\f\r\016\t\n\013\f\n\013\f\r\013\f\r\016\f\r\016\017\007\b\t\n\b\t\n\013\t\n\013\f\n\013\f\r\b\t\n\013\t\n\013\f\n\013\f\r\013\f\r\016\t\n\013\f\n\013\f\r\013\f\r\016\f\r\016\017\n\013\f\r\013\f\r\016\f\r\016\017\r\016\017\020"
-
 .subsections_via_symbols
