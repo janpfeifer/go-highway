@@ -36,9 +36,6 @@ func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			}
 		}
 	}
-	if ii < size {
-		BaseGELU_fallback_Float16(input[ii:size], output[ii:size])
-	}
 }
 
 func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
@@ -66,9 +63,6 @@ func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 				output[i] = hwy.Float32ToBFloat16(float32(x * 0.5 * (1.0 + stdmath.Erf(x*0.7071067811865476))))
 			}
 		}
-	}
-	if ii < size {
-		BaseGELU_fallback_BFloat16(input[ii:size], output[ii:size])
 	}
 }
 
@@ -98,9 +92,6 @@ func BaseGELU_avx2(input []float32, output []float32) {
 			}
 		}
 	}
-	if ii < size {
-		BaseGELU_fallback(input[ii:size], output[ii:size])
-	}
 }
 
 func BaseGELU_avx2_Float64(input []float64, output []float64) {
@@ -129,9 +120,6 @@ func BaseGELU_avx2_Float64(input []float64, output []float64) {
 			}
 		}
 	}
-	if ii < size {
-		BaseGELU_fallback_Float64(input[ii:size], output[ii:size])
-	}
 }
 
 func BaseGELUApprox_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
@@ -156,9 +144,6 @@ func BaseGELUApprox_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 				output[i] = hwy.Float32ToFloat16(float32(x * sigmoid))
 			}
 		}
-	}
-	if ii < size {
-		BaseGELUApprox_fallback_Float16(input[ii:size], output[ii:size])
 	}
 }
 
@@ -185,9 +170,6 @@ func BaseGELUApprox_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			}
 		}
 	}
-	if ii < size {
-		BaseGELUApprox_fallback_BFloat16(input[ii:size], output[ii:size])
-	}
 }
 
 func BaseGELUApprox_avx2(input []float32, output []float32) {
@@ -213,9 +195,6 @@ func BaseGELUApprox_avx2(input []float32, output []float32) {
 			}
 		}
 	}
-	if ii < size {
-		BaseGELUApprox_fallback(input[ii:size], output[ii:size])
-	}
 }
 
 func BaseGELUApprox_avx2_Float64(input []float64, output []float64) {
@@ -240,8 +219,5 @@ func BaseGELUApprox_avx2_Float64(input []float64, output []float64) {
 				output[i] = float64(x * sigmoid)
 			}
 		}
-	}
-	if ii < size {
-		BaseGELUApprox_fallback_Float64(input[ii:size], output[ii:size])
 	}
 }

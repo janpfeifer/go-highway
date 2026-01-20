@@ -1406,6 +1406,10 @@ func TestMaskedVByteDecodeGroup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Encode as standard varints
 			encoded := make([]byte, MaskedVByteMaxLen32(len(tt.values))+16) // extra for SIMD read
+			// Fill padding with continuation bytes (0x80) so they don't look like terminators
+			for i := range encoded {
+				encoded[i] = 0x80
+			}
 			n := MaskedVByteEncodeBatch32(encoded, tt.values)
 
 			// Decode using SIMD group decode
@@ -1528,7 +1532,7 @@ func BenchmarkCompareVarintVsMaskedVByte(b *testing.B) {
 	b.Run("MaskedVByte_100values", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			BaseMaskedVByteDecodeBatch32(encoded, dst32, 100)
+			MaskedVByteDecodeBatch32(encoded, dst32, 100)
 		}
 	})
 }

@@ -8,12 +8,12 @@ import (
 	"simd/archsimd"
 )
 
-var Pack32Float32 func(src []uint32, bitWidth int, dst []byte) int
-var Unpack32Float32 func(src []byte, bitWidth int, dst []uint32) int
-var Pack64Float32 func(src []uint64, bitWidth int, dst []byte) int
-var Unpack64Float32 func(src []byte, bitWidth int, dst []uint64) int
-var DeltaEncode32Float32 func(src []uint32, base uint32, dst []uint32)
-var DeltaEncode64Float32 func(src []uint64, base uint64, dst []uint64)
+var Pack32 func(src []uint32, bitWidth int, dst []byte) int
+var Unpack32 func(src []byte, bitWidth int, dst []uint32) int
+var Pack64 func(src []uint64, bitWidth int, dst []byte) int
+var Unpack64 func(src []byte, bitWidth int, dst []uint64) int
+var DeltaEncode32 func(src []uint32, base uint32, dst []uint32)
+var DeltaEncode64 func(src []uint64, base uint64, dst []uint64)
 
 func init() {
 	if os.Getenv("HWY_NO_SIMD") != "" {
@@ -32,28 +32,28 @@ func init() {
 }
 
 func initBitpackAVX2() {
-	Pack32Float32 = BasePack32_avx2
-	Unpack32Float32 = BaseUnpack32_avx2
-	Pack64Float32 = BasePack64_avx2
-	Unpack64Float32 = BaseUnpack64_avx2
-	DeltaEncode32Float32 = BaseDeltaEncode32_avx2
-	DeltaEncode64Float32 = BaseDeltaEncode64_avx2
+	Pack32 = BasePack32_avx2
+	Unpack32 = BaseUnpack32_avx2
+	Pack64 = BasePack64_avx2
+	Unpack64 = BaseUnpack64_avx2
+	DeltaEncode32 = BaseDeltaEncode32_avx2
+	DeltaEncode64 = BaseDeltaEncode64_avx2
 }
 
 func initBitpackAVX512() {
-	Pack32Float32 = BasePack32_avx512
-	Unpack32Float32 = BaseUnpack32_avx512
-	Pack64Float32 = BasePack64_avx512
-	Unpack64Float32 = BaseUnpack64_avx512
-	DeltaEncode32Float32 = BaseDeltaEncode32_avx512
-	DeltaEncode64Float32 = BaseDeltaEncode64_avx512
+	Pack32 = BasePack32_avx512
+	Unpack32 = BaseUnpack32_avx512
+	Pack64 = BasePack64_avx512
+	Unpack64 = BaseUnpack64_avx512
+	DeltaEncode32 = BaseDeltaEncode32_avx512
+	DeltaEncode64 = BaseDeltaEncode64_avx512
 }
 
 func initBitpackFallback() {
-	Pack32Float32 = BasePack32_fallback
-	Unpack32Float32 = BaseUnpack32_fallback
-	Pack64Float32 = BasePack64_fallback
-	Unpack64Float32 = BaseUnpack64_fallback
-	DeltaEncode32Float32 = BaseDeltaEncode32_fallback
-	DeltaEncode64Float32 = BaseDeltaEncode64_fallback
+	Pack32 = BasePack32_fallback
+	Unpack32 = BaseUnpack32_fallback
+	Pack64 = BasePack64_fallback
+	Unpack64 = BaseUnpack64_fallback
+	DeltaEncode32 = BaseDeltaEncode32_fallback
+	DeltaEncode64 = BaseDeltaEncode64_fallback
 }

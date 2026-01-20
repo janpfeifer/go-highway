@@ -8,28 +8,26 @@ import (
 	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
+// Hoisted constants - pre-broadcasted at package init time
+var (
+	BaseFindVarintEnds_NEON_threshold_f32 = asm.BroadcastUint8x16(0x80)
+)
+
 func BaseFindVarintEnds_neon(src []byte) uint32 {
 	if len(src) == 0 {
 		return 0
 	}
 	n := min(len(src), 32)
-	lanes := 16
+	if n == 32 {
+		threshold := BaseFindVarintEnds_NEON_threshold_f32
+		v := asm.LoadUint8x16Slice(src[:32])
+		isTerminator := v.LessThan(threshold)
+		return uint32(hwy.BitsFromMask_NEON_Uint8x16(isTerminator))
+	}
 	var mask uint32
-	for i := 0; i+16 <= n; i += lanes {
-		remaining := min(lanes, n-i)
-		v := asm.LoadUint8x16Slice(src[i : i+remaining])
-		highBitMask := hwy.TestBit(v, 7)
-		for j := 0; j < remaining; j++ {
-			if !func() bool {
-				_vOne := asm.BroadcastInt32x16(1)
-				_vZero := asm.BroadcastInt32x16(0)
-				_vMasked := _vOne.Merge(_vZero, highBitMask)
-				var _simd_mask_tmp [16]int32
-				_vMasked.StoreSlice(_simd_mask_tmp[:])
-				return _simd_mask_tmp[j] != 0
-			}() {
-				mask |= 1 << uint(i+j)
-			}
+	for i := 0; i < n; i++ {
+		if src[i] < 0x80 {
+			mask |= 1 << uint(i)
 		}
 	}
 	return mask

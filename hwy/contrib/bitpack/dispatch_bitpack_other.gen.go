@@ -7,12 +7,12 @@ import (
 	"os"
 )
 
-var Pack32Float32 func(src []uint32, bitWidth int, dst []byte) int
-var Unpack32Float32 func(src []byte, bitWidth int, dst []uint32) int
-var Pack64Float32 func(src []uint64, bitWidth int, dst []byte) int
-var Unpack64Float32 func(src []byte, bitWidth int, dst []uint64) int
-var DeltaEncode32Float32 func(src []uint32, base uint32, dst []uint32)
-var DeltaEncode64Float32 func(src []uint64, base uint64, dst []uint64)
+var Pack32 func(src []uint32, bitWidth int, dst []byte) int
+var Unpack32 func(src []byte, bitWidth int, dst []uint32) int
+var Pack64 func(src []uint64, bitWidth int, dst []byte) int
+var Unpack64 func(src []byte, bitWidth int, dst []uint64) int
+var DeltaEncode32 func(src []uint32, base uint32, dst []uint32)
+var DeltaEncode64 func(src []uint64, base uint64, dst []uint64)
 
 func init() {
 	_ = os.Getenv // silence unused import
@@ -20,10 +20,10 @@ func init() {
 }
 
 func initBitpackFallback() {
-	Pack32Float32 = BasePack32_fallback
-	Unpack32Float32 = BaseUnpack32_fallback
-	Pack64Float32 = BasePack64_fallback
-	Unpack64Float32 = BaseUnpack64_fallback
-	DeltaEncode32Float32 = BaseDeltaEncode32_fallback
-	DeltaEncode64Float32 = BaseDeltaEncode64_fallback
+	Pack32 = BasePack32_fallback
+	Unpack32 = BaseUnpack32_fallback
+	Pack64 = BasePack64_fallback
+	Unpack64 = BaseUnpack64_fallback
+	DeltaEncode32 = BaseDeltaEncode32_fallback
+	DeltaEncode64 = BaseDeltaEncode64_fallback
 }

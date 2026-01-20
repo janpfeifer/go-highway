@@ -131,25 +131,23 @@ func BaseMaskedVByteDecodeBatch32(src []byte, dst []uint32, n int) (decoded int,
 // BaseMaskedVByteDecodeGroup decodes up to 4 uint32 varints using SIMD.
 // src must have at least 16 bytes. dst must have at least 4 elements.
 // Returns (values decoded, bytes consumed).
+//
+// This uses SIMD to find varint terminators (bytes < 0x80) and extract them as a bitmask.
+// On x86, this uses PMOVMSKB which is very efficient.
+// On ARM, there's no equivalent instruction so this may be slower than scalar.
 func BaseMaskedVByteDecodeGroup(src []byte, dst []uint32) (decoded int, consumed int) {
 	if len(src) < 16 || len(dst) < 4 {
 		return 0, 0
 	}
 
-	// Load 16 bytes
+	// Load 16 bytes and find terminators using SIMD comparison
 	srcVec := hwy.Load[uint8](src[:16])
+	threshold := hwy.Set[uint8](0x80)
+	terminatorMask := hwy.LessThan(srcVec, threshold)
 
-	// Get terminator mask: bit i is set if byte i has high bit CLEAR (< 0x80)
-	// We use TestBit to check bit 7, then invert
-	highBitMask := hwy.TestBit(srcVec, 7)
-
-	// Build 12-bit pattern from first 12 bytes
-	var pattern uint16
-	for i := 0; i < 12; i++ {
-		if !highBitMask.GetBit(i) {
-			pattern |= 1 << i
-		}
-	}
+	// Extract bitmask - on x86 this compiles to PMOVMSKB (1 instruction)
+	// We only need the lower 12 bits for the lookup table
+	pattern := uint16(hwy.BitsFromMask(terminatorMask)) & 0x0FFF
 
 	if pattern == 0 {
 		// No terminators in first 12 bytes - need scalar fallback
@@ -161,7 +159,7 @@ func BaseMaskedVByteDecodeGroup(src []byte, dst []uint32) (decoded int, consumed
 		return 0, 0
 	}
 
-	// Load shuffle mask and rearrange bytes
+	// Load shuffle mask and rearrange bytes using SIMD (srcVec already loaded above)
 	shuffleMask := maskedVByte12ShuffleMasks[pattern][:]
 	maskVec := hwy.Load[uint8](shuffleMask)
 	shuffled := hwy.TableLookupBytes(srcVec, maskVec)
@@ -170,17 +168,15 @@ func BaseMaskedVByteDecodeGroup(src []byte, dst []uint32) (decoded int, consumed
 	var result [16]uint8
 	hwy.Store(shuffled, result[:])
 
-	// Combine bytes into uint32 values, masking out continuation bits
-	numVals := int(lookup.numValues)
-	start := 0
-	for i := 0; i < numVals; i++ {
-		end := int(lookup.valueEnds[i])
-		length := end - start
-		dst[i] = maskedVByteCombine(result[i*4:i*4+4], length)
-		start = end
-	}
+	// Combine bytes into uint32 values - always decode all 4 slots
+	// The shuffle already arranged bytes with zeros for padding
+	// Mask continuation bits (0x7f) and shift to combine
+	dst[0] = uint32(result[0]&0x7f) | uint32(result[1]&0x7f)<<7 | uint32(result[2]&0x7f)<<14 | uint32(result[3])<<21
+	dst[1] = uint32(result[4]&0x7f) | uint32(result[5]&0x7f)<<7 | uint32(result[6]&0x7f)<<14 | uint32(result[7])<<21
+	dst[2] = uint32(result[8]&0x7f) | uint32(result[9]&0x7f)<<7 | uint32(result[10]&0x7f)<<14 | uint32(result[11])<<21
+	dst[3] = uint32(result[12]&0x7f) | uint32(result[13]&0x7f)<<7 | uint32(result[14]&0x7f)<<14 | uint32(result[15])<<21
 
-	return numVals, int(lookup.bytesConsumed)
+	return int(lookup.numValues), int(lookup.bytesConsumed)
 }
 
 // maskedVByteCombine combines varint bytes into a uint32.

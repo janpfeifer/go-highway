@@ -6,30 +6,37 @@ package varint
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+	"sync"
 )
 
+// Hoisted constants - lazily initialized on first use to avoid init-time crashes
+var (
+	BaseFindVarintEnds_AVX512_threshold_f32 archsimd.Uint8x32
+	_hoistOnce                              sync.Once
+)
+
+func _initHoistedConstants() {
+	_hoistOnce.Do(func() {
+		BaseFindVarintEnds_AVX512_threshold_f32 = archsimd.BroadcastUint8x32(0x80)
+	})
+}
+
 func BaseFindVarintEnds_avx512(src []byte) uint32 {
+	_initHoistedConstants()
 	if len(src) == 0 {
 		return 0
 	}
 	n := min(len(src), 32)
-	lanes := 64
+	if n == 32 {
+		threshold := BaseFindVarintEnds_AVX512_threshold_f32
+		v := archsimd.LoadUint8x32Slice(src[:32])
+		isTerminator := v.Less(threshold)
+		return uint32(hwy.BitsFromMask_AVX512_Uint8x32(isTerminator))
+	}
 	var mask uint32
-	for i := 0; i+64 <= n; i += lanes {
-		remaining := min(lanes, n-i)
-		v := archsimd.LoadUint8x64Slice(src[i : i+remaining])
-		highBitMask := hwy.TestBit(v, 7)
-		for j := 0; j < remaining; j++ {
-			if !func() bool {
-				_vOne := archsimd.BroadcastInt32x64(1)
-				_vZero := archsimd.BroadcastInt32x64(0)
-				_vMasked := _vOne.Merge(_vZero, highBitMask)
-				var _simd_mask_tmp [64]int32
-				_vMasked.StoreSlice(_simd_mask_tmp[:])
-				return _simd_mask_tmp[j] != 0
-			}() {
-				mask |= 1 << uint(i+j)
-			}
+	for i := 0; i < n; i++ {
+		if src[i] < 0x80 {
+			mask |= 1 << uint(i)
 		}
 	}
 	return mask

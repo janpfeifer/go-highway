@@ -22,8 +22,8 @@ func BaseAdd_avx512_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		result := hwy.AddF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() + s[i].Float32())
+	if i < n {
+		BaseAdd_fallback_Float16(dst[i:n], s[i:n])
 	}
 }
 
@@ -41,8 +41,8 @@ func BaseAdd_avx512_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		result := hwy.AddBF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() + s[i].Float32())
+	if i < n {
+		BaseAdd_fallback_BFloat16(dst[i:n], s[i:n])
 	}
 }
 
@@ -98,8 +98,8 @@ func BaseAddTo_avx512_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float1
 		result := hwy.AddF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(a[i].Float32() + b[i].Float32())
+	if i < n {
+		BaseAddTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -117,8 +117,8 @@ func BaseAddTo_avx512_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFl
 		result := hwy.AddBF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(a[i].Float32() + b[i].Float32())
+	if i < n {
+		BaseAddTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -174,8 +174,8 @@ func BaseSub_avx512_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		result := hwy.SubF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() - s[i].Float32())
+	if i < n {
+		BaseSub_fallback_Float16(dst[i:n], s[i:n])
 	}
 }
 
@@ -193,8 +193,8 @@ func BaseSub_avx512_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		result := hwy.SubBF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() - s[i].Float32())
+	if i < n {
+		BaseSub_fallback_BFloat16(dst[i:n], s[i:n])
 	}
 }
 
@@ -250,8 +250,8 @@ func BaseSubTo_avx512_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float1
 		result := hwy.SubF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(a[i].Float32() - b[i].Float32())
+	if i < n {
+		BaseSubTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -269,8 +269,8 @@ func BaseSubTo_avx512_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFl
 		result := hwy.SubBF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(a[i].Float32() - b[i].Float32())
+	if i < n {
+		BaseSubTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -326,8 +326,8 @@ func BaseMul_avx512_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		result := hwy.MulF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() * s[i].Float32())
+	if i < n {
+		BaseMul_fallback_Float16(dst[i:n], s[i:n])
 	}
 }
 
@@ -345,8 +345,8 @@ func BaseMul_avx512_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		result := hwy.MulBF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() * s[i].Float32())
+	if i < n {
+		BaseMul_fallback_BFloat16(dst[i:n], s[i:n])
 	}
 }
 
@@ -402,8 +402,8 @@ func BaseMulTo_avx512_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float1
 		result := hwy.MulF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(a[i].Float32() * b[i].Float32())
+	if i < n {
+		BaseMulTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -421,8 +421,8 @@ func BaseMulTo_avx512_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFl
 		result := hwy.MulBF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(a[i].Float32() * b[i].Float32())
+	if i < n {
+		BaseMulTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -478,8 +478,8 @@ func BaseDiv_avx512_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		result := hwy.DivF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() / s[i].Float32())
+	if i < n {
+		BaseDiv_fallback_Float16(dst[i:n], s[i:n])
 	}
 }
 
@@ -497,8 +497,8 @@ func BaseDiv_avx512_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		result := hwy.DivBF16(vd, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() / s[i].Float32())
+	if i < n {
+		BaseDiv_fallback_BFloat16(dst[i:n], s[i:n])
 	}
 }
 
@@ -554,8 +554,8 @@ func BaseDivTo_avx512_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float1
 		result := hwy.DivF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(a[i].Float32() / b[i].Float32())
+	if i < n {
+		BaseDivTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -573,8 +573,8 @@ func BaseDivTo_avx512_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFl
 		result := hwy.DivBF16(va, vb)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(a[i].Float32() / b[i].Float32())
+	if i < n {
+		BaseDivTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
 	}
 }
 
@@ -630,8 +630,8 @@ func BaseScale_avx512_Float16(c hwy.Float16, dst []hwy.Float16) {
 		result := hwy.MulF16(vd, vc)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() * c.Float32())
+	if i < n {
+		BaseScale_fallback_Float16(c, dst[i:n])
 	}
 }
 
@@ -649,8 +649,8 @@ func BaseScale_avx512_BFloat16(c hwy.BFloat16, dst []hwy.BFloat16) {
 		result := hwy.MulBF16(vd, vc)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() * c.Float32())
+	if i < n {
+		BaseScale_fallback_BFloat16(c, dst[i:n])
 	}
 }
 
@@ -706,8 +706,8 @@ func BaseScaleTo_avx512_Float16(dst []hwy.Float16, c hwy.Float16, s []hwy.Float1
 		result := hwy.MulF16(vc, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(c.Float32() * s[i].Float32())
+	if i < n {
+		BaseScaleTo_fallback_Float16(dst[i:n], c, s[i:n])
 	}
 }
 
@@ -725,8 +725,8 @@ func BaseScaleTo_avx512_BFloat16(dst []hwy.BFloat16, c hwy.BFloat16, s []hwy.BFl
 		result := hwy.MulBF16(vc, vs)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(c.Float32() * s[i].Float32())
+	if i < n {
+		BaseScaleTo_fallback_BFloat16(dst[i:n], c, s[i:n])
 	}
 }
 
@@ -782,8 +782,8 @@ func BaseAddConst_avx512_Float16(c hwy.Float16, dst []hwy.Float16) {
 		result := hwy.AddF16(vd, vc)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() + c.Float32())
+	if i < n {
+		BaseAddConst_fallback_Float16(c, dst[i:n])
 	}
 }
 
@@ -801,8 +801,8 @@ func BaseAddConst_avx512_BFloat16(c hwy.BFloat16, dst []hwy.BFloat16) {
 		result := hwy.AddBF16(vd, vc)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() + c.Float32())
+	if i < n {
+		BaseAddConst_fallback_BFloat16(c, dst[i:n])
 	}
 }
 
@@ -859,8 +859,8 @@ func BaseMulConstAddTo_avx512_Float16(dst []hwy.Float16, a hwy.Float16, x []hwy.
 		result := hwy.FMAF16(va, vx, vd)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() + a.Float32()*x[i].Float32())
+	if i < n {
+		BaseMulConstAddTo_fallback_Float16(dst[i:n], a, x[i:n])
 	}
 }
 
@@ -879,8 +879,8 @@ func BaseMulConstAddTo_avx512_BFloat16(dst []hwy.BFloat16, a hwy.BFloat16, x []h
 		result := hwy.FMABF16(va, vx, vd)
 		hwy.Store(result, dst[i:])
 	}
-	for ; i < n; i++ {
-		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() + a.Float32()*x[i].Float32())
+	if i < n {
+		BaseMulConstAddTo_fallback_BFloat16(dst[i:n], a, x[i:n])
 	}
 }
 

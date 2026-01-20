@@ -633,6 +633,20 @@ func TestIsScalarTailLoop(t *testing.T) {
 			end:      "n",
 			want:     false,
 		},
+		{
+			name:     "scalar tail with type conversion via selector",
+			code:     "for ; i < len(dst); i++ { dst[i] = hwy.Float32ToFloat16(src[i].Float32()) }",
+			iterator: "i",
+			end:      "len(dst)",
+			want:     true,
+		},
+		{
+			name:     "scalar tail with method call on indexed element",
+			code:     "for ; i < len(dst); i++ { dst[i] = pkg.Convert(dst[i].Value() + s[i].Value()) }",
+			iterator: "i",
+			end:      "len(dst)",
+			want:     true,
+		},
 	}
 
 	for _, tt := range tests {

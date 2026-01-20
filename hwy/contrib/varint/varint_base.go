@@ -65,28 +65,25 @@ func BaseFindVarintEnds(src []byte) uint32 {
 	// Limit to 32 bytes (one uint32 bitmask)
 	n := min(len(src), 32)
 
-	// Load bytes into a vector and check high bit
-	// A byte is a varint terminator if its high bit is 0 (value < 0x80)
-	lanes := hwy.MaxLanes[uint8]()
-	var mask uint32
-
-	// Process up to 32 bytes in SIMD chunks
-	for i := 0; i < n; i += lanes {
-		remaining := min(lanes, n-i)
-		v := hwy.Load(src[i : i+remaining])
-
-		// Check high bit: bytes with value < 0x80 are terminators
-		// Use TestBit to check bit 7 (high bit)
-		highBitMask := hwy.TestBit(v, 7)
-
-		// Convert mask to bits: we want positions where high bit is NOT set
-		for j := 0; j < remaining; j++ {
-			if !highBitMask.GetBit(j) {
-				mask |= 1 << uint(i+j)
-			}
-		}
+	// SIMD path: process all 32 bytes at once
+	// AVX2/AVX512 can handle 32 bytes natively
+	// NEON will use a 16-byte vector (only processing first 16 bytes via SIMD)
+	if n == 32 {
+		// Create threshold for comparison: bytes < 0x80 are terminators
+		threshold := hwy.Set[uint8](0x80)
+		v := hwy.Load[uint8](src[:32])
+		// LessThan returns true for terminators (high bit clear)
+		isTerminator := hwy.LessThan(v, threshold)
+		return uint32(hwy.BitsFromMask(isTerminator))
 	}
 
+	// Scalar fallback for partial buffers
+	var mask uint32
+	for i := 0; i < n; i++ {
+		if src[i] < 0x80 {
+			mask |= 1 << uint(i)
+		}
+	}
 	return mask
 }
 

@@ -200,6 +200,7 @@ func AVX2Target() Target {
 			"FindLastTrue":  {Package: "hwy", Name: "FindLastTrue", IsMethod: false},
 			"LastN":         {Package: "hwy", Name: "LastN", IsMethod: false},
 			"Expand":        {Package: "hwy", Name: "Expand", IsMethod: false},
+			"BitsFromMask":  {Package: "hwy", Name: "BitsFromMask", IsMethod: false},
 
 			// ===== contrib/math: Transcendental functions =====
 			// The transformer adds target and type suffix (e.g., Exp -> BaseExpVec_avx2)
@@ -405,6 +406,7 @@ func AVX512Target() Target {
 			"FindLastTrue":  {Package: "hwy", Name: "FindLastTrue", IsMethod: false},
 			"LastN":         {Package: "hwy", Name: "LastN", IsMethod: false},
 			"Expand":        {Package: "hwy", Name: "Expand", IsMethod: false},
+			"BitsFromMask":  {Package: "hwy", Name: "BitsFromMask", IsMethod: false},
 
 			// ===== contrib/math: Transcendental functions =====
 			// The transformer adds target and type suffix (e.g., Exp -> BaseExpVec_avx512)
@@ -598,6 +600,7 @@ func FallbackTarget() Target {
 			"FindLastTrue":  {Package: "hwy", Name: "FindLastTrue", IsMethod: false},
 			"FirstN":        {Package: "hwy", Name: "FirstN", IsMethod: false},
 			"LastN":         {Package: "hwy", Name: "LastN", IsMethod: false},
+			"BitsFromMask":  {Package: "hwy", Name: "BitsFromMask", IsMethod: false},
 
 			// ===== contrib/math: Transcendental functions =====
 			// The transformer adds target and type suffix (e.g., Exp -> BaseExpVec_fallback)
@@ -784,6 +787,7 @@ func NEONTarget() Target {
 			"FindLastTrue":  {Name: "FindLastTrue", IsMethod: false},
 			"FirstN":        {Name: "FirstN", IsMethod: false},
 			"LastN":         {Name: "LastN", IsMethod: false},
+			"BitsFromMask":  {Package: "hwy", Name: "BitsFromMask", IsMethod: false},
 
 			// ===== IEEE 754 Exponent/Mantissa operations =====
 			"GetExponent": {Name: "GetExponent", IsMethod: true},

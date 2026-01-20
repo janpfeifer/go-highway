@@ -8,6 +8,11 @@ import (
 	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
+// Hoisted constants - pre-broadcasted at package init time
+var (
+	BaseMaskedVByteDecodeGroup_NEON_threshold_f32 = asm.BroadcastUint8x16(0x80)
+)
+
 func BaseMaskedVByteDecodeBatch32_neon(src []byte, dst []uint32, n int) (decoded int, consumed int) {
 	if len(src) == 0 || n == 0 || len(dst) == 0 {
 		return 0, 0
@@ -39,20 +44,9 @@ func BaseMaskedVByteDecodeGroup_neon(src []byte, dst []uint32) (decoded int, con
 		return 0, 0
 	}
 	srcVec := asm.LoadUint8x16Slice(src[:16])
-	highBitMask := hwy.TestBit(srcVec, 7)
-	var pattern uint16
-	for i := 0; i < 12; i++ {
-		if !func() bool {
-			_vOne := asm.BroadcastInt32x16(1)
-			_vZero := asm.BroadcastInt32x16(0)
-			_vMasked := _vOne.Merge(_vZero, highBitMask)
-			var _simd_mask_tmp [16]int32
-			_vMasked.StoreSlice(_simd_mask_tmp[:])
-			return _simd_mask_tmp[i] != 0
-		}() {
-			pattern |= 1 << i
-		}
-	}
+	threshold := BaseMaskedVByteDecodeGroup_NEON_threshold_f32
+	terminatorMask := srcVec.LessThan(threshold)
+	pattern := uint16(hwy.BitsFromMask_NEON_Uint8x16(terminatorMask)) & 0x0FFF
 	if pattern == 0 {
 		return 0, 0
 	}
@@ -65,13 +59,9 @@ func BaseMaskedVByteDecodeGroup_neon(src []byte, dst []uint32) (decoded int, con
 	shuffled := srcVec.TableLookupBytes(maskVec)
 	var result [16]uint8
 	shuffled.StoreSlice(result[:])
-	numVals := int(lookup.numValues)
-	start := 0
-	for i := 0; i < numVals; i++ {
-		end := int(lookup.valueEnds[i])
-		length := end - start
-		dst[i] = maskedVByteCombine(result[i*4:i*4+4], length)
-		start = end
-	}
-	return numVals, int(lookup.bytesConsumed)
+	dst[0] = uint32(result[0]&0x7f) | uint32(result[1]&0x7f)<<7 | uint32(result[2]&0x7f)<<14 | uint32(result[3])<<21
+	dst[1] = uint32(result[4]&0x7f) | uint32(result[5]&0x7f)<<7 | uint32(result[6]&0x7f)<<14 | uint32(result[7])<<21
+	dst[2] = uint32(result[8]&0x7f) | uint32(result[9]&0x7f)<<7 | uint32(result[10]&0x7f)<<14 | uint32(result[11])<<21
+	dst[3] = uint32(result[12]&0x7f) | uint32(result[13]&0x7f)<<7 | uint32(result[14]&0x7f)<<14 | uint32(result[15])<<21
+	return int(lookup.numValues), int(lookup.bytesConsumed)
 }

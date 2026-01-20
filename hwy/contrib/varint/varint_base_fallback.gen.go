@@ -11,16 +11,16 @@ func BaseFindVarintEnds_fallback(src []byte) uint32 {
 		return 0
 	}
 	n := min(len(src), 32)
-	lanes := hwy.MaxLanes[uint8]()
+	if n == 32 {
+		threshold := hwy.Set[uint8](0x80)
+		v := hwy.Load[uint8](src[:32])
+		isTerminator := hwy.LessThan(v, threshold)
+		return uint32(hwy.BitsFromMask(isTerminator))
+	}
 	var mask uint32
-	for i := 0; i < n; i += lanes {
-		remaining := min(lanes, n-i)
-		v := hwy.Load(src[i : i+remaining])
-		highBitMask := hwy.TestBit(v, 7)
-		for j := 0; j < remaining; j++ {
-			if !highBitMask.GetBit(j) {
-				mask |= 1 << uint(i+j)
-			}
+	for i := 0; i < n; i++ {
+		if src[i] < 0x80 {
+			mask |= 1 << uint(i)
 		}
 	}
 	return mask

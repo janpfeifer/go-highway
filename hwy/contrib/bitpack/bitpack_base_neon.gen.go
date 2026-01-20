@@ -45,7 +45,7 @@ func BaseUnpack32_neon(src []byte, bitWidth int, dst []uint32) int {
 	if bitWidth > 32 {
 		bitWidth = 32
 	}
-	lanes := 4
+	lanes := 16
 	mask := uint32((1 << bitWidth) - 1)
 	bitPos := 0
 	bytePos := 0
@@ -104,7 +104,7 @@ func BaseUnpack64_neon(src []byte, bitWidth int, dst []uint64) int {
 	if bitWidth > 64 {
 		bitWidth = 64
 	}
-	lanes := 2
+	lanes := 16
 	var mask uint64
 	if bitWidth == 64 {
 		mask = ^uint64(0)
@@ -144,9 +144,6 @@ func BaseDeltaEncode32_neon(src []uint32, base uint32, dst []uint32) {
 		delta.StoreSlice(dst[i:])
 		prev = src[i+lanes-1]
 	}
-	if i < len(src) {
-		BaseDeltaEncode32_fallback(src[i:len(src)], base, dst[i:len(src)])
-	}
 	for ; i < len(src); i++ {
 		dst[i] = src[i] - prev
 		prev = src[i]
@@ -171,9 +168,6 @@ func BaseDeltaEncode64_neon(src []uint64, base uint64, dst []uint64) {
 		delta := curr.Sub(prevVec)
 		delta.StoreSlice(dst[i:])
 		prev = src[i+lanes-1]
-	}
-	if i < len(src) {
-		BaseDeltaEncode64_fallback(src[i:len(src)], base, dst[i:len(src)])
 	}
 	for ; i < len(src); i++ {
 		dst[i] = src[i] - prev

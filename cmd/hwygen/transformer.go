@@ -293,6 +293,12 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	// Collect all locally-defined variable names to avoid hoisting them as constants
 	collectLocalVariables(funcDecl.Body, ctx)
 
+	// Pre-scan for Load sizes to determine inferredFuncLanes before processing Set calls.
+	// This ensures hoisted constants match the actual vector width used by Load operations.
+	if loadSize := findMaxLoadSizeForElemType(funcDecl.Body, elemType); loadSize > 0 {
+		ctx.inferredFuncLanes = loadSize
+	}
+
 	// Resolve type-specific constant references
 	// Pattern 1: expC0 -> expC0_f32 (base name lookup)
 	// Pattern 2: expC0_f32 -> expC0_f64 (suffix swapping for compilable base files)
@@ -2192,6 +2198,15 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		}
 		if inferredLanes > 0 {
 			shortTypeName = getShortTypeNameForLanes(ctx.elemType, inferredLanes)
+		} else if ctx.inferredFuncLanes > 0 {
+			// Fall back to function-level inferred lanes (from Load calls)
+			// Cap at target's max lanes to avoid generating invalid types (e.g., Uint8x32 on NEON)
+			useLanes := ctx.inferredFuncLanes
+			targetLanes := ctx.target.LanesFor(ctx.elemType)
+			if useLanes > targetLanes {
+				useLanes = targetLanes
+			}
+			shortTypeName = getShortTypeNameForLanes(ctx.elemType, useLanes)
 		}
 		fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, shortTypeName)
 		selExpr.X = ast.NewIdent("hwy")
@@ -2702,6 +2717,45 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 	}
 }
 
+// findMaxLoadSizeForElemType scans the function body for hwy.Load[T](slice) calls
+// and returns the maximum slice size found for the given element type.
+// This is used to determine the appropriate vector width for constant hoisting.
+func findMaxLoadSizeForElemType(body *ast.BlockStmt, elemType string) int {
+	maxSize := 0
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		// Check for hwy.Load[T](slice) pattern
+		indexExpr, ok := call.Fun.(*ast.IndexExpr)
+		if !ok {
+			return true
+		}
+		selExpr, ok := indexExpr.X.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		ident, ok := selExpr.X.(*ast.Ident)
+		if !ok || ident.Name != "hwy" || selExpr.Sel.Name != "Load" {
+			return true
+		}
+		// Check type parameter matches
+		typeIdent, ok := indexExpr.Index.(*ast.Ident)
+		if !ok || typeIdent.Name != elemType {
+			return true
+		}
+		// Get slice size from argument
+		if len(call.Args) == 1 {
+			if size := getSliceSize(call.Args[0]); size > 0 && size > maxSize {
+				maxSize = size
+			}
+		}
+		return true
+	})
+	return maxSize
+}
+
 // tryHoistSetCall checks if an expression is a hwy.Set[T](constant) call
 // and if so, registers it for hoisting and returns the hoisted variable name.
 func tryHoistSetCall(stmt *ast.AssignStmt, rhsIndex int, rhs ast.Expr, ctx *transformContext) string {
@@ -2792,7 +2846,20 @@ func tryHoistSetCall(stmt *ast.AssignStmt, rhsIndex int, rhs ast.Expr, ctx *tran
 
 	// Get vector type and broadcast function for this target
 	// For int32 types used in float operations, match the lane count of the parent element type
-	vecTypeName := getVectorTypeNameForInt(actualElemType, ctx.elemType, ctx.target)
+	// If inferredFuncLanes is set and smaller than target width, use it to match Load sizes
+	var useLanes int
+	if actualElemType == "int32" || actualElemType == "int64" {
+		// Int32/int64 constants used in float functions should match the parent type's lane count
+		// e.g., int32 constants in float64 functions need 2 lanes on NEON, not 4
+		useLanes = ctx.target.LanesFor(ctx.elemType)
+	} else {
+		targetLanes := ctx.target.LanesFor(actualElemType)
+		useLanes = targetLanes
+		if ctx.inferredFuncLanes > 0 && ctx.inferredFuncLanes < targetLanes {
+			useLanes = ctx.inferredFuncLanes
+		}
+	}
+	vecTypeName := getVectorTypeNameForLanes(actualElemType, useLanes)
 	pkgName := getVecPackageName(ctx.target)
 	broadcastFunc := fmt.Sprintf("%s.Broadcast%s", pkgName, vecTypeName)
 
@@ -3195,13 +3262,29 @@ func usesExternalVariables(body *ast.BlockStmt, iterator string) bool {
 		return false
 	}
 
-	// Collect the names of slices/arrays that appear in index expressions
-	// These are OK to reference since they're function parameters
-	indexedSlices := make(map[string]bool)
+	// Collect identifiers that are OK to use:
+	// 1. Slices/arrays being indexed (function parameters)
+	// 2. Identifiers that are part of selector expressions (package.Func, obj.Method)
+	okIdents := make(map[*ast.Ident]bool)
+
 	ast.Inspect(body, func(n ast.Node) bool {
-		if indexExpr, ok := n.(*ast.IndexExpr); ok {
-			if ident, ok := indexExpr.X.(*ast.Ident); ok {
-				indexedSlices[ident.Name] = true
+		switch expr := n.(type) {
+		case *ast.IndexExpr:
+			// Mark the slice/array being indexed as OK
+			if ident, ok := expr.X.(*ast.Ident); ok {
+				okIdents[ident] = true
+			}
+		case *ast.SelectorExpr:
+			// Mark both parts of selector expressions as OK
+			// e.g., hwy.Float32ToFloat16 or dst[i].Float32()
+			if ident, ok := expr.X.(*ast.Ident); ok {
+				okIdents[ident] = true
+			}
+			okIdents[expr.Sel] = true
+		case *ast.CallExpr:
+			// Mark function name in direct calls as OK
+			if ident, ok := expr.Fun.(*ast.Ident); ok {
+				okIdents[ident] = true
 			}
 		}
 		return true
@@ -3214,15 +3297,15 @@ func usesExternalVariables(body *ast.BlockStmt, iterator string) bool {
 			return true
 		}
 
+		// Skip if already marked as OK
+		if okIdents[ident] {
+			return true
+		}
+
 		name := ident.Name
 
 		// Skip the iterator variable
 		if name == iterator {
-			return true
-		}
-
-		// Skip indexed slices/arrays (these are function parameters)
-		if indexedSlices[name] {
 			return true
 		}
 
