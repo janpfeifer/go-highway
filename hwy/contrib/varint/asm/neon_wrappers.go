@@ -20,7 +20,7 @@ package asm
 
 import "unsafe"
 
-//go:generate go tool goat ../c/varint_neon_arm64.c -O3 --target arm64 -e="-march=armv8-a+simd+fp"
+//go:generate go tool goat ../c/varint_neon_arm64.c -O3 --target arm64 -e=-march=armv8-a+simd+fp
 
 // ============================================================================
 // SIMD Varint Boundary Detection

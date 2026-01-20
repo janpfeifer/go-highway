@@ -13,7 +13,6 @@ TEXT ·matmul_fmopa_at_f32(SB), $128-48
 	MOVD pm+24(FP), R3
 	MOVD pn+32(FP), R4
 	MOVD pk+40(FP), R5
-	WORD $0xd10203ff   // sub	sp, sp, #128
 	WORD $0xa9026ffc   // stp	x28, x27, [sp, #32]             ; 16-byte Folded Spill
 	WORD $0xa90367fa   // stp	x26, x25, [sp, #48]             ; 16-byte Folded Spill
 	WORD $0xa9045ff8   // stp	x24, x23, [sp, #64]             ; 16-byte Folded Spill
@@ -244,7 +243,6 @@ BB0_12:
 	WORD $0xa9445ff8 // ldp	x24, x23, [sp, #64]             ; 16-byte Folded Reload
 	WORD $0xa94367fa // ldp	x26, x25, [sp, #48]             ; 16-byte Folded Reload
 	WORD $0xa9426ffc // ldp	x28, x27, [sp, #32]             ; 16-byte Folded Reload
-	WORD $0x910203ff // add	sp, sp, #128
 	WORD $0xd503467f // smstop	sm
 	RET
 
@@ -260,7 +258,7 @@ TEXT ·matmul_fmopa_at_f64(SB), $48-48
 	WORD $0xf100051f   // cmp	x8, #1
 	WORD $0xfa41a928   // ccmp	x9, #1, #8, ge
 	BLT  BB1_13
-	WORD $0xa9bd5ff8   // stp	x24, x23, [sp, #-48]!           ; 16-byte Folded Spill
+	WORD $0xa9005ff8   // stp	x24, x23, [sp, #-48]!           ; 16-byte Folded Spill [transformed]
 	WORD $0xa90157f6   // stp	x22, x21, [sp, #16]             ; 16-byte Folded Spill
 	WORD $0xa9024ff4   // stp	x20, x19, [sp, #32]             ; 16-byte Folded Spill
 	WORD $0xf94000aa   // ldr	x10, [x5]
@@ -396,7 +394,7 @@ BB1_10:
 BB1_12:
 	WORD $0xa9424ff4 // ldp	x20, x19, [sp, #32]             ; 16-byte Folded Reload
 	WORD $0xa94157f6 // ldp	x22, x21, [sp, #16]             ; 16-byte Folded Reload
-	WORD $0xa8c35ff8 // ldp	x24, x23, [sp], #48             ; 16-byte Folded Reload
+	WORD $0xa9405ff8 // ldp	x24, x23, [sp], #48             ; 16-byte Folded Reload [transformed]
 
 BB1_13:
 	WORD $0xd503467f // smstop	sm
@@ -679,7 +677,7 @@ TEXT ·matmul_bfmopa_at_bf16(SB), $16-56
 	WORD $0xf100051f        // cmp	x8, #1
 	WORD $0xfa41a928        // ccmp	x9, #1, #8, ge
 	BLT  BB3_17
-	WORD $0xa9bf4ff4        // stp	x20, x19, [sp, #-16]!           ; 16-byte Folded Spill
+	WORD $0xa9004ff4        // stp	x20, x19, [sp, #-16]!           ; 16-byte Folded Spill [transformed]
 	WORD $0xf94000aa        // ldr	x10, [x5]
 	WORD $0xf100015f        // cmp	x10, #0
 	BLE  BB3_10
@@ -1058,7 +1056,7 @@ BB3_13:
 	BLT  BB3_11
 
 BB3_16:
-	WORD $0xa8c14ff4 // ldp	x20, x19, [sp], #16             ; 16-byte Folded Reload
+	WORD $0xa9404ff4 // ldp	x20, x19, [sp], #16             ; 16-byte Folded Reload [transformed]
 
 BB3_17:
 	WORD $0xd503467f // smstop	sm

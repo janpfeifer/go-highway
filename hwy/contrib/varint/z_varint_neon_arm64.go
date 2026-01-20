@@ -18,6 +18,7 @@ package varint
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/ajroetker/go-highway/hwy/contrib/varint/asm"
 )
@@ -59,7 +60,13 @@ func init() {
 	DecodeGroupVarint64 = asm.DecodeGroupVarint64
 
 	// Stream-VByte SIMD decode
-	DecodeStreamVByte32Into = asm.DecodeStreamVByte32Into
+	// Note: Skip on Linux ARM64 due to segfault issue with x29/x30 register
+	// usage in the generated assembly. The GoAT-compiled code uses x29/x30
+	// as scratch registers after saving them, which works on macOS but causes
+	// issues on Linux ARM64. TODO: investigate root cause.
+	if runtime.GOOS != "linux" {
+		DecodeStreamVByte32Into = asm.DecodeStreamVByte32Into
+	}
 }
 
 // wrapFindVarintEnds adapts the asm function signature.

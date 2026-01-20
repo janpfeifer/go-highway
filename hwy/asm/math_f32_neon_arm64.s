@@ -171,7 +171,7 @@ TEXT ·atan2_f32_neon(SB), $16-32
 	WORD $0xf9400068       // ldr	x8, [x3]
 	WORD $0xf100111f       // cmp	x8, #4
 	BLT  BB2_4
-	WORD $0x6dbf23e9       // stp	d9, d8, [sp, #-16]!             ; 16-byte Folded Spill
+	WORD $0x6d0023e9       // stp	d9, d8, [sp, #-16]!             ; 16-byte Folded Spill [transformed]
 	WORD $0x52800069       // mov	w9, #3                          ; =0x3
 	WORD $0x4f03f600       // fmov.4s	v0, #1.00000000
 	WORD $0x528279aa       // mov	w10, #5069                      ; =0x13cd
@@ -264,7 +264,7 @@ BB2_2:
 	WORD $0x91001129 // add	x9, x9, #4
 	WORD $0xeb08013f // cmp	x9, x8
 	BLT  BB2_2
-	WORD $0x6cc123e9 // ldp	d9, d8, [sp], #16               ; 16-byte Folded Reload
+	WORD $0x6d4023e9 // ldp	d9, d8, [sp], #16               ; 16-byte Folded Reload [transformed]
 
 BB2_4:
 	RET
@@ -277,7 +277,7 @@ TEXT ·pow_f32_neon(SB), $16-32
 	WORD $0xf9400068        // ldr	x8, [x3]
 	WORD $0xf100111f        // cmp	x8, #4
 	BLT  BB3_4
-	WORD $0x6dbf23e9        // stp	d9, d8, [sp, #-16]!             ; 16-byte Folded Spill
+	WORD $0x6d0023e9        // stp	d9, d8, [sp, #-16]!             ; 16-byte Folded Spill [transformed]
 	WORD $0x52800069        // mov	w9, #3                          ; =0x3
 	WORD $0x52884c0a        // mov	w10, #16992                     ; =0x4260
 	WORD $0x72a1b44a        // movk	w10, #3490, lsl #16
@@ -377,7 +377,7 @@ BB3_2:
 	WORD $0x91001129 // add	x9, x9, #4
 	WORD $0xeb08013f // cmp	x9, x8
 	BLT  BB3_2
-	WORD $0x6cc123e9 // ldp	d9, d8, [sp], #16               ; 16-byte Folded Reload
+	WORD $0x6d4023e9 // ldp	d9, d8, [sp], #16               ; 16-byte Folded Reload [transformed]
 
 BB3_4:
 	RET
@@ -805,7 +805,7 @@ TEXT ·exp_bulk_f32_neon(SB), $64-24
 	MOVD input+0(FP), R0
 	MOVD result+8(FP), R1
 	MOVD len+16(FP), R2
-	WORD $0x6dbc3bef      // stp	d15, d14, [sp, #-64]!           ; 16-byte Folded Spill
+	WORD $0x6d003bef      // stp	d15, d14, [sp, #-64]!           ; 16-byte Folded Spill [transformed]
 	WORD $0x6d0133ed      // stp	d13, d12, [sp, #16]             ; 16-byte Folded Spill
 	WORD $0x6d022beb      // stp	d11, d10, [sp, #32]             ; 16-byte Folded Spill
 	WORD $0x6d0323e9      // stp	d9, d8, [sp, #48]               ; 16-byte Folded Spill
@@ -1102,5 +1102,5 @@ BB10_11:
 	WORD $0x6d4323e9 // ldp	d9, d8, [sp, #48]               ; 16-byte Folded Reload
 	WORD $0x6d422beb // ldp	d11, d10, [sp, #32]             ; 16-byte Folded Reload
 	WORD $0x6d4133ed // ldp	d13, d12, [sp, #16]             ; 16-byte Folded Reload
-	WORD $0x6cc43bef // ldp	d15, d14, [sp], #64             ; 16-byte Folded Reload
+	WORD $0x6d403bef // ldp	d15, d14, [sp], #64             ; 16-byte Folded Reload [transformed]
 	RET

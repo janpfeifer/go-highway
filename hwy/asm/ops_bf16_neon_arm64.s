@@ -460,7 +460,6 @@ TEXT ·matmul_bf16_neon(SB), $144-72
 	MOVD ldb_ptr+56(FP), R7
 	MOVD ldc_ptr+64(FP), R8
 	MOVD R8, 0(RSP)
-	WORD $0xd10243ff        // sub	sp, sp, #144
 	WORD $0xa9036ffc        // stp	x28, x27, [sp, #48]             ; 16-byte Folded Spill
 	WORD $0xa90467fa        // stp	x26, x25, [sp, #64]             ; 16-byte Folded Spill
 	WORD $0xa9055ff8        // stp	x24, x23, [sp, #80]             ; 16-byte Folded Spill
@@ -727,7 +726,6 @@ BB3_30:
 	WORD $0xa9455ff8 // ldp	x24, x23, [sp, #80]             ; 16-byte Folded Reload
 	WORD $0xa94467fa // ldp	x26, x25, [sp, #64]             ; 16-byte Folded Reload
 	WORD $0xa9436ffc // ldp	x28, x27, [sp, #48]             ; 16-byte Folded Reload
-	WORD $0x910243ff // add	sp, sp, #144
 	RET
 
 BB3_31:
@@ -748,22 +746,22 @@ TEXT ·load4_bf16x8(SB), $0-40
 	WORD $0x3d800083     // str	q3, [x4]
 	RET
 
-TEXT ·store4_bf16x8(SB), $0-72
+TEXT ·store4_bf16x8(SB), $0-80
 	MOVD ptr+0(FP), R0
-	MOVD v0_0+8(FP), R9
-	MOVD v0_8+16(FP), R10
+	MOVD v0_0+16(FP), R9
+	MOVD v0_8+24(FP), R10
 	VMOV R9, V0.D[0]
 	VMOV R10, V0.D[1]
-	MOVD v1_0+24(FP), R9
-	MOVD v1_8+32(FP), R10
+	MOVD v1_0+32(FP), R9
+	MOVD v1_8+40(FP), R10
 	VMOV R9, V1.D[0]
 	VMOV R10, V1.D[1]
-	MOVD v2_0+40(FP), R9
-	MOVD v2_8+48(FP), R10
+	MOVD v2_0+48(FP), R9
+	MOVD v2_8+56(FP), R10
 	VMOV R9, V2.D[0]
 	VMOV R10, V2.D[1]
-	MOVD v3_0+56(FP), R9
-	MOVD v3_8+64(FP), R10
+	MOVD v3_0+64(FP), R9
+	MOVD v3_8+72(FP), R10
 	VMOV R9, V3.D[0]
 	VMOV R10, V3.D[1]
 	WORD $0x4c002400      // st1.8h	{ v0, v1, v2, v3 }, [x0]
