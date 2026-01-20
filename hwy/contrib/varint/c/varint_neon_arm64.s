@@ -5,28 +5,212 @@
 _find_varint_ends_u8:                   ; @find_varint_ends_u8
 ; %bb.0:
 	cmp	x1, #1
-	b.lt	LBB0_4
+	b.lt	LBB0_3
 ; %bb.1:
-	mov	x9, #0                          ; =0x0
-	mov	x8, #0                          ; =0x0
-	mov	w10, #64                        ; =0x40
+	mov	w8, #64                         ; =0x40
 	cmp	x1, #64
-	csel	x10, x1, x10, lo
-	mov	w11, #1                         ; =0x1
-LBB0_2:                                 ; =>This Inner Loop Header: Depth=1
-	ldrsb	w12, [x0, x9]
-	lsl	x13, x11, x9
-	cmp	w12, #0
-	csel	x12, xzr, x13, lt
-	orr	x8, x12, x8
-	add	x9, x9, #1
-	cmp	x10, x9
-	b.ne	LBB0_2
-; %bb.3:
-	str	x8, [x2]
+	csel	x8, x1, x8, lo
+	cmp	x1, #15
+	b.hi	LBB0_4
+; %bb.2:
+	mov	x10, #0                         ; =0x0
+	mov	x9, #0                          ; =0x0
+	cmp	x10, x8
+	b.lo	LBB0_12
+	b	LBB0_14
+LBB0_3:
+	str	xzr, [x2]
 	ret
 LBB0_4:
-	str	xzr, [x2]
+	sub	sp, sp, #48
+	stp	x22, x21, [sp, #16]             ; 16-byte Folded Spill
+	stp	x20, x19, [sp, #32]             ; 16-byte Folded Spill
+	ldr	q0, [x0]
+	cmge.16b	v1, v0, #0
+	movi.16b	v0, #1
+	and.16b	v1, v1, v0
+	str	q1, [sp]
+	ldrb	w9, [sp]
+	ldrb	w10, [sp, #1]
+	orr	x9, x9, x10, lsl #1
+	ldrb	w10, [sp, #2]
+	orr	x9, x9, x10, lsl #2
+	ldrb	w10, [sp, #3]
+	orr	x9, x9, x10, lsl #3
+	ldrb	w10, [sp, #4]
+	orr	x9, x9, x10, lsl #4
+	ldrb	w10, [sp, #5]
+	orr	x9, x9, x10, lsl #5
+	ldrb	w10, [sp, #6]
+	orr	x9, x9, x10, lsl #6
+	ldrb	w10, [sp, #7]
+	orr	x9, x9, x10, lsl #7
+	ldrb	w10, [sp, #8]
+	orr	x9, x9, x10, lsl #8
+	ldrb	w10, [sp, #9]
+	orr	x9, x9, x10, lsl #9
+	ldrb	w10, [sp, #10]
+	orr	x9, x9, x10, lsl #10
+	ldrb	w10, [sp, #11]
+	orr	x9, x9, x10, lsl #11
+	ldrb	w10, [sp, #12]
+	orr	x9, x9, x10, lsl #12
+	ldrb	w10, [sp, #13]
+	orr	x9, x9, x10, lsl #13
+	ldrb	w10, [sp, #14]
+	orr	x9, x9, x10, lsl #14
+	ldrb	w10, [sp, #15]
+	orr	x9, x9, x10, lsl #15
+	cmp	x1, #32
+	b.hs	LBB0_6
+; %bb.5:
+	mov	w10, #16                        ; =0x10
+	b	LBB0_11
+LBB0_6:
+	ldr	q1, [x0, #16]
+	cmge.16b	v1, v1, #0
+	and.16b	v0, v1, v0
+	str	q0, [sp]
+	ldrb	w10, [sp]
+	ldrb	w11, [sp, #1]
+	ldrb	w12, [sp, #2]
+	ldrb	w13, [sp, #3]
+	ldrb	w14, [sp, #4]
+	ldrb	w15, [sp, #5]
+	ldrb	w16, [sp, #6]
+	ldrb	w17, [sp, #7]
+	ldrb	w3, [sp, #8]
+	ldrb	w4, [sp, #9]
+	ldrb	w5, [sp, #10]
+	ldrb	w6, [sp, #11]
+	ldrb	w7, [sp, #12]
+	ldrb	w19, [sp, #13]
+	ldrb	w20, [sp, #14]
+	ldrb	w21, [sp, #15]
+	lsl	x11, x11, #17
+	orr	x10, x11, x10, lsl #16
+	orr	x10, x10, x12, lsl #18
+	orr	x10, x10, x13, lsl #19
+	orr	x10, x10, x14, lsl #20
+	orr	x10, x10, x15, lsl #21
+	orr	x10, x10, x16, lsl #22
+	orr	x10, x10, x17, lsl #23
+	orr	x10, x10, x3, lsl #24
+	orr	x10, x10, x4, lsl #25
+	orr	x10, x10, x5, lsl #26
+	orr	x10, x10, x6, lsl #27
+	orr	x10, x10, x7, lsl #28
+	orr	x10, x10, x19, lsl #29
+	orr	x10, x10, x20, lsl #30
+	orr	x10, x10, x21, lsl #31
+	orr	x9, x10, x9
+	cmp	x1, #48
+	b.hs	LBB0_8
+; %bb.7:
+	mov	w10, #32                        ; =0x20
+	b	LBB0_11
+LBB0_8:
+	ldr	q0, [x0, #32]
+	cmge.16b	v1, v0, #0
+	movi.16b	v0, #1
+	and.16b	v1, v1, v0
+	str	q1, [sp]
+	ldrb	w10, [sp]
+	ldrb	w11, [sp, #1]
+	ldrb	w12, [sp, #2]
+	ldrb	w13, [sp, #3]
+	ldrb	w14, [sp, #4]
+	ldrb	w15, [sp, #5]
+	ldrb	w16, [sp, #6]
+	ldrb	w17, [sp, #7]
+	ldrb	w3, [sp, #8]
+	ldrb	w4, [sp, #9]
+	ldrb	w5, [sp, #10]
+	ldrb	w6, [sp, #11]
+	ldrb	w7, [sp, #12]
+	ldrb	w19, [sp, #13]
+	ldrb	w20, [sp, #14]
+	ldrb	w21, [sp, #15]
+	lsl	x11, x11, #33
+	orr	x10, x11, x10, lsl #32
+	orr	x10, x10, x12, lsl #34
+	orr	x10, x10, x13, lsl #35
+	orr	x10, x10, x14, lsl #36
+	orr	x10, x10, x15, lsl #37
+	orr	x10, x10, x16, lsl #38
+	orr	x10, x10, x17, lsl #39
+	orr	x10, x10, x3, lsl #40
+	orr	x10, x10, x4, lsl #41
+	orr	x10, x10, x5, lsl #42
+	orr	x10, x10, x6, lsl #43
+	orr	x10, x10, x7, lsl #44
+	orr	x10, x10, x19, lsl #45
+	orr	x10, x10, x20, lsl #46
+	orr	x10, x10, x21, lsl #47
+	orr	x9, x10, x9
+	cmp	x1, #64
+	b.hs	LBB0_10
+; %bb.9:
+	mov	w10, #48                        ; =0x30
+	b	LBB0_11
+LBB0_10:
+	ldr	q1, [x0, #48]
+	cmge.16b	v1, v1, #0
+	and.16b	v0, v1, v0
+	str	q0, [sp]
+	ldrb	w10, [sp]
+	ldrb	w11, [sp, #1]
+	ldrb	w12, [sp, #2]
+	ldrb	w13, [sp, #3]
+	ldrb	w14, [sp, #4]
+	ldrb	w15, [sp, #5]
+	ldrb	w16, [sp, #6]
+	ldrb	w17, [sp, #7]
+	ldrb	w1, [sp, #8]
+	ldrb	w3, [sp, #9]
+	ldrb	w4, [sp, #10]
+	ldrb	w5, [sp, #11]
+	ldrb	w6, [sp, #12]
+	ldrb	w7, [sp, #13]
+	ldrb	w19, [sp, #14]
+	ldrb	w20, [sp, #15]
+	lsl	x11, x11, #49
+	orr	x10, x11, x10, lsl #48
+	orr	x10, x10, x12, lsl #50
+	orr	x10, x10, x13, lsl #51
+	orr	x10, x10, x14, lsl #52
+	orr	x10, x10, x15, lsl #53
+	orr	x10, x10, x16, lsl #54
+	orr	x10, x10, x17, lsl #55
+	orr	x10, x10, x1, lsl #56
+	orr	x10, x10, x3, lsl #57
+	orr	x10, x10, x4, lsl #58
+	orr	x10, x10, x5, lsl #59
+	orr	x10, x10, x6, lsl #60
+	orr	x10, x10, x7, lsl #61
+	orr	x10, x10, x19, lsl #62
+	orr	x10, x10, x20, lsl #63
+	orr	x9, x10, x9
+	mov	w10, #64                        ; =0x40
+LBB0_11:
+	ldp	x20, x19, [sp, #32]             ; 16-byte Folded Reload
+	ldp	x22, x21, [sp, #16]             ; 16-byte Folded Reload
+	add	sp, sp, #48
+	cmp	x10, x8
+	b.hs	LBB0_14
+LBB0_12:
+	mov	w11, #1                         ; =0x1
+LBB0_13:                                ; =>This Inner Loop Header: Depth=1
+	ldrsb	w12, [x0, x10]
+	lsl	x13, x11, x10
+	cmp	w12, #0
+	csel	x12, xzr, x13, lt
+	orr	x9, x12, x9
+	add	x10, x10, #1
+	cmp	x8, x10
+	b.ne	LBB0_13
+LBB0_14:
+	str	x9, [x2]
 	ret
                                         ; -- End function
 	.globl	_decode_uvarint64_batch         ; -- Begin function decode_uvarint64_batch

@@ -47,12 +47,53 @@ void find_varint_ends_u8(unsigned char *src, int64_t n, int64_t *result) {
         n = 64;
     }
 
-    // Pure scalar implementation - avoids constant pool references that
-    // clang generates for NEON movemask emulation, which don't link in Go.
-    // Disable vectorization to prevent clang from auto-vectorizing with
-    // constant pool lookup tables.
+    int64_t i = 0;
+
+    // Process 16 bytes at a time with NEON
+    // Uses SIMD comparison + store to stack for movemask emulation.
+    // The volatile prevents clang from optimizing into TBL with constant pools.
+    for (; i + 16 <= n; i += 16) {
+        uint8x16_t v = vld1q_u8(src + i);
+
+        // Get the high bit of each byte: highBit[j] = (byte[j] >> 7)
+        // If byte >= 0x80, highBit = 1 (continuation)
+        // If byte < 0x80, highBit = 0 (terminator)
+        uint8x16_t highBit = vshrq_n_u8(v, 7);
+
+        // We want terminator positions (high bit clear), so XOR with 1
+        uint8x16_t ones = vdupq_n_u8(1);
+        uint8x16_t terminator = veorq_u8(highBit, ones);
+
+        // Store to stack and read back to build bitmask.
+        // Use volatile to prevent clang from optimizing this into
+        // vectorized bit collection with constant pool lookup tables.
+        volatile unsigned char buf[16];
+        vst1q_u8((unsigned char *)buf, terminator);
+
+        uint64_t laneMask = 0;
+        laneMask |= (uint64_t)buf[0];
+        laneMask |= (uint64_t)buf[1] << 1;
+        laneMask |= (uint64_t)buf[2] << 2;
+        laneMask |= (uint64_t)buf[3] << 3;
+        laneMask |= (uint64_t)buf[4] << 4;
+        laneMask |= (uint64_t)buf[5] << 5;
+        laneMask |= (uint64_t)buf[6] << 6;
+        laneMask |= (uint64_t)buf[7] << 7;
+        laneMask |= (uint64_t)buf[8] << 8;
+        laneMask |= (uint64_t)buf[9] << 9;
+        laneMask |= (uint64_t)buf[10] << 10;
+        laneMask |= (uint64_t)buf[11] << 11;
+        laneMask |= (uint64_t)buf[12] << 12;
+        laneMask |= (uint64_t)buf[13] << 13;
+        laneMask |= (uint64_t)buf[14] << 14;
+        laneMask |= (uint64_t)buf[15] << 15;
+
+        mask |= laneMask << i;
+    }
+
+    // Handle remaining bytes with scalar loop
 #pragma clang loop vectorize(disable) interleave(disable)
-    for (int64_t i = 0; i < n; i++) {
+    for (; i < n; i++) {
         if (src[i] < 0x80) {
             mask |= 1LL << i;
         }
