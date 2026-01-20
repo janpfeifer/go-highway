@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //go:build amd64 && goexperiment.simd
 
 package hwy
@@ -105,6 +119,26 @@ func GetLane_AVX512_F64x8(v archsimd.Float64x8, idx int) float64 {
 		return 0
 	}
 	var data [8]float64
+	v.StoreSlice(data[:])
+	return data[idx]
+}
+
+// GetLane_AVX512_I32x16 extracts a single lane value.
+func GetLane_AVX512_I32x16(v archsimd.Int32x16, idx int) int32 {
+	if idx < 0 || idx >= 16 {
+		return 0
+	}
+	var data [16]int32
+	v.StoreSlice(data[:])
+	return data[idx]
+}
+
+// GetLane_AVX512_I64x8 extracts a single lane value.
+func GetLane_AVX512_I64x8(v archsimd.Int64x8, idx int) int64 {
+	if idx < 0 || idx >= 8 {
+		return 0
+	}
+	var data [8]int64
 	v.StoreSlice(data[:])
 	return data[idx]
 }
@@ -345,6 +379,66 @@ func SlideUpLanes_AVX512_F64x8(v archsimd.Float64x8, offset int) archsimd.Float6
 	return archsimd.LoadFloat64x8Slice(result[:])
 }
 
+// SlideUpLanes_AVX512_I32x16 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX512_I32x16(v archsimd.Int32x16, offset int) archsimd.Int32x16 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 16 {
+		return archsimd.Int32x16{}
+	}
+	var data [16]int32
+	v.StoreSlice(data[:])
+	var result [16]int32
+	copy(result[offset:], data[:16-offset])
+	return archsimd.LoadInt32x16Slice(result[:])
+}
+
+// SlideUpLanes_AVX512_I64x8 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX512_I64x8(v archsimd.Int64x8, offset int) archsimd.Int64x8 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 8 {
+		return archsimd.Int64x8{}
+	}
+	var data [8]int64
+	v.StoreSlice(data[:])
+	var result [8]int64
+	copy(result[offset:], data[:8-offset])
+	return archsimd.LoadInt64x8Slice(result[:])
+}
+
+// SlideUpLanes_AVX512_Uint32x16 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX512_Uint32x16(v archsimd.Uint32x16, offset int) archsimd.Uint32x16 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 16 {
+		return archsimd.Uint32x16{}
+	}
+	var data [16]uint32
+	v.StoreSlice(data[:])
+	var result [16]uint32
+	copy(result[offset:], data[:16-offset])
+	return archsimd.LoadUint32x16Slice(result[:])
+}
+
+// SlideUpLanes_AVX512_Uint64x8 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX512_Uint64x8(v archsimd.Uint64x8, offset int) archsimd.Uint64x8 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 8 {
+		return archsimd.Uint64x8{}
+	}
+	var data [8]uint64
+	v.StoreSlice(data[:])
+	var result [8]uint64
+	copy(result[offset:], data[:8-offset])
+	return archsimd.LoadUint64x8Slice(result[:])
+}
+
 // SlideDownLanes_AVX512_F32x16 shifts lanes down by offset, filling high lanes with zeros.
 func SlideDownLanes_AVX512_F32x16(v archsimd.Float32x16, offset int) archsimd.Float32x16 {
 	if offset <= 0 {
@@ -393,4 +487,11 @@ func Slide1Down_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 // Slide1Down_AVX512_F64x8 shifts lanes down by 1, filling last lane with zero.
 func Slide1Down_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	return SlideDownLanes_AVX512_F64x8(v, 1)
+}
+
+// TableLookupBytes_AVX512_Uint8x16 performs byte shuffling using indices.
+// For each byte in indices, selects the corresponding byte from v.
+// If the high bit of an index is set, the result byte is zero (VPSHUFB semantics).
+func TableLookupBytes_AVX512_Uint8x16(v, indices archsimd.Uint8x16) archsimd.Uint8x16 {
+	return v.PermuteOrZero(indices.AsInt8x16())
 }

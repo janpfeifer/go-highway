@@ -1003,7 +1003,6 @@ TEXT ·pow_f64_neon(SB), $80-32
 	WORD $0xf9400068       // ldr	x8, [x3]
 	WORD $0xf100091f       // cmp	x8, #2
 	BLT  BB11_4
-	WORD $0xd10143ff       // sub	sp, sp, #80
 	WORD $0x6d013bef       // stp	d15, d14, [sp, #16]             ; 16-byte Folded Spill
 	WORD $0x6d0233ed       // stp	d13, d12, [sp, #32]             ; 16-byte Folded Spill
 	WORD $0x6d032beb       // stp	d11, d10, [sp, #48]             ; 16-byte Folded Spill
@@ -1146,7 +1145,6 @@ BB11_2:
 	WORD $0x6d432beb // ldp	d11, d10, [sp, #48]             ; 16-byte Folded Reload
 	WORD $0x6d4233ed // ldp	d13, d12, [sp, #32]             ; 16-byte Folded Reload
 	WORD $0x6d413bef // ldp	d15, d14, [sp, #16]             ; 16-byte Folded Reload
-	WORD $0x910143ff // add	sp, sp, #80
 
 BB11_4:
 	RET

@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -117,6 +131,12 @@ func getHalfPrecisionFuncName(opName string, elemType string) string {
 		return "Max" + suffix
 	case "Sqrt":
 		return "Sqrt" + suffix
+	case "RSqrt":
+		return "RSqrt" + suffix
+	case "RSqrtNewtonRaphson":
+		return "RSqrtNewtonRaphson" + suffix
+	case "RSqrtPrecise":
+		return "RSqrtPrecise" + suffix
 	case "Greater", "GreaterThan":
 		return "GreaterThan" + suffix
 	case "Less", "LessThan":
@@ -244,6 +264,7 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 		varTypes:                make(map[string]string),
 		halfPrecisionSlices:     make(map[string]bool),
 		halfPrecisionScalarVars: make(map[string]bool),
+		varVecLanes:             make(map[string]int),
 	}
 
 	// Add function parameters to localVars to prevent them from being hoisted
@@ -334,6 +355,63 @@ type transformContext struct {
 	varTypes                map[string]string             // map[var_name]type for type inference (e.g., "int32", "hwy.Float16")
 	halfPrecisionScalarVars map[string]bool               // Variables assigned from half-precision slice reads
 	halfPrecisionSlices     map[string]bool               // Slice variables that hold half-precision elements
+	varVecLanes             map[string]int                // map[var_name]lanes for detected vector sizes from Load
+	inferredFuncLanes       int                           // Inferred lane count for function (from first detected Load size)
+}
+
+// inferVecLanesFromLoad checks if an expression is an hwy.Load call with a detectable slice size.
+// Returns the number of lanes if detected, 0 otherwise.
+func inferVecLanesFromLoad(expr ast.Expr, ctx *transformContext) int {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return 0
+	}
+
+	// Check for hwy.Load(...) or hwy.Load[T](...) call
+	var funcName string
+	switch fun := call.Fun.(type) {
+	case *ast.SelectorExpr:
+		// hwy.Load(...)
+		pkgIdent, ok := fun.X.(*ast.Ident)
+		if !ok || pkgIdent.Name != "hwy" {
+			return 0
+		}
+		funcName = fun.Sel.Name
+	case *ast.IndexExpr:
+		// hwy.Load[T](...) - generic call
+		sel, ok := fun.X.(*ast.SelectorExpr)
+		if !ok {
+			return 0
+		}
+		pkgIdent, ok := sel.X.(*ast.Ident)
+		if !ok || pkgIdent.Name != "hwy" {
+			return 0
+		}
+		funcName = sel.Sel.Name
+	default:
+		return 0
+	}
+
+	if funcName != "Load" {
+		return 0
+	}
+
+	// Check if we have an argument with a detectable slice size
+	if len(call.Args) == 0 {
+		return 0
+	}
+
+	sliceBytes := getSliceSize(call.Args[0])
+	if sliceBytes <= 0 {
+		return 0
+	}
+
+	elemSize := elemTypeSize(ctx.elemType)
+	if elemSize <= 0 {
+		return 0
+	}
+
+	return sliceBytes / elemSize
 }
 
 // inferTypeFromExpr analyzes an expression and returns its inferred type.
@@ -435,6 +513,14 @@ func collectLocalVariables(node ast.Node, ctx *transformContext) {
 						if i < len(stmt.Rhs) {
 							if inferredType := inferTypeFromExpr(stmt.Rhs[i], ctx); inferredType != "" {
 								ctx.varTypes[ident.Name] = inferredType
+							}
+							// Track vector lanes for variables assigned from Load with known slice size
+							if lanes := inferVecLanesFromLoad(stmt.Rhs[i], ctx); lanes > 0 {
+								ctx.varVecLanes[ident.Name] = lanes
+								// Set function-wide inferred lanes on first detection
+								if ctx.inferredFuncLanes == 0 {
+									ctx.inferredFuncLanes = lanes
+								}
 							}
 						}
 					}
@@ -1250,13 +1336,13 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		// but this may cause issues if they try to use method calls
 	}
 
-	// For unsigned integer types on AVX2/AVX512, use wrapper functions for ReduceMax and GetLane.
-	// archsimd doesn't have ReduceMax or GetLane methods for unsigned types.
-	if isUnsignedIntType(ctx.elemType) && (ctx.target.Name == "AVX2" || ctx.target.Name == "AVX512") {
+	// For AVX2/AVX512, use wrapper functions for ReduceMax (unsigned only) and GetLane (all types).
+	// archsimd doesn't have ReduceMax for unsigned types or a direct GetLane method.
+	if ctx.target.Name == "AVX2" || ctx.target.Name == "AVX512" {
 		switch funcName {
 		case "ReduceMax":
-			// hwy.ReduceMax(v) -> hwy.ReduceMax_AVX2_Uint32x8(v)
-			if len(call.Args) >= 1 {
+			// hwy.ReduceMax(v) -> hwy.ReduceMax_AVX2_Uint32x8(v) (unsigned only)
+			if isUnsignedIntType(ctx.elemType) && len(call.Args) >= 1 {
 				vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
 				wrapperName := fmt.Sprintf("ReduceMax_%s_%s", ctx.target.Name, vecTypeName)
 				call.Fun = &ast.SelectorExpr{
@@ -1267,7 +1353,7 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				return
 			}
 		case "GetLane":
-			// hwy.GetLane(v, i) -> hwy.GetLane_AVX2_Uint32x8(v, i)
+			// hwy.GetLane(v, i) -> hwy.GetLane_AVX2_Float32x8(v, i) etc.
 			if len(call.Args) >= 2 {
 				vecTypeName := getVectorTypeName(ctx.elemType, ctx.target)
 				wrapperName := fmt.Sprintf("GetLane_%s_%s", ctx.target.Name, vecTypeName)
@@ -2093,7 +2179,21 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 	// Check if this op should be redirected to hwy wrappers (archsimd doesn't have it)
 	if opInfo.Package == "hwy" && opInfo.SubPackage == "" {
 		// Use hwy wrapper instead of archsimd
-		fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, getShortTypeName(ctx.elemType, ctx.target))
+		// Try to infer lanes from any argument (for operations like TableLookupBytes)
+		shortTypeName := getShortTypeName(ctx.elemType, ctx.target)
+		inferredLanes := 0
+		for _, arg := range call.Args {
+			if argIdent, ok := arg.(*ast.Ident); ok {
+				if lanes, found := ctx.varVecLanes[argIdent.Name]; found {
+					inferredLanes = lanes
+					break // Use the first known lanes
+				}
+			}
+		}
+		if inferredLanes > 0 {
+			shortTypeName = getShortTypeNameForLanes(ctx.elemType, inferredLanes)
+		}
+		fullName = fmt.Sprintf("%s_%s_%s", opInfo.Name, ctx.target.Name, shortTypeName)
 		selExpr.X = ast.NewIdent("hwy")
 		selExpr.Sel.Name = fullName
 		return
@@ -2101,7 +2201,26 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 
 	switch funcName {
 	case "Load":
-		fullName = fmt.Sprintf("Load%sSlice", vecTypeName)
+		// Check if we can determine the slice size from the argument
+		// For example, hwy.Load(data[:16]) with uint8 should use Uint8x16, not Uint8x32
+		loadVecTypeName := vecTypeName
+		if len(call.Args) > 0 {
+			sliceBytes := getSliceSize(call.Args[0])
+			elemSize := elemTypeSize(ctx.elemType)
+			targetLanes := ctx.target.LanesFor(ctx.elemType)
+			if sliceBytes > 0 && elemSize > 0 {
+				detectedLanes := sliceBytes / elemSize
+				// Only use smaller type if detected lanes is less than target default
+				// and is a valid vector size (power of 2, typically 2, 4, 8, 16, 32, 64)
+				if detectedLanes < targetLanes && detectedLanes > 0 {
+					loadVecTypeName = getVectorTypeNameForLanes(ctx.elemType, detectedLanes)
+				}
+			} else if ctx.inferredFuncLanes > 0 && ctx.inferredFuncLanes < targetLanes {
+				// No explicit size, but we have inferred lanes from earlier in the function
+				loadVecTypeName = getVectorTypeNameForLanes(ctx.elemType, ctx.inferredFuncLanes)
+			}
+		}
+		fullName = fmt.Sprintf("Load%sSlice", loadVecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
 	case "Load4":
 		// For Vec types (Float16/BFloat16), use hwy wrapper since asm doesn't have Load4VecSlice
@@ -2129,6 +2248,32 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			fullName = fmt.Sprintf("Zero%s", vecTypeName)
 			selExpr.X = ast.NewIdent(pkgName)
 		}
+	case "SlideUpLanes":
+		// For NEON: hwy.SlideUpLanes(v, offset) -> asm.SlideUpLanesFloat32x4(v, offset)
+		// For AVX2/AVX512: hwy.SlideUpLanes(v, offset) -> hwy.SlideUpLanes_AVX2_F32x8(v, offset)
+		if ctx.target.Name == "AVX2" || ctx.target.Name == "AVX512" {
+			shortTypeName := getShortTypeName(ctx.elemType, ctx.target)
+			fullName = fmt.Sprintf("SlideUpLanes_%s_%s", ctx.target.Name, shortTypeName)
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			fullName = fmt.Sprintf("SlideUpLanes%s", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+		}
+	case "SlideDownLanes":
+		// For NEON: hwy.SlideDownLanes(v, offset) -> asm.SlideDownLanesFloat32x4(v, offset)
+		// For AVX2/AVX512: hwy.SlideDownLanes(v, offset) -> hwy.SlideDownLanes_AVX2_F32x8(v, offset)
+		if ctx.target.Name == "AVX2" || ctx.target.Name == "AVX512" {
+			shortTypeName := getShortTypeName(ctx.elemType, ctx.target)
+			fullName = fmt.Sprintf("SlideDownLanes_%s_%s", ctx.target.Name, shortTypeName)
+			selExpr.X = ast.NewIdent("hwy")
+		} else {
+			fullName = fmt.Sprintf("SlideDownLanes%s", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+		}
+	case "InsertLane":
+		// hwy.InsertLane(v, idx, val) -> asm.InsertLaneFloat32x4(v, idx, val)
+		fullName = fmt.Sprintf("InsertLane%s", vecTypeName)
+		selExpr.X = ast.NewIdent(pkgName)
 	case "MaskLoad":
 		fullName = fmt.Sprintf("MaskLoad%sSlice", vecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
@@ -2376,6 +2521,11 @@ func getVecPackageName(target Target) string {
 // getShortTypeName returns the short type name like F32x8 for contrib functions.
 func getShortTypeName(elemType string, target Target) string {
 	lanes := target.LanesFor(elemType)
+	return getShortTypeNameForLanes(elemType, lanes)
+}
+
+// getShortTypeNameForLanes returns the short type name for a specific lane count.
+func getShortTypeNameForLanes(elemType string, lanes int) string {
 	switch elemType {
 	case "float32":
 		return fmt.Sprintf("F32x%d", lanes)
@@ -2385,6 +2535,10 @@ func getShortTypeName(elemType string, target Target) string {
 		return fmt.Sprintf("I32x%d", lanes)
 	case "int64":
 		return fmt.Sprintf("I64x%d", lanes)
+	case "uint8":
+		return fmt.Sprintf("Uint8x%d", lanes)
+	case "uint16":
+		return fmt.Sprintf("Uint16x%d", lanes)
 	case "uint32":
 		return fmt.Sprintf("Uint32x%d", lanes)
 	case "uint64":
@@ -2814,6 +2968,23 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 		return
 	}
 
+	// Count SIMD loops that use the same iterator. If there are multiple SIMD loops,
+	// the function has a multi-phase algorithm (e.g., Normalize: accumulate then scale)
+	// and automatic tail handling would break the data dependencies between phases.
+	// In such cases, the template must handle tails manually.
+	simdLoopCount := 0
+	for _, stmt := range body.List {
+		if forStmt, ok := stmt.(*ast.ForStmt); ok {
+			if matchesLoopIterator(forStmt, loopInfo.Iterator) && isSimdStyleLoop(forStmt, loopInfo) {
+				simdLoopCount++
+			}
+		}
+	}
+	if simdLoopCount > 1 {
+		// Multiple SIMD loops - don't insert automatic tail handling
+		return
+	}
+
 	// Find the SIMD loop that uses loopInfo.Iterator as its iterator.
 	// This ensures we don't add tail handling after unrelated loops (e.g., scalar loops).
 	var loopIdx int = -1
@@ -2892,6 +3063,14 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 	}
 
 	// Insert init statement, main loop, and tail handling
+	// Skip the original scalar tail loop if present (it's replaced by the fallback call)
+	nextIdx := loopIdx + 1
+	if nextIdx < len(body.List) {
+		if isScalarTailLoop(body.List[nextIdx], loopInfo.Iterator, loopInfo.End) {
+			nextIdx++ // Skip the scalar tail loop
+		}
+	}
+
 	newStmts := make([]ast.Stmt, 0, len(body.List)+2)
 	newStmts = append(newStmts, body.List[:loopIdx]...)
 	if initStmt != nil {
@@ -2899,8 +3078,101 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 	}
 	newStmts = append(newStmts, mainLoop)
 	newStmts = append(newStmts, tailIf)
-	newStmts = append(newStmts, body.List[loopIdx+1:]...)
+	newStmts = append(newStmts, body.List[nextIdx:]...)
 	body.List = newStmts
+}
+
+// isScalarTailLoop checks if a statement is a scalar tail loop that should be
+// replaced by the fallback call. A scalar tail loop has the form:
+//
+//	for ; i < n; i++ { ... }
+//
+// where i is the iterator and n is the end variable from the SIMD loop.
+func isScalarTailLoop(stmt ast.Stmt, iterator, end string) bool {
+	forStmt, ok := stmt.(*ast.ForStmt)
+	if !ok {
+		return false
+	}
+
+	// Scalar tail loops have no Init (the iterator is already declared)
+	if forStmt.Init != nil {
+		return false
+	}
+
+	// Check condition: i < n
+	cond, ok := forStmt.Cond.(*ast.BinaryExpr)
+	if !ok || cond.Op != token.LSS {
+		return false
+	}
+
+	// Left side should be the iterator
+	leftIdent, ok := cond.X.(*ast.Ident)
+	if !ok || leftIdent.Name != iterator {
+		return false
+	}
+
+	// Right side should be the end variable
+	rightIdent, ok := cond.Y.(*ast.Ident)
+	if !ok || rightIdent.Name != end {
+		return false
+	}
+
+	// Check post: i++ (increment expression)
+	post, ok := forStmt.Post.(*ast.IncDecStmt)
+	if !ok || post.Tok != token.INC {
+		return false
+	}
+
+	postIdent, ok := post.X.(*ast.Ident)
+	if !ok || postIdent.Name != iterator {
+		return false
+	}
+
+	return true
+}
+
+// isSimdStyleLoop checks if a for loop appears to be a SIMD-style loop (as opposed
+// to a scalar tail loop). SIMD loops typically have:
+// - A condition like i+lanes <= len(dst) (not i < len)
+// - A stride like i += lanes (not i++)
+func isSimdStyleLoop(forStmt *ast.ForStmt, loopInfo *LoopInfo) bool {
+	if forStmt == nil || forStmt.Cond == nil || forStmt.Post == nil {
+		return false
+	}
+
+	// Check condition: should be i+lanes <= len (not i < len)
+	cond, ok := forStmt.Cond.(*ast.BinaryExpr)
+	if !ok {
+		return false
+	}
+
+	// SIMD loop condition is typically <= (not <)
+	// Or it's < with a +lanes on the left side
+	if cond.Op == token.LEQ {
+		return true
+	}
+
+	// Check if left side is i+lanes (binary expr with +)
+	if cond.Op == token.LSS {
+		if _, ok := cond.X.(*ast.BinaryExpr); ok {
+			// i+lanes < len pattern
+			return true
+		}
+	}
+
+	// Check post: should be i += lanes (not i++)
+	switch post := forStmt.Post.(type) {
+	case *ast.AssignStmt:
+		// i += lanes
+		if post.Tok == token.ADD_ASSIGN {
+			return true
+		}
+	case *ast.IncDecStmt:
+		// i++ is NOT a SIMD loop
+		return false
+	}
+
+	return false
 }
 
 // specializeType replaces generic type parameters with concrete types.
@@ -3068,6 +3340,11 @@ func getMaskTypeName(elemType string, target Target) string {
 // getVectorTypeName returns the vector type name for archsimd functions.
 func getVectorTypeName(elemType string, target Target) string {
 	lanes := target.LanesFor(elemType)
+	return getVectorTypeNameForLanes(elemType, lanes)
+}
+
+// getVectorTypeNameForLanes returns the vector type name for a specific lane count.
+func getVectorTypeNameForLanes(elemType string, lanes int) string {
 	switch elemType {
 	case "float32":
 		return fmt.Sprintf("Float32x%d", lanes)
@@ -3077,12 +3354,61 @@ func getVectorTypeName(elemType string, target Target) string {
 		return fmt.Sprintf("Int32x%d", lanes)
 	case "int64":
 		return fmt.Sprintf("Int64x%d", lanes)
+	case "uint8":
+		return fmt.Sprintf("Uint8x%d", lanes)
+	case "uint16":
+		return fmt.Sprintf("Uint16x%d", lanes)
 	case "uint32":
 		return fmt.Sprintf("Uint32x%d", lanes)
 	case "uint64":
 		return fmt.Sprintf("Uint64x%d", lanes)
 	default:
 		return "Vec"
+	}
+}
+
+// getSliceSize extracts the size from a slice expression like data[:16] or data[0:16].
+// Returns 0 if the size cannot be determined.
+func getSliceSize(expr ast.Expr) int {
+	sliceExpr, ok := expr.(*ast.SliceExpr)
+	if !ok {
+		return 0
+	}
+	// Check for [:N] or [0:N] pattern
+	if sliceExpr.High == nil {
+		return 0
+	}
+	highLit, ok := sliceExpr.High.(*ast.BasicLit)
+	if !ok || highLit.Kind != token.INT {
+		return 0
+	}
+	size, err := strconv.Atoi(highLit.Value)
+	if err != nil {
+		return 0
+	}
+	// If there's a low bound, check if it's 0
+	if sliceExpr.Low != nil {
+		lowLit, ok := sliceExpr.Low.(*ast.BasicLit)
+		if !ok || lowLit.Kind != token.INT || lowLit.Value != "0" {
+			return 0 // Non-zero low bound, can't determine effective size
+		}
+	}
+	return size
+}
+
+// elemTypeSize returns the size in bytes of an element type.
+func elemTypeSize(elemType string) int {
+	switch elemType {
+	case "float32", "int32", "uint32":
+		return 4
+	case "float64", "int64", "uint64":
+		return 8
+	case "uint8", "int8":
+		return 1
+	case "uint16", "int16":
+		return 2
+	default:
+		return 0
 	}
 }
 
@@ -4809,3 +5135,4 @@ func isHalfPrecisionSliceExpr(indexExpr *ast.IndexExpr, ctx *transformContext) b
 	}
 	return false
 }
+

@@ -460,7 +460,6 @@ TEXT ·matmul_bf16_neon(SB), $144-72
 	MOVD ldb_ptr+56(FP), R7
 	MOVD ldc_ptr+64(FP), R8
 	MOVD R8, 0(RSP)
-	WORD $0xd10243ff        // sub	sp, sp, #144
 	WORD $0xa9036ffc        // stp	x28, x27, [sp, #48]             ; 16-byte Folded Spill
 	WORD $0xa90467fa        // stp	x26, x25, [sp, #64]             ; 16-byte Folded Spill
 	WORD $0xa9055ff8        // stp	x24, x23, [sp, #80]             ; 16-byte Folded Spill
@@ -727,7 +726,6 @@ BB3_30:
 	WORD $0xa9455ff8 // ldp	x24, x23, [sp, #80]             ; 16-byte Folded Reload
 	WORD $0xa94467fa // ldp	x26, x25, [sp, #64]             ; 16-byte Folded Reload
 	WORD $0xa9436ffc // ldp	x28, x27, [sp, #48]             ; 16-byte Folded Reload
-	WORD $0x910243ff // add	sp, sp, #144
 	RET
 
 BB3_31:

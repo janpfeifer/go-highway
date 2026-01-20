@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //go:build !noasm && arm64
 
 package asm
@@ -118,6 +132,36 @@ func SqrtF32(a, result []float32) {
 	sqrt_f32_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
 }
 
+// RSqrtF32 performs element-wise reciprocal square root: result[i] = 1/sqrt(a[i])
+// Uses FRSQRTE instruction (~8-bit precision)
+func RSqrtF32(a, result []float32) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	rsqrt_f32_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// RSqrtNewtonRaphsonF32 performs element-wise reciprocal square root with Newton-Raphson refinement
+// Uses FRSQRTE + FRSQRTS for improved precision (~16-bit)
+func RSqrtNewtonRaphsonF32(a, result []float32) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	rsqrt_nr_f32_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// RSqrtPreciseF32 performs element-wise reciprocal square root with full precision
+// Uses sqrt + reciprocal
+func RSqrtPreciseF32(a, result []float32) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	rsqrt_precise_f32_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
 // AbsF32 performs element-wise absolute value: result[i] = abs(a[i])
 func AbsF32(a, result []float32) {
 	if len(a) == 0 {
@@ -219,6 +263,36 @@ func SqrtF64(a, result []float64) {
 	}
 	n := int64(len(a))
 	sqrt_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// RSqrtF64 performs element-wise reciprocal square root: result[i] = 1/sqrt(a[i])
+// Uses FRSQRTE instruction (~8-bit precision)
+func RSqrtF64(a, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	rsqrt_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// RSqrtNewtonRaphsonF64 performs element-wise reciprocal square root with Newton-Raphson refinement
+// Uses FRSQRTE + FRSQRTS for improved precision
+func RSqrtNewtonRaphsonF64(a, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	rsqrt_nr_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+}
+
+// RSqrtPreciseF64 performs element-wise reciprocal square root with full precision
+// Uses sqrt + reciprocal
+func RSqrtPreciseF64(a, result []float64) {
+	if len(a) == 0 {
+		return
+	}
+	n := int64(len(a))
+	rsqrt_precise_f64_neon(unsafe.Pointer(&a[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
 }
 
 // AbsF64 computes absolute value: result[i] = |a[i]|
@@ -1325,4 +1399,57 @@ func CountEqualI64(slice []int64, target int64) int {
 	return int(result)
 }
 
+// SlideUpLanesF32 shifts lanes up by offset, filling low lanes with zeros.
+// [1,2,3,4] with offset=1 -> [0,1,2,3]
+func SlideUpLanesF32(input []float32, offset int, result []float32) {
+	if len(input) == 0 {
+		return
+	}
+	o := int64(offset)
+	slide_up_f32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&o), unsafe.Pointer(&result[0]))
+}
 
+// SlideUpLanesF64 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanesF64(input []float64, offset int, result []float64) {
+	if len(input) == 0 {
+		return
+	}
+	o := int64(offset)
+	slide_up_f64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&o), unsafe.Pointer(&result[0]))
+}
+
+// SlideUpLanesI32 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanesI32(input []int32, offset int, result []int32) {
+	if len(input) == 0 {
+		return
+	}
+	o := int64(offset)
+	slide_up_i32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&o), unsafe.Pointer(&result[0]))
+}
+
+// SlideUpLanesI64 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanesI64(input []int64, offset int, result []int64) {
+	if len(input) == 0 {
+		return
+	}
+	o := int64(offset)
+	slide_up_i64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&o), unsafe.Pointer(&result[0]))
+}
+
+// SlideUpLanesU32 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanesU32(input []uint32, offset int, result []uint32) {
+	if len(input) == 0 {
+		return
+	}
+	o := int64(offset)
+	slide_up_u32_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&o), unsafe.Pointer(&result[0]))
+}
+
+// SlideUpLanesU64 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanesU64(input []uint64, offset int, result []uint64) {
+	if len(input) == 0 {
+		return
+	}
+	o := int64(offset)
+	slide_up_u64_neon(unsafe.Pointer(&input[0]), unsafe.Pointer(&o), unsafe.Pointer(&result[0]))
+}

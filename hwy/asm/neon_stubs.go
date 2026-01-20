@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //go:build !arm64 || noasm
 
 package asm
@@ -60,6 +74,7 @@ func BroadcastUint8x16(v uint8) Uint8x16 {
 }
 
 func LoadUint8x16(s []uint8) Uint8x16       { return *(*Uint8x16)(unsafe.Pointer(&s[0])) }
+func LoadUint8x16Slice(s []uint8) Uint8x16  { return LoadUint8x16(s) }
 func ZeroUint8x16() Uint8x16                { return Uint8x16{} }
 func (v Uint8x16) Get(i int) uint8          { return v[i] }
 func (v *Uint8x16) Set(i int, val uint8)    { v[i] = val }
@@ -81,6 +96,18 @@ func (v Uint8x16) And(other Uint8x16) Uint8x16         { panic("NEON not availab
 func (v Uint8x16) Or(other Uint8x16) Uint8x16          { panic("NEON not available") }
 func (v Uint8x16) Xor(other Uint8x16) Uint8x16         { panic("NEON not available") }
 func (v Uint8x16) Not() Uint8x16                       { panic("NEON not available") }
+func (v Uint8x16) TableLookupBytes(idx Uint8x16) Uint8x16 {
+	// Scalar fallback implementation
+	var result [16]uint8
+	for i := 0; i < 16; i++ {
+		index := idx[i]
+		if index < 16 {
+			result[i] = v[index]
+		}
+		// Out-of-range indices produce 0 (already zero from array initialization)
+	}
+	return *(*Uint8x16)(unsafe.Pointer(&result))
+}
 
 // ===== Uint16x8 stub methods =====
 
@@ -464,3 +491,19 @@ func and_u64x2(a, b [16]byte) [16]byte          { panic("NEON not available") }
 func or_u64x2(a, b [16]byte) [16]byte           { panic("NEON not available") }
 func xor_u64x2(a, b [16]byte) [16]byte          { panic("NEON not available") }
 func sel_u64x2(mask, yes, no [16]byte) [16]byte { panic("NEON not available") }
+
+// SlideUpLanes stubs
+func SlideUpLanesFloat32x4(v Float32x4, offset int) Float32x4 { panic("NEON not available") }
+func SlideUpLanesFloat64x2(v Float64x2, offset int) Float64x2 { panic("NEON not available") }
+func SlideUpLanesInt32x4(v Int32x4, offset int) Int32x4       { panic("NEON not available") }
+func SlideUpLanesInt64x2(v Int64x2, offset int) Int64x2       { panic("NEON not available") }
+func SlideUpLanesUint32x4(v Uint32x4, offset int) Uint32x4    { panic("NEON not available") }
+func SlideUpLanesUint64x2(v Uint64x2, offset int) Uint64x2    { panic("NEON not available") }
+
+// InsertLane stubs
+func InsertLaneFloat32x4(v Float32x4, lane int, val float32) Float32x4 { panic("NEON not available") }
+func InsertLaneFloat64x2(v Float64x2, lane int, val float64) Float64x2 { panic("NEON not available") }
+func InsertLaneInt32x4(v Int32x4, lane int, val int32) Int32x4         { panic("NEON not available") }
+func InsertLaneInt64x2(v Int64x2, lane int, val int64) Int64x2         { panic("NEON not available") }
+func InsertLaneUint32x4(v Uint32x4, lane int, val uint32) Uint32x4     { panic("NEON not available") }
+func InsertLaneUint64x2(v Uint64x2, lane int, val uint64) Uint64x2     { panic("NEON not available") }

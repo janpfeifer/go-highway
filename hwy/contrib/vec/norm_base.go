@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package vec
 
 //go:generate go run ../../../cmd/hwygen -input norm_base.go -output . -targets avx2,avx512,neon,fallback -dispatch norm
@@ -22,31 +36,9 @@ import (
 //	v := []float32{3, 4}
 //	result := SquaredNorm(v)  // 3*3 + 4*4 = 25
 func BaseSquaredNorm[T hwy.Floats](v []T) T {
-	if len(v) == 0 {
-		return 0
-	}
-
-	n := len(v)
-	sum := hwy.Zero[T]()
-	lanes := sum.NumLanes()
-
-	// Process full vectors
-	var i int
-	for i = 0; i+lanes <= n; i += lanes {
-		vec := hwy.Load(v[i:])
-		prod := hwy.Mul(vec, vec)
-		sum = hwy.Add(sum, prod)
-	}
-
-	// Reduce vector sum to scalar
-	result := hwy.ReduceSum(sum)
-
-	// Handle tail elements with scalar code
-	for ; i < n; i++ {
-		result += v[i] * v[i]
-	}
-
-	return result
+	// Use Dot(v, v) for consistency with how norms are typically computed.
+	// This ensures the same precision characteristics as dot product operations.
+	return BaseDot(v, v)
 }
 
 // BaseNorm computes the L2 norm (Euclidean magnitude) of a vector using hwy

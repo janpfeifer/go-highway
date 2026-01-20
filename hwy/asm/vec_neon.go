@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //go:build !noasm && arm64
 
 package asm
@@ -1990,6 +2004,11 @@ func LoadUint8x16(s []uint8) Uint8x16 {
 	return *(*Uint8x16)(unsafe.Pointer(&s[0]))
 }
 
+// LoadUint8x16Slice is an alias for LoadUint8x16 for consistency with other types.
+func LoadUint8x16Slice(s []uint8) Uint8x16 {
+	return LoadUint8x16(s)
+}
+
 // Load4Uint8x16Slice loads 4 consecutive Uint8x16 vectors (64 bytes)
 // using a single ARM ld1 instruction with 4 registers.
 func Load4Uint8x16Slice(s []uint8) (Uint8x16, Uint8x16, Uint8x16, Uint8x16) {
@@ -2104,6 +2123,15 @@ func (v Uint8x16) Not() Uint8x16 {
 // GetBit returns true if the element at index i is non-zero.
 func (v Uint8x16) GetBit(i int) bool {
 	return v[i] != 0
+}
+
+// TableLookupBytes performs byte-level table lookup: result[i] = v[idx[i]].
+// If idx[i] >= 16, the result is 0 (NEON TBL behavior with out-of-range indices).
+func (v Uint8x16) TableLookupBytes(idx Uint8x16) Uint8x16 {
+	var result [16]uint8
+	n := int64(16)
+	tbl_u8_neon(unsafe.Pointer(&v[0]), unsafe.Pointer(&idx[0]), unsafe.Pointer(&result[0]), unsafe.Pointer(&n))
+	return *(*Uint8x16)(unsafe.Pointer(&result))
 }
 
 // ============================================================================
@@ -2793,4 +2821,143 @@ func SortSmallF32(data []float32) {
 			data[j+1] = key
 		}
 	}
+}
+
+// ===== SlideUpLanes operations =====
+// SlideUpLanes shifts lanes up by offset positions, filling low lanes with zeros.
+// [a,b,c,d] with offset=1 -> [0,a,b,c]
+
+// SlideUpLanesFloat32x4 shifts Float32x4 lanes up by offset.
+func SlideUpLanesFloat32x4(v Float32x4, offset int) Float32x4 {
+	switch offset {
+	case 1:
+		return Float32x4(slide_up_1_f32x4([16]byte(v)))
+	case 2:
+		return Float32x4(slide_up_2_f32x4([16]byte(v)))
+	default:
+		arr := (*[4]float32)(unsafe.Pointer(&v))
+		var out [4]float32
+		for i := offset; i < 4; i++ {
+			out[i] = arr[i-offset]
+		}
+		return *(*Float32x4)(unsafe.Pointer(&out))
+	}
+}
+
+// SlideUpLanesFloat64x2 shifts Float64x2 lanes up by offset.
+func SlideUpLanesFloat64x2(v Float64x2, offset int) Float64x2 {
+	if offset == 1 {
+		return Float64x2(slide_up_1_f64x2([16]byte(v)))
+	}
+	arr := (*[2]float64)(unsafe.Pointer(&v))
+	var out [2]float64
+	for i := offset; i < 2; i++ {
+		out[i] = arr[i-offset]
+	}
+	return *(*Float64x2)(unsafe.Pointer(&out))
+}
+
+// SlideUpLanesInt32x4 shifts Int32x4 lanes up by offset.
+func SlideUpLanesInt32x4(v Int32x4, offset int) Int32x4 {
+	switch offset {
+	case 1:
+		return Int32x4(slide_up_1_i32x4([16]byte(v)))
+	case 2:
+		return Int32x4(slide_up_2_i32x4([16]byte(v)))
+	default:
+		arr := (*[4]int32)(unsafe.Pointer(&v))
+		var out [4]int32
+		for i := offset; i < 4; i++ {
+			out[i] = arr[i-offset]
+		}
+		return *(*Int32x4)(unsafe.Pointer(&out))
+	}
+}
+
+// SlideUpLanesInt64x2 shifts Int64x2 lanes up by offset.
+func SlideUpLanesInt64x2(v Int64x2, offset int) Int64x2 {
+	if offset == 1 {
+		return Int64x2(slide_up_1_i64x2([16]byte(v)))
+	}
+	arr := (*[2]int64)(unsafe.Pointer(&v))
+	var out [2]int64
+	for i := offset; i < 2; i++ {
+		out[i] = arr[i-offset]
+	}
+	return *(*Int64x2)(unsafe.Pointer(&out))
+}
+
+// SlideUpLanesUint32x4 shifts Uint32x4 lanes up by offset.
+func SlideUpLanesUint32x4(v Uint32x4, offset int) Uint32x4 {
+	switch offset {
+	case 1:
+		return Uint32x4(slide_up_1_u32x4([16]byte(v)))
+	case 2:
+		return Uint32x4(slide_up_2_u32x4([16]byte(v)))
+	default:
+		arr := (*[4]uint32)(unsafe.Pointer(&v))
+		var out [4]uint32
+		for i := offset; i < 4; i++ {
+			out[i] = arr[i-offset]
+		}
+		return *(*Uint32x4)(unsafe.Pointer(&out))
+	}
+}
+
+// SlideUpLanesUint64x2 shifts Uint64x2 lanes up by offset.
+func SlideUpLanesUint64x2(v Uint64x2, offset int) Uint64x2 {
+	if offset == 1 {
+		return Uint64x2(slide_up_1_u64x2([16]byte(v)))
+	}
+	arr := (*[2]uint64)(unsafe.Pointer(&v))
+	var out [2]uint64
+	for i := offset; i < 2; i++ {
+		out[i] = arr[i-offset]
+	}
+	return *(*Uint64x2)(unsafe.Pointer(&out))
+}
+
+// ===== InsertLane operations =====
+// InsertLane inserts a value at the specified lane index.
+
+// InsertLaneFloat32x4 inserts a float32 value at the specified lane.
+func InsertLaneFloat32x4(v Float32x4, lane int, val float32) Float32x4 {
+	arr := (*[4]float32)(unsafe.Pointer(&v))
+	arr[lane] = val
+	return *(*Float32x4)(unsafe.Pointer(arr))
+}
+
+// InsertLaneFloat64x2 inserts a float64 value at the specified lane.
+func InsertLaneFloat64x2(v Float64x2, lane int, val float64) Float64x2 {
+	arr := (*[2]float64)(unsafe.Pointer(&v))
+	arr[lane] = val
+	return *(*Float64x2)(unsafe.Pointer(arr))
+}
+
+// InsertLaneInt32x4 inserts an int32 value at the specified lane.
+func InsertLaneInt32x4(v Int32x4, lane int, val int32) Int32x4 {
+	arr := (*[4]int32)(unsafe.Pointer(&v))
+	arr[lane] = val
+	return *(*Int32x4)(unsafe.Pointer(arr))
+}
+
+// InsertLaneInt64x2 inserts an int64 value at the specified lane.
+func InsertLaneInt64x2(v Int64x2, lane int, val int64) Int64x2 {
+	arr := (*[2]int64)(unsafe.Pointer(&v))
+	arr[lane] = val
+	return *(*Int64x2)(unsafe.Pointer(arr))
+}
+
+// InsertLaneUint32x4 inserts a uint32 value at the specified lane.
+func InsertLaneUint32x4(v Uint32x4, lane int, val uint32) Uint32x4 {
+	arr := (*[4]uint32)(unsafe.Pointer(&v))
+	arr[lane] = val
+	return *(*Uint32x4)(unsafe.Pointer(arr))
+}
+
+// InsertLaneUint64x2 inserts a uint64 value at the specified lane.
+func InsertLaneUint64x2(v Uint64x2, lane int, val uint64) Uint64x2 {
+	arr := (*[2]uint64)(unsafe.Pointer(&v))
+	arr[lane] = val
+	return *(*Uint64x2)(unsafe.Pointer(arr))
 }

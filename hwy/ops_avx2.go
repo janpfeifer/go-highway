@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //go:build amd64 && goexperiment.simd
 
 package hwy
@@ -47,6 +61,72 @@ func Sqrt_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
 // Uses the hardware VSQRTPD instruction which provides correctly rounded results.
 func Sqrt_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
 	return x.Sqrt()
+}
+
+// RSqrt_AVX2_F32x8 computes approximate 1/sqrt(x) for 8 float32 values.
+// Uses the hardware VRSQRTPS instruction which provides ~12-bit precision.
+// For values where x <= 0, result is undefined.
+func RSqrt_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
+	return x.ReciprocalSqrt()
+}
+
+// RSqrt_AVX2_F64x4 computes approximate 1/sqrt(x) for 4 float64 values.
+// Uses the hardware VRSQRTPD instruction which provides ~12-bit precision.
+// For values where x <= 0, result is undefined.
+func RSqrt_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
+	return x.ReciprocalSqrt()
+}
+
+// RSqrtNewtonRaphson_AVX2_F32x8 computes 1/sqrt(x) with one Newton-Raphson refinement.
+// Provides ~23-bit precision (sufficient for float32).
+// Formula: y = y * (1.5 - 0.5 * x * y * y)
+func RSqrtNewtonRaphson_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
+	half := archsimd.BroadcastFloat32x8(0.5)
+	threeHalf := archsimd.BroadcastFloat32x8(1.5)
+
+	// Initial approximation
+	y := x.ReciprocalSqrt()
+
+	// One Newton-Raphson iteration: y = y * (1.5 - 0.5 * x * y * y)
+	xHalf := x.Mul(half)
+	yy := y.Mul(y)
+	xyy := xHalf.Mul(yy)
+	correction := threeHalf.Sub(xyy)
+	return y.Mul(correction)
+}
+
+// RSqrtNewtonRaphson_AVX2_F64x4 computes 1/sqrt(x) with one Newton-Raphson refinement.
+// Provides improved precision over the approximate version.
+// Formula: y = y * (1.5 - 0.5 * x * y * y)
+func RSqrtNewtonRaphson_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
+	half := archsimd.BroadcastFloat64x4(0.5)
+	threeHalf := archsimd.BroadcastFloat64x4(1.5)
+
+	// Initial approximation
+	y := x.ReciprocalSqrt()
+
+	// One Newton-Raphson iteration: y = y * (1.5 - 0.5 * x * y * y)
+	xHalf := x.Mul(half)
+	yy := y.Mul(y)
+	xyy := xHalf.Mul(yy)
+	correction := threeHalf.Sub(xyy)
+	return y.Mul(correction)
+}
+
+// RSqrtPrecise_AVX2_F32x8 computes precise 1/sqrt(x) via sqrt + reciprocal.
+// Uses VSQRTPS + VRCPPS for high precision at higher latency.
+func RSqrtPrecise_AVX2_F32x8(x archsimd.Float32x8) archsimd.Float32x8 {
+	one := archsimd.BroadcastFloat32x8(1.0)
+	sqrtX := x.Sqrt()
+	return one.Div(sqrtX)
+}
+
+// RSqrtPrecise_AVX2_F64x4 computes precise 1/sqrt(x) via sqrt + division.
+// Uses VSQRTPD + VDIVPD for full precision.
+func RSqrtPrecise_AVX2_F64x4(x archsimd.Float64x4) archsimd.Float64x4 {
+	one := archsimd.BroadcastFloat64x4(1.0)
+	sqrtX := x.Sqrt()
+	return one.Div(sqrtX)
 }
 
 // ReduceMax_AVX2_Uint32x8 returns the maximum element in the vector.
@@ -238,6 +318,38 @@ func GetLane_AVX2_Uint32x8(v archsimd.Uint32x8, lane int) uint32 {
 
 // GetLane_AVX2_Uint64x4 extracts the element at the given lane index.
 func GetLane_AVX2_Uint64x4(v archsimd.Uint64x4, lane int) uint64 {
+	if lane < 2 {
+		return v.GetLo().GetElem(uint8(lane))
+	}
+	return v.GetHi().GetElem(uint8(lane - 2))
+}
+
+// GetLane_AVX2_I32x8 extracts the element at the given lane index.
+func GetLane_AVX2_I32x8(v archsimd.Int32x8, lane int) int32 {
+	if lane < 4 {
+		return v.GetLo().GetElem(uint8(lane))
+	}
+	return v.GetHi().GetElem(uint8(lane - 4))
+}
+
+// GetLane_AVX2_I64x4 extracts the element at the given lane index.
+func GetLane_AVX2_I64x4(v archsimd.Int64x4, lane int) int64 {
+	if lane < 2 {
+		return v.GetLo().GetElem(uint8(lane))
+	}
+	return v.GetHi().GetElem(uint8(lane - 2))
+}
+
+// GetLane_AVX2_F32x8 extracts the element at the given lane index.
+func GetLane_AVX2_F32x8(v archsimd.Float32x8, lane int) float32 {
+	if lane < 4 {
+		return v.GetLo().GetElem(uint8(lane))
+	}
+	return v.GetHi().GetElem(uint8(lane - 4))
+}
+
+// GetLane_AVX2_F64x4 extracts the element at the given lane index.
+func GetLane_AVX2_F64x4(v archsimd.Float64x4, lane int) float64 {
 	if lane < 2 {
 		return v.GetLo().GetElem(uint8(lane))
 	}

@@ -1,3 +1,17 @@
+// Copyright 2025 go-highway Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //go:build amd64 && goexperiment.simd
 
 package hwy
@@ -65,26 +79,6 @@ func Reverse4_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // Reverse4_AVX2_F64x4 reverses all 4 lanes (same as Reverse for F64x4).
 func Reverse4_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	return Reverse_AVX2_F64x4(v)
-}
-
-// GetLane_AVX2_F32x8 extracts a single lane value.
-func GetLane_AVX2_F32x8(v archsimd.Float32x8, idx int) float32 {
-	if idx < 0 || idx >= 8 {
-		return 0
-	}
-	var data [8]float32
-	v.StoreSlice(data[:])
-	return data[idx]
-}
-
-// GetLane_AVX2_F64x4 extracts a single lane value.
-func GetLane_AVX2_F64x4(v archsimd.Float64x4, idx int) float64 {
-	if idx < 0 || idx >= 4 {
-		return 0
-	}
-	var data [4]float64
-	v.StoreSlice(data[:])
-	return data[idx]
 }
 
 // InsertLane_AVX2_F32x8 inserts a value at the given lane.
@@ -294,6 +288,66 @@ func SlideUpLanes_AVX2_F64x4(v archsimd.Float64x4, offset int) archsimd.Float64x
 	return archsimd.LoadFloat64x4Slice(result[:])
 }
 
+// SlideUpLanes_AVX2_I32x8 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX2_I32x8(v archsimd.Int32x8, offset int) archsimd.Int32x8 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 8 {
+		return archsimd.Int32x8{}
+	}
+	var data [8]int32
+	v.StoreSlice(data[:])
+	var result [8]int32
+	copy(result[offset:], data[:8-offset])
+	return archsimd.LoadInt32x8Slice(result[:])
+}
+
+// SlideUpLanes_AVX2_I64x4 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX2_I64x4(v archsimd.Int64x4, offset int) archsimd.Int64x4 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 4 {
+		return archsimd.Int64x4{}
+	}
+	var data [4]int64
+	v.StoreSlice(data[:])
+	var result [4]int64
+	copy(result[offset:], data[:4-offset])
+	return archsimd.LoadInt64x4Slice(result[:])
+}
+
+// SlideUpLanes_AVX2_Uint32x8 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX2_Uint32x8(v archsimd.Uint32x8, offset int) archsimd.Uint32x8 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 8 {
+		return archsimd.Uint32x8{}
+	}
+	var data [8]uint32
+	v.StoreSlice(data[:])
+	var result [8]uint32
+	copy(result[offset:], data[:8-offset])
+	return archsimd.LoadUint32x8Slice(result[:])
+}
+
+// SlideUpLanes_AVX2_Uint64x4 shifts lanes up by offset, filling low lanes with zeros.
+func SlideUpLanes_AVX2_Uint64x4(v archsimd.Uint64x4, offset int) archsimd.Uint64x4 {
+	if offset <= 0 {
+		return v
+	}
+	if offset >= 4 {
+		return archsimd.Uint64x4{}
+	}
+	var data [4]uint64
+	v.StoreSlice(data[:])
+	var result [4]uint64
+	copy(result[offset:], data[:4-offset])
+	return archsimd.LoadUint64x4Slice(result[:])
+}
+
 // SlideDownLanes_AVX2_F32x8 shifts lanes down by offset, filling high lanes with zeros.
 // [1,2,3,4,5,6,7,8] with offset=2 -> [3,4,5,6,7,8,0,0]
 func SlideDownLanes_AVX2_F32x8(v archsimd.Float32x8, offset int) archsimd.Float32x8 {
@@ -345,4 +399,11 @@ func Slide1Down_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // Slide1Down_AVX2_F64x4 shifts lanes down by 1, filling last lane with zero.
 func Slide1Down_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	return SlideDownLanes_AVX2_F64x4(v, 1)
+}
+
+// TableLookupBytes_AVX2_Uint8x16 performs byte shuffling using indices.
+// For each byte in indices, selects the corresponding byte from v.
+// If the high bit of an index is set, the result byte is zero (PSHUFB semantics).
+func TableLookupBytes_AVX2_Uint8x16(v, indices archsimd.Uint8x16) archsimd.Uint8x16 {
+	return v.PermuteOrZero(indices.AsInt8x16())
 }
