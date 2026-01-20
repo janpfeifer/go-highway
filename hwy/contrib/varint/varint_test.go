@@ -871,6 +871,53 @@ func TestBaseDecodeStreamVByte32Into(t *testing.T) {
 	}
 }
 
+// TestDecodeStreamVByte32Into_PartialGroupWithLargeValues tests decoding when
+// the value count is not a multiple of 4 AND the final partial group contains
+// multi-byte values. This is a regression test for a bug where the NEON decoder
+// would skip the last partial group when n/4 < control_len.
+func TestDecodeStreamVByte32Into_PartialGroupWithLargeValues(t *testing.T) {
+	// 31 values - the last 3 values (5000, 6000, 0) are in a partial group
+	// and require 2-byte encoding, which exercises the scalar fallback path
+	values := []uint32{
+		0, 1, 0, 5, 0, 0, 2, 5, 10, 2, 0, 1, 1, 3, 10, 20, 3, 0, 1, 2, // 20 small values
+		0, 100, 500, 600, 1, 5, 2, 1000, // mixed sizes
+		5000, 6000, 0, // partial group with large values
+	}
+
+	control, data := BaseEncodeStreamVByte32(values)
+
+	// Test both Base (pure Go) and dispatched (may use SIMD) implementations
+	t.Run("Base", func(t *testing.T) {
+		dst := make([]uint32, len(values))
+		decoded, _ := BaseDecodeStreamVByte32Into(control, data, dst)
+
+		if decoded != len(values) {
+			t.Errorf("decoded: got %d, want %d", decoded, len(values))
+		}
+
+		for i, want := range values {
+			if dst[i] != want {
+				t.Errorf("value %d: got %d, want %d", i, dst[i], want)
+			}
+		}
+	})
+
+	t.Run("Dispatch", func(t *testing.T) {
+		dst := make([]uint32, len(values))
+		decoded, _ := DecodeStreamVByte32Into(control, data, dst)
+
+		if decoded != len(values) {
+			t.Errorf("decoded: got %d, want %d", decoded, len(values))
+		}
+
+		for i, want := range values {
+			if dst[i] != want {
+				t.Errorf("value %d: got %d, want %d", i, dst[i], want)
+			}
+		}
+	})
+}
+
 func TestBaseStreamVByte32DataLen(t *testing.T) {
 	values := []uint32{300, 5, 1000, 2}
 	control, data := BaseEncodeStreamVByte32(values)
@@ -994,4 +1041,308 @@ func BenchmarkCompareGroupVarintVsStreamVByte(b *testing.B) {
 			DecodeStreamVByte32Into(control, streamData, dst)
 		}
 	})
+}
+
+// ============================================================================
+// Dispatch Function Tests (SIMD Assembly Paths)
+//
+// These tests exercise the dispatch functions that may use SIMD assembly
+// (NEON on ARM64, AVX on AMD64) to catch crashes before benchmarks run.
+// They verify correctness by comparing against the pure Go Base implementations.
+// ============================================================================
+
+// TestDispatchFindVarintEnds tests the dispatched FindVarintEnds function
+// which may use SIMD on supported architectures.
+func TestDispatchFindVarintEnds(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{"empty", []byte{}},
+		{"single_terminator", []byte{0x01}},
+		{"single_continuation", []byte{0x80}},
+		{"mixed_short", []byte{0x01, 0x80, 0x01, 0x7F}},
+		{"all_terminators_32", make32ByteTerminators()},
+		{"all_continuations_32", make32ByteContinuations()},
+		{"alternating_32", makeAlternating32()},
+		{"realistic_varints", encodeMultipleUvarints(1, 128, 300, 16384, 1, 2, 3, 4, 5, 6)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			want := BaseFindVarintEnds(tt.input)
+			got := FindVarintEnds(tt.input)
+			if got != want {
+				t.Errorf("FindVarintEnds mismatch: got %032b, want %032b", got, want)
+			}
+		})
+	}
+}
+
+// TestDispatchDecodeUvarint64Batch tests the dispatched batch decoder.
+func TestDispatchDecodeUvarint64Batch(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []uint64
+	}{
+		{"single_value", []uint64{42}},
+		{"small_values", []uint64{1, 2, 3, 4, 5}},
+		{"mixed_sizes", []uint64{1, 128, 300, 16384, 2097152, 0}},
+		{"large_batch", makeLargeBatch(100)},
+		{"max_values", []uint64{math.MaxUint64, math.MaxUint64 - 1, 0, 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := encodeMultipleUvarints(tt.values...)
+
+			wantDst := make([]uint64, len(tt.values))
+			wantDecoded, wantConsumed := BaseDecodeUvarint64Batch(encoded, wantDst, len(tt.values))
+
+			gotDst := make([]uint64, len(tt.values))
+			gotDecoded, gotConsumed := DecodeUvarint64Batch(encoded, gotDst, len(tt.values))
+
+			if gotDecoded != wantDecoded || gotConsumed != wantConsumed {
+				t.Errorf("DecodeUvarint64Batch: got (%d, %d), want (%d, %d)",
+					gotDecoded, gotConsumed, wantDecoded, wantConsumed)
+			}
+			for i := 0; i < gotDecoded; i++ {
+				if gotDst[i] != wantDst[i] {
+					t.Errorf("value %d: got %d, want %d", i, gotDst[i], wantDst[i])
+				}
+			}
+		})
+	}
+}
+
+// TestDispatchDecode2Uvarint64 tests the dispatched 2-varint decoder.
+func TestDispatchDecode2Uvarint64(t *testing.T) {
+	tests := []struct {
+		name   string
+		v1, v2 uint64
+	}{
+		{"small_values", 1, 2},
+		{"mixed_sizes", 1, 300},
+		{"both_large", 16384, 2097152},
+		{"zeros", 0, 0},
+		{"max_value", math.MaxUint64, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := encodeMultipleUvarints(tt.v1, tt.v2)
+
+			wantV1, wantV2, wantConsumed := BaseDecode2Uvarint64(encoded)
+			gotV1, gotV2, gotConsumed := Decode2Uvarint64(encoded)
+
+			if gotV1 != wantV1 || gotV2 != wantV2 || gotConsumed != wantConsumed {
+				t.Errorf("Decode2Uvarint64: got (%d, %d, %d), want (%d, %d, %d)",
+					gotV1, gotV2, gotConsumed, wantV1, wantV2, wantConsumed)
+			}
+		})
+	}
+}
+
+// TestDispatchDecode5Uvarint64 tests the dispatched 5-varint decoder.
+func TestDispatchDecode5Uvarint64(t *testing.T) {
+	tests := []struct {
+		name   string
+		values [5]uint64
+	}{
+		{"small_values", [5]uint64{1, 2, 3, 4, 5}},
+		{"mixed_sizes", [5]uint64{1, 128, 300, 16384, 0}},
+		{"location_fields", [5]uint64{10, 1000, 5000, 5050, 3}},
+		{"all_zeros", [5]uint64{0, 0, 0, 0, 0}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encoded := encodeMultipleUvarints(tt.values[0], tt.values[1], tt.values[2], tt.values[3], tt.values[4])
+
+			wantValues, wantConsumed := BaseDecode5Uvarint64(encoded)
+			gotValues, gotConsumed := Decode5Uvarint64(encoded)
+
+			if gotValues != wantValues || gotConsumed != wantConsumed {
+				t.Errorf("Decode5Uvarint64: got (%v, %d), want (%v, %d)",
+					gotValues, gotConsumed, wantValues, wantConsumed)
+			}
+		})
+	}
+}
+
+// TestDispatchDecodeGroupVarint32 tests the dispatched group varint decoder.
+func TestDispatchDecodeGroupVarint32(t *testing.T) {
+	tests := []struct {
+		name   string
+		values [4]uint32
+	}{
+		{"small_values", [4]uint32{1, 2, 3, 4}},
+		{"mixed_sizes", [4]uint32{1, 127, 128, 65535}},
+		{"zeros", [4]uint32{0, 0, 0, 0}},
+		{"max_values", [4]uint32{math.MaxUint32, math.MaxUint32, math.MaxUint32, math.MaxUint32}},
+		{"boundary_values", [4]uint32{255, 256, 65535, 65536}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := make([]byte, 17)
+			n := BaseEncodeGroupVarint32(tt.values, dst)
+			encoded := dst[:n]
+
+			wantValues, wantConsumed := BaseDecodeGroupVarint32(encoded)
+			gotValues, gotConsumed := DecodeGroupVarint32(encoded)
+
+			if gotValues != wantValues || gotConsumed != wantConsumed {
+				t.Errorf("DecodeGroupVarint32: got (%v, %d), want (%v, %d)",
+					gotValues, gotConsumed, wantValues, wantConsumed)
+			}
+		})
+	}
+}
+
+// TestDispatchDecodeGroupVarint64 tests the dispatched group varint 64-bit decoder.
+func TestDispatchDecodeGroupVarint64(t *testing.T) {
+	tests := []struct {
+		name   string
+		values [4]uint64
+	}{
+		{"small_values", [4]uint64{1, 2, 3, 4}},
+		{"mixed_sizes", [4]uint64{1, 127, 128, 65535}},
+		{"zeros", [4]uint64{0, 0, 0, 0}},
+		{"max_values", [4]uint64{math.MaxUint64, math.MaxUint64, math.MaxUint64, math.MaxUint64}},
+		{"large_values", [4]uint64{1 << 40, 1 << 48, 1 << 56, math.MaxUint64}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dst := make([]byte, 34)
+			n := BaseEncodeGroupVarint64(tt.values, dst)
+			encoded := dst[:n]
+
+			wantValues, wantConsumed := BaseDecodeGroupVarint64(encoded)
+			gotValues, gotConsumed := DecodeGroupVarint64(encoded)
+
+			if gotValues != wantValues || gotConsumed != wantConsumed {
+				t.Errorf("DecodeGroupVarint64: got (%v, %d), want (%v, %d)",
+					gotValues, gotConsumed, wantValues, wantConsumed)
+			}
+		})
+	}
+}
+
+// TestDispatchDecodeStreamVByte32Into tests the dispatched Stream-VByte decoder
+// which is the function that was causing segfaults on Linux ARM64.
+func TestDispatchDecodeStreamVByte32Into(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []uint32
+	}{
+		{"4_small_values", []uint32{1, 2, 3, 4}},
+		{"8_mixed_sizes", []uint32{1, 128, 300, 65535, 100000, 1, 2, 3}},
+		{"100_sequential", makeSequential32(100)},
+		{"100_random_like", makeRandomLike32(100)},
+		{"partial_group_31", makeSequential32(31)},
+		{"partial_group_large", makeLargePartialGroup()},
+		{"all_max", makeAllMax32(8)},
+		{"all_zero", make([]uint32, 8)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			control, data := BaseEncodeStreamVByte32(tt.values)
+
+			wantDst := make([]uint32, len(tt.values))
+			wantDecoded, wantConsumed := BaseDecodeStreamVByte32Into(control, data, wantDst)
+
+			gotDst := make([]uint32, len(tt.values))
+			gotDecoded, gotConsumed := DecodeStreamVByte32Into(control, data, gotDst)
+
+			if gotDecoded != wantDecoded {
+				t.Errorf("DecodeStreamVByte32Into decoded: got %d, want %d", gotDecoded, wantDecoded)
+			}
+			if gotConsumed != wantConsumed {
+				t.Errorf("DecodeStreamVByte32Into consumed: got %d, want %d", gotConsumed, wantConsumed)
+			}
+			for i := 0; i < gotDecoded; i++ {
+				if gotDst[i] != wantDst[i] {
+					t.Errorf("value %d: got %d, want %d", i, gotDst[i], wantDst[i])
+				}
+			}
+		})
+	}
+}
+
+// Helper functions for test data generation
+
+func make32ByteTerminators() []byte {
+	b := make([]byte, 32)
+	for i := range b {
+		b[i] = 0x01
+	}
+	return b
+}
+
+func make32ByteContinuations() []byte {
+	b := make([]byte, 32)
+	for i := range b {
+		b[i] = 0x80
+	}
+	return b
+}
+
+func makeAlternating32() []byte {
+	b := make([]byte, 32)
+	for i := range b {
+		if i%2 == 0 {
+			b[i] = 0x80
+		} else {
+			b[i] = 0x01
+		}
+	}
+	return b
+}
+
+func makeLargeBatch(n int) []uint64 {
+	values := make([]uint64, n)
+	for i := range values {
+		values[i] = uint64(i * 100)
+	}
+	return values
+}
+
+func makeSequential32(n int) []uint32 {
+	values := make([]uint32, n)
+	for i := range values {
+		values[i] = uint32(i * 100)
+	}
+	return values
+}
+
+func makeRandomLike32(n int) []uint32 {
+	// Deterministic "random-like" values for reproducibility
+	values := make([]uint32, n)
+	for i := range values {
+		values[i] = uint32((i*12345 + 67890) % 1000000)
+	}
+	return values
+}
+
+func makeLargePartialGroup() []uint32 {
+	// 31 values where the last 3 are large (requiring 2+ bytes)
+	values := make([]uint32, 31)
+	for i := 0; i < 28; i++ {
+		values[i] = uint32(i)
+	}
+	values[28] = 5000
+	values[29] = 6000
+	values[30] = 7000
+	return values
+}
+
+func makeAllMax32(n int) []uint32 {
+	values := make([]uint32, n)
+	for i := range values {
+		values[i] = math.MaxUint32
+	}
+	return values
 }

@@ -47,47 +47,12 @@ void find_varint_ends_u8(unsigned char *src, int64_t n, int64_t *result) {
         n = 64;
     }
 
-    int64_t i = 0;
-
-    // Process 16 bytes at a time with NEON
-    for (; i + 16 <= n; i += 16) {
-        uint8x16_t v = vld1q_u8(src + i);
-
-        // Get the high bit of each byte by shifting right 7 positions
-        // highBit[j] = 1 if byte[j] >= 0x80 (continuation), 0 if < 0x80 (terminator)
-        uint8x16_t highBit = vshrq_n_u8(v, 7);
-
-        // We need the inverse: terminator positions should be 1
-        // XOR with 1 to flip: notHighBit[j] = 1 if byte[j] < 0x80
-        uint8x16_t ones = vdupq_n_u8(1);
-        uint8x16_t terminator = veorq_u8(highBit, ones);
-
-        // Extract to scalar bitmask
-        // NEON doesn't have movemask, so we accumulate lane by lane
-        // Each lane is either 0 or 1, so we shift and OR
-        uint64_t laneMask = 0;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 0) << 0;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 1) << 1;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 2) << 2;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 3) << 3;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 4) << 4;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 5) << 5;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 6) << 6;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 7) << 7;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 8) << 8;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 9) << 9;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 10) << 10;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 11) << 11;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 12) << 12;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 13) << 13;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 14) << 14;
-        laneMask |= (uint64_t)vgetq_lane_u8(terminator, 15) << 15;
-
-        mask |= laneMask << i;
-    }
-
-    // Handle remaining bytes with scalar loop
-    for (; i < n; i++) {
+    // Pure scalar implementation - avoids constant pool references that
+    // clang generates for NEON movemask emulation, which don't link in Go.
+    // Disable vectorization to prevent clang from auto-vectorizing with
+    // constant pool lookup tables.
+#pragma clang loop vectorize(disable) interleave(disable)
+    for (int64_t i = 0; i < n; i++) {
         if (src[i] < 0x80) {
             mask |= 1LL << i;
         }
@@ -564,7 +529,8 @@ void decode_streamvbyte32_batch(
         return;
     }
 
-    int64_t num_groups = n / 4;
+    // Round up to handle partial groups (e.g., n=31 needs 8 groups, not 7)
+    int64_t num_groups = (n + 3) / 4;
     if (num_groups > control_len) {
         num_groups = control_len;
     }
@@ -573,6 +539,11 @@ void decode_streamvbyte32_batch(
     int64_t val_pos = 0;
 
     for (int64_t g = 0; g < num_groups; g++) {
+        // Check if this is a partial group (last values don't fill all 4 slots)
+        int64_t vals_remaining = n - val_pos;
+        if (vals_remaining <= 0) {
+            break;
+        }
         unsigned char ctrl = control[g];
 
         // Extract lengths from control byte (2 bits each, value is length-1)
@@ -588,22 +559,35 @@ void decode_streamvbyte32_batch(
             break;
         }
 
-        // SIMD path requires 16 bytes to be readable for vld1q_u8
-        // Fall back to scalar if we don't have enough buffer
-        if (data_pos + 16 > data_len) {
-            // Scalar decode for this group
+        // SIMD path requires 16 bytes to be readable for vld1q_u8, and
+        // needs a full group (4 values) to avoid writing past output bounds.
+        // Fall back to scalar if we don't have enough buffer or partial group.
+        if (data_pos + 16 > data_len || vals_remaining < 4) {
+            // Scalar decode for this group (handles partial groups safely)
+            // Only decode and consume data for the values we actually output
             int64_t pos = data_pos;
-            unsigned int v0 = 0, v1 = 0, v2 = 0, v3 = 0;
-            for (int64_t i = 0; i < len0; i++) v0 |= ((unsigned int)data[pos++]) << (i * 8);
-            for (int64_t i = 0; i < len1; i++) v1 |= ((unsigned int)data[pos++]) << (i * 8);
-            for (int64_t i = 0; i < len2; i++) v2 |= ((unsigned int)data[pos++]) << (i * 8);
-            for (int64_t i = 0; i < len3; i++) v3 |= ((unsigned int)data[pos++]) << (i * 8);
-            values[val_pos + 0] = v0;
-            values[val_pos + 1] = v1;
-            values[val_pos + 2] = v2;
-            values[val_pos + 3] = v3;
+            if (vals_remaining > 0) {
+                unsigned int v0 = 0;
+                for (int64_t i = 0; i < len0; i++) v0 |= ((unsigned int)data[pos++]) << (i * 8);
+                values[val_pos + 0] = v0;
+            }
+            if (vals_remaining > 1) {
+                unsigned int v1 = 0;
+                for (int64_t i = 0; i < len1; i++) v1 |= ((unsigned int)data[pos++]) << (i * 8);
+                values[val_pos + 1] = v1;
+            }
+            if (vals_remaining > 2) {
+                unsigned int v2 = 0;
+                for (int64_t i = 0; i < len2; i++) v2 |= ((unsigned int)data[pos++]) << (i * 8);
+                values[val_pos + 2] = v2;
+            }
+            if (vals_remaining > 3) {
+                unsigned int v3 = 0;
+                for (int64_t i = 0; i < len3; i++) v3 |= ((unsigned int)data[pos++]) << (i * 8);
+                values[val_pos + 3] = v3;
+            }
             data_pos = pos;
-            val_pos += 4;
+            val_pos += (vals_remaining < 4) ? vals_remaining : 4;
             continue;
         }
 

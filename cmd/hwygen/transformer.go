@@ -2968,6 +2968,23 @@ func insertTailHandling(body *ast.BlockStmt, loopInfo *LoopInfo, elemType string
 		return
 	}
 
+	// Count SIMD loops that use the same iterator. If there are multiple SIMD loops,
+	// the function has a multi-phase algorithm (e.g., Normalize: accumulate then scale)
+	// and automatic tail handling would break the data dependencies between phases.
+	// In such cases, the template must handle tails manually.
+	simdLoopCount := 0
+	for _, stmt := range body.List {
+		if forStmt, ok := stmt.(*ast.ForStmt); ok {
+			if matchesLoopIterator(forStmt, loopInfo.Iterator) && isSimdStyleLoop(forStmt, loopInfo) {
+				simdLoopCount++
+			}
+		}
+	}
+	if simdLoopCount > 1 {
+		// Multiple SIMD loops - don't insert automatic tail handling
+		return
+	}
+
 	// Find the SIMD loop that uses loopInfo.Iterator as its iterator.
 	// This ensures we don't add tail handling after unrelated loops (e.g., scalar loops).
 	var loopIdx int = -1
@@ -3112,6 +3129,50 @@ func isScalarTailLoop(stmt ast.Stmt, iterator, end string) bool {
 	}
 
 	return true
+}
+
+// isSimdStyleLoop checks if a for loop appears to be a SIMD-style loop (as opposed
+// to a scalar tail loop). SIMD loops typically have:
+// - A condition like i+lanes <= len(dst) (not i < len)
+// - A stride like i += lanes (not i++)
+func isSimdStyleLoop(forStmt *ast.ForStmt, loopInfo *LoopInfo) bool {
+	if forStmt == nil || forStmt.Cond == nil || forStmt.Post == nil {
+		return false
+	}
+
+	// Check condition: should be i+lanes <= len (not i < len)
+	cond, ok := forStmt.Cond.(*ast.BinaryExpr)
+	if !ok {
+		return false
+	}
+
+	// SIMD loop condition is typically <= (not <)
+	// Or it's < with a +lanes on the left side
+	if cond.Op == token.LEQ {
+		return true
+	}
+
+	// Check if left side is i+lanes (binary expr with +)
+	if cond.Op == token.LSS {
+		if _, ok := cond.X.(*ast.BinaryExpr); ok {
+			// i+lanes < len pattern
+			return true
+		}
+	}
+
+	// Check post: should be i += lanes (not i++)
+	switch post := forStmt.Post.(type) {
+	case *ast.AssignStmt:
+		// i += lanes
+		if post.Tok == token.ADD_ASSIGN {
+			return true
+		}
+	case *ast.IncDecStmt:
+		// i++ is NOT a SIMD loop
+		return false
+	}
+
+	return false
 }
 
 // specializeType replaces generic type parameters with concrete types.

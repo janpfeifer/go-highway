@@ -1,488 +1,33 @@
 	.build_version macos, 15, 0	sdk_version 15, 5
-	.section	__TEXT,__literal8,8byte_literals
-	.p2align	3, 0x0                          ; -- Begin function find_varint_ends_u8
-lCPI0_0:
-	.short	2                               ; 0x2
-	.short	3                               ; 0x3
-	.short	6                               ; 0x6
-	.short	7                               ; 0x7
-	.section	__TEXT,__literal16,16byte_literals
-	.p2align	4, 0x0
-lCPI0_1:
-	.quad	12                              ; 0xc
-	.quad	13                              ; 0xd
-lCPI0_2:
-	.quad	8                               ; 0x8
-	.quad	9                               ; 0x9
-lCPI0_3:
-	.quad	14                              ; 0xe
-	.quad	15                              ; 0xf
-lCPI0_4:
-	.quad	10                              ; 0xa
-	.quad	11                              ; 0xb
-lCPI0_5:
-	.quad	6                               ; 0x6
-	.quad	7                               ; 0x7
-lCPI0_6:
-	.quad	4                               ; 0x4
-	.quad	5                               ; 0x5
-lCPI0_7:
-	.quad	2                               ; 0x2
-	.quad	3                               ; 0x3
-lCPI0_8:
-	.quad	0                               ; 0x0
-	.quad	1                               ; 0x1
 	.section	__TEXT,__text,regular,pure_instructions
-	.globl	_find_varint_ends_u8
+	.globl	_find_varint_ends_u8            ; -- Begin function find_varint_ends_u8
 	.p2align	2
 _find_varint_ends_u8:                   ; @find_varint_ends_u8
 ; %bb.0:
 	cmp	x1, #1
-	b.lt	LBB0_3
+	b.lt	LBB0_4
 ; %bb.1:
-	stp	d11, d10, [sp, #-32]!           ; 16-byte Folded Spill
-	stp	d9, d8, [sp, #16]               ; 16-byte Folded Spill
-	mov	w8, #64                         ; =0x40
-	cmp	x1, #64
-	csel	x8, x1, x8, lo
-	cmp	x1, #15
-	b.hi	LBB0_4
-; %bb.2:
-	mov	x10, #0                         ; =0x0
 	mov	x9, #0                          ; =0x0
-	b	LBB0_11
-LBB0_3:
-	str	xzr, [x2]
+	mov	x8, #0                          ; =0x0
+	mov	w10, #64                        ; =0x40
+	cmp	x1, #64
+	csel	x10, x1, x10, lo
+	mov	w11, #1                         ; =0x1
+LBB0_2:                                 ; =>This Inner Loop Header: Depth=1
+	ldrsb	w12, [x0, x9]
+	lsl	x13, x11, x9
+	cmp	w12, #0
+	csel	x12, xzr, x13, lt
+	orr	x8, x12, x8
+	add	x9, x9, #1
+	cmp	x10, x9
+	b.ne	LBB0_2
+; %bb.3:
+	str	x8, [x2]
 	ret
 LBB0_4:
-	ldr	q0, [x0]
-	cmge.16b	v0, v0, #0
-	movi.16b	v5, #1
-	and.16b	v1, v0, v5
-	umov.b	w9, v1[0]
-	umov.b	w10, v1[1]
-	umov.b	w11, v1[4]
-	umov.b	w12, v1[5]
-	mov	b2, v1[2]
-	mov.b	v2[2], v1[3]
-	mov.b	v2[4], v1[6]
-	lsl	w12, w12, #5
-	mov.b	v2[6], v1[7]
-Lloh0:
-	adrp	x13, lCPI0_0@PAGE
-Lloh1:
-	ldr	d0, [x13, lCPI0_0@PAGEOFF]
-	ushl.4h	v2, v2, v0
-	fmov	x13, d2
-	orr	x13, x13, x13, lsr #32
-	lsr	x14, x13, #16
-	orr	w9, w13, w9
-	orr	w9, w9, w14
-	orr	w10, w12, w10, lsl #1
-	orr	w9, w9, w10
-	orr	w9, w9, w11, lsl #4
-	and	x9, x9, #0xff
-	ushll2.8h	v1, v1, #0
-	ushll.4s	v2, v1, #0
-	ushll2.2d	v6, v2, #0
-	ushll2.4s	v1, v1, #0
-	ushll2.2d	v4, v1, #0
-	ushll.2d	v3, v2, #0
-	ushll.2d	v2, v1, #0
-Lloh2:
-	adrp	x10, lCPI0_1@PAGE
-Lloh3:
-	ldr	q1, [x10, lCPI0_1@PAGEOFF]
-	ushl.2d	v7, v2, v1
-Lloh4:
-	adrp	x10, lCPI0_2@PAGE
-Lloh5:
-	ldr	q2, [x10, lCPI0_2@PAGEOFF]
-	ushl.2d	v16, v3, v2
-Lloh6:
-	adrp	x10, lCPI0_3@PAGE
-Lloh7:
-	ldr	q3, [x10, lCPI0_3@PAGEOFF]
-	ushl.2d	v17, v4, v3
-Lloh8:
-	adrp	x10, lCPI0_4@PAGE
-Lloh9:
-	ldr	q4, [x10, lCPI0_4@PAGEOFF]
-	ushl.2d	v6, v6, v4
-	orr.16b	v6, v6, v17
-	orr.16b	v7, v16, v7
-	orr.16b	v6, v7, v6
-	ext.16b	v7, v6, v6, #8
-	orr.8b	v6, v6, v7
-	fmov	x10, d6
-	orr	x9, x10, x9
-	cmp	x1, #32
-	b.hs	LBB0_6
-; %bb.5:
-	mov	w10, #16                        ; =0x10
-	b	LBB0_11
-LBB0_6:
-	ldr	q6, [x0, #16]
-	cmge.16b	v6, v6, #0
-	and.16b	v5, v6, v5
-	umov.b	w10, v5[0]
-	umov.b	w11, v5[1]
-	umov.b	w12, v5[4]
-	umov.b	w13, v5[5]
-	lsl	w13, w13, #5
-	mov	b6, v5[2]
-	mov.b	v6[2], v5[3]
-	mov.b	v6[4], v5[6]
-	mov.b	v6[6], v5[7]
-	ushl.4h	v6, v6, v0
-	fmov	x14, d6
-	orr	x14, x14, x14, lsr #32
-	lsr	x15, x14, #16
-	orr	w10, w14, w10
-	orr	w10, w10, w15
-	orr	w11, w13, w11, lsl #1
-	orr	w10, w10, w11
-	orr	w10, w10, w12, lsl #4
-	and	x10, x10, #0xff
-	ushll2.8h	v5, v5, #0
-	ushll.4s	v6, v5, #0
-	ushll2.2d	v7, v6, #0
-	ushll2.4s	v5, v5, #0
-	ushll2.2d	v16, v5, #0
-	ushll.2d	v6, v6, #0
-	ushll.2d	v5, v5, #0
-	ushl.2d	v5, v5, v1
-	ushl.2d	v6, v6, v2
-	ushl.2d	v16, v16, v3
-	ushl.2d	v7, v7, v4
-	orr.16b	v7, v7, v16
-	orr.16b	v5, v6, v5
-	orr.16b	v5, v5, v7
-	ext.16b	v6, v5, v5, #8
-	orr.8b	v5, v5, v6
-	fmov	x11, d5
-	orr	x10, x11, x10
-	orr	x9, x9, x10, lsl #16
-	cmp	x1, #48
-	b.hs	LBB0_8
-; %bb.7:
-	mov	w10, #32                        ; =0x20
-	b	LBB0_11
-LBB0_8:
-	ldr	q5, [x0, #32]
-	cmge.16b	v6, v5, #0
-	movi.16b	v5, #1
-	and.16b	v6, v6, v5
-	umov.b	w10, v6[0]
-	umov.b	w11, v6[1]
-	umov.b	w12, v6[4]
-	umov.b	w13, v6[5]
-	lsl	w13, w13, #5
-	mov	b7, v6[2]
-	mov.b	v7[2], v6[3]
-	mov.b	v7[4], v6[6]
-	mov.b	v7[6], v6[7]
-	ushl.4h	v7, v7, v0
-	fmov	x14, d7
-	lsr	x15, x14, #32
-	orr	w14, w14, w15
-	orr	w14, w14, w14, lsr #16
-	orr	w11, w13, w11, lsl #1
-	orr	w10, w10, w11
-	orr	w10, w14, w10
-	orr	w10, w10, w12, lsl #4
-	ushll2.8h	v6, v6, #0
-	ushll.4s	v7, v6, #0
-	ushll2.2d	v16, v7, #0
-	ushll2.4s	v6, v6, #0
-	ushll2.2d	v17, v6, #0
-	ushll.2d	v7, v7, #0
-	ushll.2d	v6, v6, #0
-	ushl.2d	v6, v6, v1
-	ushl.2d	v7, v7, v2
-	ushl.2d	v17, v17, v3
-	ushl.2d	v16, v16, v4
-	orr.16b	v16, v16, v17
-	orr.16b	v6, v7, v6
-	orr.16b	v6, v6, v16
-	ext.16b	v7, v6, v6, #8
-	orr.8b	v6, v6, v7
-	fmov	x11, d6
-	and	w10, w10, #0xff
-	orr	w10, w11, w10
-	orr	x9, x9, x10, lsl #32
-	cmp	x1, #64
-	b.hs	LBB0_10
-; %bb.9:
-	mov	w10, #48                        ; =0x30
-	b	LBB0_11
-LBB0_10:
-	ldr	q6, [x0, #48]
-	cmge.16b	v6, v6, #0
-	and.16b	v5, v6, v5
-	umov.b	w10, v5[0]
-	umov.b	w11, v5[1]
-	umov.b	w12, v5[4]
-	umov.b	w13, v5[5]
-	lsl	w13, w13, #5
-	mov	b6, v5[2]
-	mov.b	v6[2], v5[3]
-	mov.b	v6[4], v5[6]
-	mov.b	v6[6], v5[7]
-	ushl.4h	v0, v6, v0
-	fmov	x14, d0
-	lsr	x15, x14, #32
-	orr	w14, w14, w15
-	orr	w14, w14, w14, lsr #16
-	orr	w11, w13, w11, lsl #1
-	orr	w10, w10, w11
-	orr	w10, w14, w10
-	orr	w10, w10, w12, lsl #4
-	ushll2.8h	v0, v5, #0
-	ushll.4s	v5, v0, #0
-	ushll2.2d	v6, v5, #0
-	ushll2.4s	v0, v0, #0
-	ushll2.2d	v7, v0, #0
-	ushll.2d	v5, v5, #0
-	ushll.2d	v0, v0, #0
-	ushl.2d	v0, v0, v1
-	ushl.2d	v1, v5, v2
-	ushl.2d	v2, v7, v3
-	ushl.2d	v3, v6, v4
-	orr.16b	v2, v3, v2
-	orr.16b	v0, v1, v0
-	orr.16b	v0, v0, v2
-	ext.16b	v1, v0, v0, #8
-	orr.8b	v0, v0, v1
-	fmov	x11, d0
-	and	w10, w10, #0xff
-	orr	w10, w11, w10
-	orr	x9, x9, x10, lsl #48
-	mov	w10, #64                        ; =0x40
-LBB0_11:
-	subs	x12, x8, x10
-	b.ls	LBB0_26
-; %bb.12:
-	cmp	x12, #3
-	b.hi	LBB0_14
-; %bb.13:
-	mov	x12, x10
-	b	LBB0_24
-LBB0_14:
-	adrp	x13, lCPI0_7@PAGE
-	adrp	x11, lCPI0_8@PAGE
-	cmp	x12, #16
-	b.hs	LBB0_16
-; %bb.15:
-	mov	x14, #0                         ; =0x0
-	mov	x15, x10
-	b	LBB0_21
-LBB0_16:
-	movi.2d	v0, #0000000000000000
-	movi.2d	v1, #0000000000000000
-	mov.d	v1[0], x9
-	dup.2d	v17, x10
-Lloh10:
-	adrp	x9, lCPI0_3@PAGE
-Lloh11:
-	ldr	q2, [x9, lCPI0_3@PAGEOFF]
-	orr.16b	v2, v17, v2
-Lloh12:
-	adrp	x9, lCPI0_1@PAGE
-Lloh13:
-	ldr	q3, [x9, lCPI0_1@PAGEOFF]
-	orr.16b	v3, v17, v3
-Lloh14:
-	adrp	x9, lCPI0_4@PAGE
-Lloh15:
-	ldr	q4, [x9, lCPI0_4@PAGEOFF]
-	orr.16b	v4, v17, v4
-Lloh16:
-	adrp	x9, lCPI0_2@PAGE
-Lloh17:
-	ldr	q5, [x9, lCPI0_2@PAGEOFF]
-	orr.16b	v5, v17, v5
-Lloh18:
-	adrp	x9, lCPI0_5@PAGE
-Lloh19:
-	ldr	q6, [x9, lCPI0_5@PAGEOFF]
-	orr.16b	v6, v17, v6
-Lloh20:
-	adrp	x9, lCPI0_6@PAGE
-Lloh21:
-	ldr	q7, [x9, lCPI0_6@PAGEOFF]
-	orr.16b	v7, v17, v7
-	ldr	q16, [x13, lCPI0_7@PAGEOFF]
-	orr.16b	v16, v17, v16
-	ldr	q18, [x11, lCPI0_8@PAGEOFF]
-	orr.16b	v17, v17, v18
-	mov	w9, #1                          ; =0x1
-	dup.2d	v18, x9
-	mov	w9, #16                         ; =0x10
-	dup.2d	v19, x9
-	and	x16, x8, #0xf
-	sub	x14, x12, x16
-	add	x15, x10, x14
-	add	x9, x0, x10
-	add	x17, x10, x16
-	sub	x17, x17, x8
-	movi.2d	v21, #0000000000000000
-	movi.2d	v20, #0000000000000000
-	movi.2d	v24, #0000000000000000
-	movi.2d	v22, #0000000000000000
-	movi.2d	v25, #0000000000000000
-	movi.2d	v23, #0000000000000000
-LBB0_17:                                ; =>This Inner Loop Header: Depth=1
-	ushl.2d	v26, v18, v5
-	ushl.2d	v27, v18, v7
-	ldr	q28, [x9], #16
-	ushl.2d	v29, v18, v2
-	ushl.2d	v30, v18, v17
-	cmlt.16b	v28, v28, #0
-	sshll2.8h	v31, v28, #0
-	sshll.8h	v28, v28, #0
-	sshll2.4s	v8, v31, #0
-	sshll.4s	v9, v28, #0
-	sshll.2d	v10, v9, #0
-	bic.16b	v30, v30, v10
-	sshll2.2d	v10, v8, #0
-	bic.16b	v29, v29, v10
-	ushl.2d	v10, v18, v16
-	sshll.4s	v31, v31, #0
-	sshll2.4s	v28, v28, #0
-	sshll2.2d	v9, v9, #0
-	bic.16b	v9, v10, v9
-	sshll.2d	v10, v28, #0
-	bic.16b	v27, v27, v10
-	sshll.2d	v10, v31, #0
-	bic.16b	v26, v26, v10
-	ushl.2d	v10, v18, v3
-	sshll.2d	v8, v8, #0
-	bic.16b	v8, v10, v8
-	ushl.2d	v10, v18, v6
-	sshll2.2d	v28, v28, #0
-	bic.16b	v28, v10, v28
-	ushl.2d	v10, v18, v4
-	sshll2.2d	v31, v31, #0
-	bic.16b	v31, v10, v31
-	orr.16b	v22, v31, v22
-	orr.16b	v20, v28, v20
-	orr.16b	v25, v8, v25
-	orr.16b	v24, v26, v24
-	orr.16b	v21, v27, v21
-	orr.16b	v0, v9, v0
-	orr.16b	v23, v29, v23
-	orr.16b	v1, v30, v1
-	add.2d	v7, v7, v19
-	add.2d	v16, v16, v19
-	add.2d	v17, v17, v19
-	add.2d	v6, v6, v19
-	add.2d	v5, v5, v19
-	add.2d	v4, v4, v19
-	add.2d	v3, v3, v19
-	add.2d	v2, v2, v19
-	adds	x17, x17, #16
-	b.ne	LBB0_17
-; %bb.18:
-	orr.16b	v1, v1, v24
-	orr.16b	v2, v21, v25
-	orr.16b	v1, v1, v2
-	orr.16b	v0, v0, v22
-	orr.16b	v2, v20, v23
-	orr.16b	v0, v0, v2
-	orr.16b	v0, v1, v0
-	ext.16b	v1, v0, v0, #8
-	orr.8b	v0, v0, v1
-	fmov	x9, d0
-	cbz	x16, LBB0_26
-; %bb.19:
-	cmp	x16, #4
-	b.hs	LBB0_21
-; %bb.20:
-	add	x12, x10, x14
-	b	LBB0_24
-LBB0_21:
-	and	x16, x8, #0x3
-	sub	x12, x12, x16
-	add	x12, x10, x12
-	movi.2d	v0, #0000000000000000
-	movi.2d	v1, #0000000000000000
-	mov.d	v1[0], x9
-	dup.2d	v3, x15
-	ldr	q2, [x13, lCPI0_7@PAGEOFF]
-	add.2d	v2, v3, v2
-	ldr	q4, [x11, lCPI0_8@PAGEOFF]
-	add.2d	v3, v3, v4
-	add	x10, x10, x14
-	add	x9, x0, x10
-	add	x10, x10, x16
-	sub	x10, x10, x8
-	mov	w11, #1                         ; =0x1
-	dup.2d	v4, x11
-	mov	w11, #4                         ; =0x4
-	dup.2d	v5, x11
-LBB0_22:                                ; =>This Inner Loop Header: Depth=1
-	ldr	s6, [x9], #4
-	sshll.8h	v6, v6, #0
-	ushl.2d	v7, v4, v2
-	ushl.2d	v16, v4, v3
-	cmlt.4h	v6, v6, #0
-	ushll.4s	v6, v6, #0
-	ushll2.2d	v17, v6, #0
-	shl.2d	v17, v17, #56
-	sshr.2d	v17, v17, #56
-	ushll.2d	v6, v6, #0
-	shl.2d	v6, v6, #56
-	sshr.2d	v6, v6, #56
-	bic.16b	v6, v16, v6
-	bic.16b	v7, v7, v17
-	orr.16b	v0, v7, v0
-	orr.16b	v1, v6, v1
-	add.2d	v2, v2, v5
-	add.2d	v3, v3, v5
-	adds	x10, x10, #4
-	b.ne	LBB0_22
-; %bb.23:
-	orr.16b	v0, v1, v0
-	ext.16b	v1, v0, v0, #8
-	orr.8b	v0, v0, v1
-	fmov	x9, d0
-	cbz	x16, LBB0_26
-LBB0_24:
-	mov	w10, #1                         ; =0x1
-LBB0_25:                                ; =>This Inner Loop Header: Depth=1
-	ldrsb	w11, [x0, x12]
-	lsl	x13, x10, x12
-	cmp	w11, #0
-	csel	x11, xzr, x13, lt
-	orr	x9, x11, x9
-	add	x12, x12, #1
-	cmp	x8, x12
-	b.ne	LBB0_25
-LBB0_26:
-	ldp	d9, d8, [sp, #16]               ; 16-byte Folded Reload
-	ldp	d11, d10, [sp], #32             ; 16-byte Folded Reload
-	str	x9, [x2]
+	str	xzr, [x2]
 	ret
-	.loh AdrpLdr	Lloh8, Lloh9
-	.loh AdrpAdrp	Lloh6, Lloh8
-	.loh AdrpLdr	Lloh6, Lloh7
-	.loh AdrpAdrp	Lloh4, Lloh6
-	.loh AdrpLdr	Lloh4, Lloh5
-	.loh AdrpAdrp	Lloh2, Lloh4
-	.loh AdrpLdr	Lloh2, Lloh3
-	.loh AdrpLdr	Lloh0, Lloh1
-	.loh AdrpLdr	Lloh20, Lloh21
-	.loh AdrpAdrp	Lloh18, Lloh20
-	.loh AdrpLdr	Lloh18, Lloh19
-	.loh AdrpAdrp	Lloh16, Lloh18
-	.loh AdrpLdr	Lloh16, Lloh17
-	.loh AdrpAdrp	Lloh14, Lloh16
-	.loh AdrpLdr	Lloh14, Lloh15
-	.loh AdrpAdrp	Lloh12, Lloh14
-	.loh AdrpLdr	Lloh12, Lloh13
-	.loh AdrpAdrp	Lloh10, Lloh12
-	.loh AdrpLdr	Lloh10, Lloh11
                                         ; -- End function
 	.globl	_decode_uvarint64_batch         ; -- Begin function decode_uvarint64_batch
 	.p2align	2
@@ -1545,203 +1090,243 @@ _decode_streamvbyte32_batch:            ; @decode_streamvbyte32_batch
 ; %bb.0:
 	str	xzr, [x6]
 	cmp	x1, #1
-	b.lt	LBB7_28
+	b.lt	LBB7_34
 ; %bb.1:
 	cmp	x3, #1
-	b.lt	LBB7_28
+	b.lt	LBB7_34
 ; %bb.2:
 	cmp	x5, #1
-	b.lt	LBB7_28
+	b.lt	LBB7_34
 ; %bb.3:
-	stp	x28, x27, [sp, #-80]!           ; 16-byte Folded Spill
-	stp	x26, x25, [sp, #16]             ; 16-byte Folded Spill
-	stp	x24, x23, [sp, #32]             ; 16-byte Folded Spill
-	stp	x22, x21, [sp, #48]             ; 16-byte Folded Spill
-	stp	x20, x19, [sp, #64]             ; 16-byte Folded Spill
-	lsr	x8, x5, #2
-	cmp	x8, x1
-	csel	x8, x8, x1, lo
-	cmp	x5, #4
-	b.hs	LBB7_5
-; %bb.4:
-	mov	x14, #0                         ; =0x0
-	b	LBB7_27
-LBB7_5:
-	mov	x16, #0                         ; =0x0
-	add	x9, x2, #1
-	add	x10, x2, #2
-	add	x11, x2, #3
-	mov	w12, #-128                      ; =0xffffff80
-	mov	w13, #2                         ; =0x2
-	b	LBB7_7
-LBB7_6:                                 ;   in Loop: Header=BB7_7 Depth=1
-	ldr	q0, [x2, x16]
-	cmp	w24, #0
-	csinc	w16, w12, wzr, eq
-	cmp	w24, #1
-	csel	w17, w13, w12, hi
-	cmp	w24, #3
-	csel	w19, w24, w12, eq
-	cmp	w20, #0
-	csinc	w22, w12, w7, eq
-	add	w24, w7, #2
-	cmp	w20, #1
-	csel	w24, w24, w12, hi
-	add	w25, w7, #3
-	cmp	w20, #3
-	csel	w20, w25, w12, eq
-	cmp	w5, #0
-	csinc	w25, w12, w21, eq
-	add	w26, w21, #2
-	cmp	w5, #1
-	csel	w26, w26, w12, hi
-	add	w27, w21, #3
-	cmp	w5, #3
-	csel	w5, w27, w12, eq
-	cmp	w15, #64
-	csinc	w27, w12, w1, lo
-	sxtb	w15, w15
-	add	w28, w1, #2
-	cmp	w15, #0
-	csel	w15, w28, w12, lt
-	add	w28, w1, #3
+	sub	sp, sp, #112
+	stp	x28, x27, [sp, #16]             ; 16-byte Folded Spill
+	stp	x26, x25, [sp, #32]             ; 16-byte Folded Spill
+	stp	x24, x23, [sp, #48]             ; 16-byte Folded Spill
+	stp	x22, x21, [sp, #64]             ; 16-byte Folded Spill
+	stp	x20, x19, [sp, #80]             ; 16-byte Folded Spill
+	stp	x29, x30, [sp, #96]             ; 16-byte Folded Spill
+	mov	x7, #0                          ; =0x0
+	mov	x8, #0                          ; =0x0
+	add	x9, x5, #3
+	lsr	x9, x9, #2
+	cmp	x9, x1
+	csel	x9, x9, x1, lo
+	add	x10, x2, #1
+	add	x11, x2, #2
+	add	x12, x2, #3
+	str	x12, [sp, #8]                   ; 8-byte Folded Spill
+	mov	w14, #-128                      ; =0xffffff80
+	mov	w15, #2                         ; =0x2
+	b	LBB7_5
+LBB7_4:                                 ;   in Loop: Header=BB7_5 Depth=1
+	ldr	q0, [x2, x7]
+	cmp	w28, #0
+	csinc	w17, w14, wzr, eq
+	cmp	w28, #1
+	csel	w7, w15, w14, hi
+	cmp	w28, #3
+	csel	w19, w28, w14, eq
+	cmp	w23, #0
+	csinc	w22, w14, w21, eq
+	add	w25, w21, #2
+	cmp	w23, #1
+	csel	w25, w25, w14, hi
+	add	w28, w21, #3
 	cmp	w23, #3
-	csel	w23, w28, w12, eq
+	csel	w23, w28, w14, eq
+	cmp	w20, #0
+	csinc	w28, w14, w26, eq
+	add	w30, w26, #2
+	cmp	w20, #1
+	csel	w30, w30, w14, hi
+	add	w12, w26, #3
+	cmp	w20, #3
+	csel	w12, w12, w14, eq
+	cmp	w1, #64
+	csinc	w20, w14, w24, lo
+	sxtb	w1, w1
+	add	w13, w24, #2
+	cmp	w1, #0
+	csel	w13, w13, w14, lt
+	add	w1, w24, #3
+	cmp	w27, #3
+	csel	w1, w1, w14, eq
 	movi.2d	v1, #0000000000000000
-	mov.b	v1[1], w16
-	mov.b	v1[2], w17
+	mov.b	v1[1], w17
+	mov.b	v1[2], w7
 	mov.b	v1[3], w19
-	mov.b	v1[4], w7
+	mov.b	v1[4], w21
 	mov.b	v1[5], w22
-	mov.b	v1[6], w24
-	mov.b	v1[7], w20
-	mov.b	v1[8], w21
-	mov.b	v1[9], w25
-	mov.b	v1[10], w26
-	mov.b	v1[11], w5
-	mov.b	v1[12], w1
-	mov.b	v1[13], w27
-	mov.b	v1[14], w15
-	mov.b	v1[15], w23
+	mov.b	v1[6], w25
+	mov.b	v1[7], w23
+	mov.b	v1[8], w26
+	mov.b	v1[9], w28
+	mov.b	v1[10], w30
+	mov.b	v1[11], w12
+	mov.b	v1[12], w24
+	mov.b	v1[13], w20
+	mov.b	v1[14], w13
+	mov.b	v1[15], w1
 	tbl.16b	v0, { v0 }, v1
-	str	q0, [x4], #16
-	mov	x16, x14
-	subs	x8, x8, #1
-	b.eq	LBB7_27
-LBB7_7:                                 ; =>This Inner Loop Header: Depth=1
-	ldrb	w15, [x0], #1
-	and	w24, w15, #0x3
-	add	w7, w24, #1
-	ubfx	w20, w15, #2, #2
+	lsl	x12, x8, #2
+	str	q0, [x4, x12]
+	mov	w17, #4                         ; =0x4
+	add	x8, x17, x8
+	add	x0, x0, #1
+	mov	x7, x16
+	subs	x9, x9, #1
+	b.eq	LBB7_33
+LBB7_5:                                 ; =>This Inner Loop Header: Depth=1
+	sub	x17, x5, x8
+	cmp	x17, #1
+	b.lt	LBB7_32
+; %bb.6:                                ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w1, [x0]
+	and	w28, w1, #0x3
+	add	w21, w28, #1
+	ubfx	w23, w1, #2, #2
+	add	w25, w23, #1
+	ubfx	w20, w1, #4, #2
 	add	w22, w20, #1
-	ubfx	w5, w15, #4, #2
-	add	w19, w5, #1
-	lsr	x23, x15, #6
-	add	x17, x23, #1
-	add	w21, w22, w7
-	add	w1, w21, w19
-	add	x14, x16, x17
-	add	x14, x14, x1
-	cmp	x14, x3
-	b.gt	LBB7_26
-; %bb.8:                                ;   in Loop: Header=BB7_7 Depth=1
-	add	x25, x16, #16
-	cmp	x25, x3
-	b.le	LBB7_6
-; %bb.9:                                ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w1, [x2, x16]
-	cbz	w24, LBB7_13
-; %bb.10:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w21, [x9, x16]
-	orr	w1, w1, w21, lsl #8
-	cmp	w7, #2
+	lsr	x27, x1, #6
+	add	x19, x27, #1
+	add	w26, w25, w21
+	add	w24, w26, w22
+	add	x16, x7, x19
+	add	x16, x16, x24
+	cmp	x16, x3
+	b.gt	LBB7_32
+; %bb.7:                                ;   in Loop: Header=BB7_5 Depth=1
+	cmp	x17, #4
+	b.lo	LBB7_9
+; %bb.8:                                ;   in Loop: Header=BB7_5 Depth=1
+	add	x30, x7, #16
+	cmp	x30, x3
+	b.le	LBB7_4
+LBB7_9:                                 ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w26, [x2, x7]
+	cbz	w28, LBB7_13
+; %bb.10:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w24, [x10, x7]
+	orr	w26, w26, w24, lsl #8
+	cmp	w21, #2
 	b.eq	LBB7_13
-; %bb.11:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w21, [x10, x16]
-	orr	w1, w1, w21, lsl #16
-	cmp	w7, #3
+; %bb.11:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w24, [x11, x7]
+	orr	w26, w26, w24, lsl #16
+	cmp	w21, #3
 	b.eq	LBB7_13
-; %bb.12:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w7, [x11, x16]
-	orr	w1, w1, w7, lsl #24
-LBB7_13:                                ;   in Loop: Header=BB7_7 Depth=1
-	and	x21, x15, #0x3
-	add	x23, x16, x21
-	add	x24, x23, #1
-	ldrb	w7, [x2, x24]
-	cbz	w20, LBB7_17
-; %bb.14:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w20, [x9, x24]
-	orr	w7, w7, w20, lsl #8
+; %bb.12:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldr	x12, [sp, #8]                   ; 8-byte Folded Reload
+	ldrb	w21, [x12, x7]
+	orr	w26, w26, w21, lsl #24
+LBB7_13:                                ;   in Loop: Header=BB7_5 Depth=1
+	and	x24, x1, #0x3
+	add	x21, x7, x24
+	add	x27, x21, #1
+	add	x21, x4, x8, lsl #2
+	str	w26, [x21]
+	cmp	x17, #1
+	b.eq	LBB7_25
+; %bb.14:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w26, [x2, x27]
+	cbz	w23, LBB7_18
+; %bb.15:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w23, [x10, x27]
+	orr	w26, w26, w23, lsl #8
+	cmp	w25, #2
+	b.eq	LBB7_18
+; %bb.16:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w23, [x11, x27]
+	orr	w26, w26, w23, lsl #16
+	cmp	w25, #3
+	b.eq	LBB7_18
+; %bb.17:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldr	x12, [sp, #8]                   ; 8-byte Folded Reload
+	ldrb	w23, [x12, x27]
+	orr	w26, w26, w23, lsl #24
+LBB7_18:                                ;   in Loop: Header=BB7_5 Depth=1
+	ubfx	x23, x1, #2, #2
+	add	x25, x7, x24
+	add	x25, x25, x23
+	add	x27, x25, #2
+	str	w26, [x21, #4]
+	cmp	x17, #3
+	b.lt	LBB7_25
+; %bb.19:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w25, [x2, x27]
+	cbz	w20, LBB7_23
+; %bb.20:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w20, [x10, x27]
+	orr	w25, w25, w20, lsl #8
 	cmp	w22, #2
-	b.eq	LBB7_17
-; %bb.15:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w20, [x10, x24]
-	orr	w7, w7, w20, lsl #16
+	b.eq	LBB7_23
+; %bb.21:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w20, [x11, x27]
+	orr	w25, w25, w20, lsl #16
 	cmp	w22, #3
-	b.eq	LBB7_17
-; %bb.16:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w20, [x11, x24]
-	orr	w7, w7, w20, lsl #24
-LBB7_17:                                ;   in Loop: Header=BB7_7 Depth=1
-	ubfx	x22, x15, #2, #2
-	add	x20, x23, x22
-	add	x23, x20, #2
-	ldrb	w20, [x2, x23]
-	cbz	w5, LBB7_21
-; %bb.18:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w5, [x9, x23]
-	orr	w20, w20, w5, lsl #8
+	b.eq	LBB7_23
+; %bb.22:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldr	x12, [sp, #8]                   ; 8-byte Folded Reload
+	ldrb	w20, [x12, x27]
+	orr	w25, w25, w20, lsl #24
+LBB7_23:                                ;   in Loop: Header=BB7_5 Depth=1
+	add	x7, x7, x24
+	ubfx	x20, x1, #4, #2
+	add	x20, x20, x23
+	add	x7, x7, x20
+	add	x7, x7, #3
+	str	w25, [x21, #8]
+	cmp	x17, #3
+	b.ne	LBB7_27
+; %bb.24:                               ;   in Loop: Header=BB7_5 Depth=1
+	mov	x16, x7
+	b	LBB7_26
+LBB7_25:                                ;   in Loop: Header=BB7_5 Depth=1
+	mov	x16, x27
+LBB7_26:                                ;   in Loop: Header=BB7_5 Depth=1
+	cmp	x17, #4
+	mov	w12, #4                         ; =0x4
+	csel	x17, x17, x12, lt
+	add	x8, x17, x8
+	add	x0, x0, #1
+	mov	x7, x16
+	subs	x9, x9, #1
+	b.ne	LBB7_5
+	b	LBB7_33
+LBB7_27:                                ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w20, [x2, x7]
+	cmp	w1, #64
+	b.lo	LBB7_31
+; %bb.28:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w1, [x10, x7]
+	orr	w20, w20, w1, lsl #8
 	cmp	w19, #2
-	b.eq	LBB7_21
-; %bb.19:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w5, [x10, x23]
-	orr	w20, w20, w5, lsl #16
+	b.eq	LBB7_31
+; %bb.29:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldrb	w1, [x11, x7]
+	orr	w20, w20, w1, lsl #16
 	cmp	w19, #3
-	b.eq	LBB7_21
-; %bb.20:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w5, [x11, x23]
-	orr	w20, w20, w5, lsl #24
-LBB7_21:                                ;   in Loop: Header=BB7_7 Depth=1
-	add	x16, x16, x21
-	ubfx	x5, x15, #4, #2
-	add	x5, x5, x22
-	add	x16, x16, x5
-	add	x5, x16, #3
-	ldrb	w16, [x2, x5]
-	cmp	w15, #64
-	b.lo	LBB7_25
-; %bb.22:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w15, [x9, x5]
-	orr	w16, w16, w15, lsl #8
-	cmp	w17, #2
-	b.eq	LBB7_25
-; %bb.23:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w15, [x10, x5]
-	orr	w16, w16, w15, lsl #16
-	cmp	w17, #3
-	b.eq	LBB7_25
-; %bb.24:                               ;   in Loop: Header=BB7_7 Depth=1
-	ldrb	w15, [x11, x5]
-	orr	w16, w16, w15, lsl #24
-LBB7_25:                                ;   in Loop: Header=BB7_7 Depth=1
-	stp	w1, w7, [x4]
-	stp	w20, w16, [x4, #8]
-	add	x4, x4, #16
-	mov	x16, x14
-	subs	x8, x8, #1
-	b.ne	LBB7_7
-	b	LBB7_27
-LBB7_26:
-	mov	x14, x16
-LBB7_27:
-	str	x14, [x6]
-	ldp	x20, x19, [sp, #64]             ; 16-byte Folded Reload
-	ldp	x22, x21, [sp, #48]             ; 16-byte Folded Reload
-	ldp	x24, x23, [sp, #32]             ; 16-byte Folded Reload
-	ldp	x26, x25, [sp, #16]             ; 16-byte Folded Reload
-	ldp	x28, x27, [sp], #80             ; 16-byte Folded Reload
-LBB7_28:
+	b.eq	LBB7_31
+; %bb.30:                               ;   in Loop: Header=BB7_5 Depth=1
+	ldr	x12, [sp, #8]                   ; 8-byte Folded Reload
+	ldrb	w1, [x12, x7]
+	orr	w20, w20, w1, lsl #24
+LBB7_31:                                ;   in Loop: Header=BB7_5 Depth=1
+	str	w20, [x21, #12]
+	b	LBB7_26
+LBB7_32:
+	mov	x16, x7
+LBB7_33:
+	str	x16, [x6]
+	ldp	x29, x30, [sp, #96]             ; 16-byte Folded Reload
+	ldp	x20, x19, [sp, #80]             ; 16-byte Folded Reload
+	ldp	x22, x21, [sp, #64]             ; 16-byte Folded Reload
+	ldp	x24, x23, [sp, #48]             ; 16-byte Folded Reload
+	ldp	x26, x25, [sp, #32]             ; 16-byte Folded Reload
+	ldp	x28, x27, [sp, #16]             ; 16-byte Folded Reload
+	add	sp, sp, #112
+LBB7_34:
 	ret
                                         ; -- End function
 .subsections_via_symbols
