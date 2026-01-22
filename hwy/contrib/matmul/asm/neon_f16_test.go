@@ -19,6 +19,7 @@ package asm
 import (
 	"fmt"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/ajroetker/go-highway/hwy"
@@ -279,4 +280,77 @@ func TestBlockedMatMulNEONF16_64(t *testing.T) {
 	if maxErr > tolerance {
 		t.Errorf("max error %e exceeds threshold %e", maxErr, tolerance)
 	}
+}
+
+// TestBlockedMatMulNEONF16_InGoroutine tests running the assembly in a goroutine.
+// The benchmark uses ParallelMatMul which spawns goroutines - this might be the issue!
+func TestBlockedMatMulNEONF16_InGoroutine(t *testing.T) {
+	if !hwy.HasARMFP16() {
+		t.Skip("CPU does not support ARM FP16")
+	}
+
+	m, n, k := 64, 64, 64
+
+	a := make([]hwy.Float16, m*k)
+	b := make([]hwy.Float16, k*n)
+	c := make([]hwy.Float16, m*n)
+
+	for i := range a {
+		a[i] = hwy.NewFloat16(float32(i%7) + 0.5)
+	}
+	for i := range b {
+		b[i] = hwy.NewFloat16(float32(i%11) + 0.25)
+	}
+
+	// Run in a goroutine like ParallelMatMul does
+	t.Log("Calling BlockedMatMulNEONF16 in a goroutine...")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		BlockedMatMulNEONF16(a, b, c, m, n, k)
+	}()
+	<-done
+	t.Log("Goroutine completed successfully")
+}
+
+// TestBlockedMatMulNEONF16_MultipleGoroutines tests concurrent execution
+func TestBlockedMatMulNEONF16_MultipleGoroutines(t *testing.T) {
+	if !hwy.HasARMFP16() {
+		t.Skip("CPU does not support ARM FP16")
+	}
+
+	m, n, k := 64, 64, 64
+	numGoroutines := 4
+
+	// Each goroutine gets its own matrices
+	type work struct {
+		a, b, c []hwy.Float16
+	}
+	works := make([]work, numGoroutines)
+
+	for i := range works {
+		works[i].a = make([]hwy.Float16, m*k)
+		works[i].b = make([]hwy.Float16, k*n)
+		works[i].c = make([]hwy.Float16, m*n)
+
+		for j := range works[i].a {
+			works[i].a[j] = hwy.NewFloat16(float32((i+j)%7) + 0.5)
+		}
+		for j := range works[i].b {
+			works[i].b[j] = hwy.NewFloat16(float32((i+j)%11) + 0.25)
+		}
+	}
+
+	t.Logf("Running %d concurrent BlockedMatMulNEONF16 calls...", numGoroutines)
+
+	var wg sync.WaitGroup
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			BlockedMatMulNEONF16(works[idx].a, works[idx].b, works[idx].c, m, n, k)
+		}(i)
+	}
+	wg.Wait()
+	t.Log("All goroutines completed successfully")
 }
