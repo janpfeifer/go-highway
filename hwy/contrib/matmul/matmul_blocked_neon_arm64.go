@@ -49,6 +49,11 @@ func blockedMatMulNEONBF16(a, b, c []hwy.BFloat16, m, n, k int) {
 func init() {
 	// Override blocked matmul dispatch for F16 and BF16 on ARM64
 	// This uses optimized NEON assembly instead of generated fallback
-	BlockedMatMulFloat16 = blockedMatMulNEONF16
-	BlockedMatMulBFloat16 = blockedMatMulNEONBF16
+	// FP16/BF16 NEON instructions require ARMv8.2+ extensions
+	if hwy.HasARMFP16() {
+		BlockedMatMulFloat16 = blockedMatMulNEONF16
+	}
+	if hwy.HasARMBF16() {
+		BlockedMatMulBFloat16 = blockedMatMulNEONBF16
+	}
 }
