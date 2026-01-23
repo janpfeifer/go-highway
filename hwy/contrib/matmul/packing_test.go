@@ -22,6 +22,147 @@ import (
 	"github.com/ajroetker/go-highway/hwy"
 )
 
+// TestKernelDirect tests the micro-kernel directly with known inputs.
+// This helps diagnose platform-specific issues.
+func TestKernelDirect(t *testing.T) {
+	lanes := hwy.Zero[float32]().NumLanes()
+	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+
+	// Simple 2x2 matmul: C = A * B
+	// A = [[1, 2], [3, 4]]  (2x2)
+	// B = [[5, 6], [7, 8]]  (2x2)
+	// C = [[1*5+2*7, 1*6+2*8], [3*5+4*7, 3*6+4*8]] = [[19, 22], [43, 50]]
+
+	// Pack A with mr=4 (padding with zeros)
+	// Layout: [k, mr] -> for k=0: [1,3,0,0], for k=1: [2,4,0,0]
+	packedA := []float32{1, 3, 0, 0, 2, 4, 0, 0}
+
+	// Pack B with nr=8 (padding with zeros)
+	// Layout: [k, nr] -> for k=0: [5,6,0,0,0,0,0,0], for k=1: [7,8,0,0,0,0,0,0]
+	packedB := []float32{5, 6, 0, 0, 0, 0, 0, 0, 7, 8, 0, 0, 0, 0, 0, 0}
+
+	// Output C (n=2, so row stride is 2)
+	c := make([]float32, 4*2) // 4 rows (mr) x 2 cols (n)
+	n := 2
+
+	// Call kernel: ir=0, jr=0, kc=2, mr=4, nr=8
+	// But we only have 2 active rows and 2 active columns
+	t.Logf("Calling PackedMicroKernelPartial with activeRows=2, activeCols=2")
+	PackedMicroKernelPartial(packedA, packedB, c, n, 0, 0, 2, 4, 8, 2, 2)
+
+	// Check results
+	expected := []float32{19, 22, 43, 50, 0, 0, 0, 0}
+	t.Logf("c = %v", c)
+	t.Logf("expected = %v", expected)
+
+	for i := 0; i < 4; i++ {
+		if c[i] != expected[i] {
+			t.Errorf("c[%d] = %f, want %f", i, c[i], expected[i])
+		}
+	}
+}
+
+// TestBaseKernelGeneral directly tests basePackedMicroKernelGeneral
+// which is used when lanes != nr/2.
+func TestBaseKernelGeneral(t *testing.T) {
+	lanes := hwy.Zero[float32]().NumLanes()
+	t.Logf("lanes=%d", lanes)
+
+	// Simple 2x2 matmul with mr=4, nr=8 (like fallback params)
+	// A = [[1, 2], [3, 4]]  packed as [k, mr]
+	// B = [[5, 6], [7, 8]]  packed as [k, nr]
+	packedA := []float32{1, 3, 0, 0, 2, 4, 0, 0} // k=0: [1,3,0,0], k=1: [2,4,0,0]
+	packedB := []float32{5, 6, 0, 0, 0, 0, 0, 0, 7, 8, 0, 0, 0, 0, 0, 0}
+
+	c := make([]float32, 4*8) // 4 rows x 8 cols (full micro-tile output space)
+	n := 8                    // Leading dimension of C
+
+	// Call the general kernel directly
+	basePackedMicroKernelGeneral(packedA, packedB, c, n, 0, 0, 2, 4, 8)
+
+	// Expected: C[0,0]=19, C[0,1]=22, C[1,0]=43, C[1,1]=50, rest=0
+	// In row-major with n=8: c[0]=19, c[1]=22, c[8]=43, c[9]=50
+	t.Logf("c[0:16] = %v", c[0:16])
+
+	if c[0] != 19 {
+		t.Errorf("c[0,0] = %f, want 19", c[0])
+	}
+	if c[1] != 22 {
+		t.Errorf("c[0,1] = %f, want 22", c[1])
+	}
+	if c[8] != 43 {
+		t.Errorf("c[1,0] = %f, want 43", c[8])
+	}
+	if c[9] != 50 {
+		t.Errorf("c[1,1] = %f, want 50", c[9])
+	}
+}
+
+// TestScalarMatmulReference computes the expected result using pure scalar operations.
+// This serves as a known-good reference for comparison.
+func TestScalarMatmulReference(t *testing.T) {
+	lanes := hwy.Zero[float32]().NumLanes()
+	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+
+	// Use the packed data layout as in other tests
+	// A = [[1, 2], [3, 4]] (2 rows, k=2)
+	// B = [[5, 6], [7, 8]] (k=2, 2 cols)
+	// C = A*B = [[19, 22], [43, 50]]
+
+	// Packed A with mr=4: [k, mr] layout
+	packedA := []float32{1, 3, 0, 0, 2, 4, 0, 0}
+	// Packed B with nr=8: [k, nr] layout
+	packedB := []float32{5, 6, 0, 0, 0, 0, 0, 0, 7, 8, 0, 0, 0, 0, 0, 0}
+
+	mr, nr, kc := 4, 8, 2
+
+	// Compute C manually using scalar loop (same algorithm as basePackedMicroKernelGeneral but without hwy)
+	c := make([]float32, 4*8)
+	n := 8
+
+	for r := 0; r < mr; r++ {
+		cRowStart := r * n
+		for col := 0; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				bVal := packedB[p*nr+col]
+				sum += aVal * bVal
+			}
+			c[cRowStart+col] += sum
+		}
+	}
+
+	t.Logf("Scalar result c[0:16] = %v", c[0:16])
+
+	// Verify scalar computation matches expected
+	if c[0] != 19 {
+		t.Errorf("Scalar: c[0,0] = %f, want 19", c[0])
+	}
+	if c[1] != 22 {
+		t.Errorf("Scalar: c[0,1] = %f, want 22", c[1])
+	}
+	if c[8] != 43 {
+		t.Errorf("Scalar: c[1,0] = %f, want 43", c[8])
+	}
+	if c[9] != 50 {
+		t.Errorf("Scalar: c[1,1] = %f, want 50", c[9])
+	}
+
+	// Now test the general kernel and compare
+	c2 := make([]float32, 4*8)
+	basePackedMicroKernelGeneral(packedA, packedB, c2, n, 0, 0, kc, mr, nr)
+
+	t.Logf("General kernel c2[0:16] = %v", c2[0:16])
+
+	// Compare scalar vs general kernel
+	for i := 0; i < 16; i++ {
+		if c[i] != c2[i] {
+			t.Errorf("Mismatch at c[%d]: scalar=%f, general=%f", i, c[i], c2[i])
+		}
+	}
+}
+
 // TestPackLHS verifies that LHS packing produces the expected layout.
 func TestPackLHS(t *testing.T) {
 	// 6x4 matrix A, Mr=2
