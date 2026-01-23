@@ -167,7 +167,10 @@ func TestScalarMatmulReference(t *testing.T) {
 // multiple micro-panels to exercise the GEBP loop structure.
 func TestPackedMatMulSmall(t *testing.T) {
 	lanes := hwy.Zero[float32]().NumLanes()
+	params := getCacheParams[float32]()
 	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+	t.Logf("CacheParams: Mr=%d, Nr=%d, Kc=%d, Mc=%d, Nc=%d",
+		params.Mr, params.Nr, params.Kc, params.Mc, params.Nc)
 
 	// 8x8 matmul with simple values
 	// This spans multiple micro-panels: with Mr=4, we have 2 row panels
