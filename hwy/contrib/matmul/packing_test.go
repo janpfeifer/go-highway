@@ -17,6 +17,7 @@ package matmul
 import (
 	"math"
 	"math/rand"
+	"os"
 	"testing"
 
 	"github.com/ajroetker/go-highway/hwy"
@@ -259,6 +260,7 @@ func TestPackedMatMulSmall(t *testing.T) {
 func TestPackedMatMul16x16Deterministic(t *testing.T) {
 	lanes := hwy.Zero[float32]().NumLanes()
 	params := getCacheParams[float32]()
+	t.Logf("HWY_NO_SIMD=%q", os.Getenv("HWY_NO_SIMD"))
 	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
 	t.Logf("CacheParams: Mr=%d, Nr=%d, Kc=%d, Mc=%d, Nc=%d",
 		params.Mr, params.Nr, params.Kc, params.Mc, params.Nc)
@@ -337,6 +339,94 @@ func TestPackedMatMul16x16Deterministic(t *testing.T) {
 			}
 		}
 		t.Errorf("max error %f exceeds threshold", maxErr)
+	}
+}
+
+// TestPackedMatMulDiagnostic isolates packing and micro-kernel to find bugs.
+func TestPackedMatMulDiagnostic(t *testing.T) {
+	t.Logf("=== Environment ===")
+	t.Logf("HWY_NO_SIMD=%q", os.Getenv("HWY_NO_SIMD"))
+	t.Logf("lanes=%d, CurrentName=%s", hwy.Zero[float32]().NumLanes(), hwy.CurrentName())
+
+	params := getCacheParams[float32]()
+	mr, nr := params.Mr, params.Nr
+	t.Logf("CacheParams: Mr=%d, Nr=%d", mr, nr)
+
+	// Simple 16x16 case: 2 B panels (columns 0-7 and 8-15)
+	m, n, k := 16, 16, 16
+
+	// Create deterministic inputs
+	a := make([]float32, m*k)
+	b := make([]float32, k*n)
+	for i := range a {
+		a[i] = float32(i + 1)
+	}
+	for i := range b {
+		b[i] = float32(i + 1)
+	}
+
+	// Test RHS packing for both B panels
+	t.Logf("=== Testing RHS Packing ===")
+	packedBSize := params.PackedBSize()
+	packedB := make([]float32, packedBSize)
+
+	// Pack B: all 16 columns
+	activeColsLast := PackRHS(b, packedB, k, n, 0, 0, k, n, nr)
+	t.Logf("PackRHS returned activeColsLast=%d", activeColsLast)
+
+	// Check first B panel (columns 0-7) at offset 0
+	t.Logf("First B panel (cols 0-7), first k-row:")
+	t.Logf("  packedB[0:8] = %v", packedB[0:8])
+
+	// Check second B panel (columns 8-15) at offset k*nr = 16*8 = 128
+	bPanel1Offset := k * nr
+	t.Logf("Second B panel (cols 8-15), first k-row (offset=%d):", bPanel1Offset)
+	t.Logf("  packedB[%d:%d] = %v", bPanel1Offset, bPanel1Offset+8, packedB[bPanel1Offset:bPanel1Offset+8])
+
+	// Verify packing is correct
+	// For k-row 0, columns 8-15: b[0*16+8..15] = b[8:16] = [9,10,11,12,13,14,15,16]
+	expectedB1 := []float32{9, 10, 11, 12, 13, 14, 15, 16}
+	packingOK := true
+	for i, exp := range expectedB1 {
+		if packedB[bPanel1Offset+i] != exp {
+			t.Errorf("packedB[%d] = %f, want %f", bPanel1Offset+i, packedB[bPanel1Offset+i], exp)
+			packingOK = false
+		}
+	}
+	if packingOK {
+		t.Logf("Second B panel packing: CORRECT")
+	}
+
+	// Test micro-kernel for second B panel
+	t.Logf("=== Testing Micro-Kernel for Second B Panel ===")
+
+	// Pack A (first panel, rows 0-3)
+	packedASize := params.PackedASize()
+	packedA := make([]float32, packedASize)
+	PackLHS(a, packedA, m, k, 0, 0, mr, k, mr)
+
+	// Initialize C to zero
+	c := make([]float32, m*n)
+
+	// Call micro-kernel for second B panel (columns 8-15)
+	// ir=0, jr=8, kc=16, mr=4, nr=8
+	PackedMicroKernel(packedA, packedB[bPanel1Offset:], c, n, 0, 8, k, mr, nr)
+
+	// Check results for row 0, columns 8-15
+	t.Logf("After micro-kernel, C[0, 8:16] = %v", c[8:16])
+
+	// Compute expected values for C[0, 8:15]
+	// C[0,j] = sum(A[0,kk] * B[kk,j]) for kk=0..15
+	// A[0,:] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+	// B[:,8] = [9,25,41,57,73,89,105,121,137,153,169,185,201,217,233,249]
+	var expectedC08 float32
+	for kk := 0; kk < k; kk++ {
+		expectedC08 += a[kk] * b[kk*n+8]
+	}
+	t.Logf("Expected C[0,8] = %f, got %f", expectedC08, c[8])
+
+	if c[8] == 0 && expectedC08 != 0 {
+		t.Errorf("MICRO-KERNEL BUG: C[0,8] is 0 but should be %f", expectedC08)
 	}
 }
 
