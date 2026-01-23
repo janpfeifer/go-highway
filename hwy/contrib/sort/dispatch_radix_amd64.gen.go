@@ -64,12 +64,12 @@ func init() {
 		initRadixFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initRadixAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initRadixAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initRadixAVX2()
 		return
 	}
 	initRadixFallback()

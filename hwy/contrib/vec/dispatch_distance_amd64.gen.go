@@ -54,12 +54,12 @@ func init() {
 		initDistanceFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initDistanceAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initDistanceAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initDistanceAVX2()
 		return
 	}
 	initDistanceFallback()

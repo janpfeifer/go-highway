@@ -20,12 +20,12 @@ func init() {
 		initBitpackFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initBitpackAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initBitpackAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initBitpackAVX2()
 		return
 	}
 	initBitpackFallback()

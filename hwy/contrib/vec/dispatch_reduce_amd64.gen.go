@@ -102,12 +102,12 @@ func init() {
 		initReduceFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initReduceAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initReduceAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initReduceAVX2()
 		return
 	}
 	initReduceFallback()

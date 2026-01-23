@@ -66,12 +66,12 @@ func init() {
 		initPartitionFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initPartitionAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initPartitionAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initPartitionAVX2()
 		return
 	}
 	initPartitionFallback()

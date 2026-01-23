@@ -216,12 +216,12 @@ func init() {
 		initFindFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initFindAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initFindAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initFindAVX2()
 		return
 	}
 	initFindFallback()

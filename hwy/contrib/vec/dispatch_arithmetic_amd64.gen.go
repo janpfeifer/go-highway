@@ -232,12 +232,12 @@ func init() {
 		initArithmeticFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initArithmeticAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initArithmeticAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initArithmeticAVX2()
 		return
 	}
 	initArithmeticFallback()

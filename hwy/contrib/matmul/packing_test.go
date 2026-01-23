@@ -254,6 +254,92 @@ func TestPackedMatMulSmall(t *testing.T) {
 	}
 }
 
+// TestPackedMatMul16x16Deterministic tests with 16x16 deterministic values
+// to isolate whether the bug is size-dependent or random-value-dependent.
+func TestPackedMatMul16x16Deterministic(t *testing.T) {
+	lanes := hwy.Zero[float32]().NumLanes()
+	params := getCacheParams[float32]()
+	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+	t.Logf("CacheParams: Mr=%d, Nr=%d, Kc=%d, Mc=%d, Nc=%d",
+		params.Mr, params.Nr, params.Kc, params.Mc, params.Nc)
+
+	// 16x16 matmul - this spans:
+	// - 4 row panels (16/4 = 4) with Mr=4
+	// - 2 column panels (16/8 = 2) with Nr=8
+	m, n, k := 16, 16, 16
+
+	// Use simple deterministic values
+	a := make([]float32, m*k)
+	for i := 0; i < m; i++ {
+		for j := 0; j < k; j++ {
+			a[i*k+j] = float32(i*k + j + 1)
+		}
+	}
+
+	b := make([]float32, k*n)
+	for i := 0; i < k; i++ {
+		for j := 0; j < n; j++ {
+			b[i*n+j] = float32(i*n + j + 1)
+		}
+	}
+
+	// Compute expected result using simple triple loop
+	expected := make([]float32, m*n)
+	for i := 0; i < m; i++ {
+		for j := 0; j < n; j++ {
+			var sum float32
+			for kk := 0; kk < k; kk++ {
+				sum += a[i*k+kk] * b[kk*n+j]
+			}
+			expected[i*n+j] = sum
+		}
+	}
+
+	// Run packed matmul
+	c := make([]float32, m*n)
+	PackedMatMul(a, b, c, m, n, k)
+
+	// Compare and find max error
+	var maxErr float32
+	var maxErrI, maxErrJ int
+	for i := 0; i < m; i++ {
+		for j := 0; j < n; j++ {
+			idx := i*n + j
+			diff := c[idx] - expected[idx]
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > maxErr {
+				maxErr = diff
+				maxErrI, maxErrJ = i, j
+			}
+		}
+	}
+
+	t.Logf("Max error: %f at C[%d,%d] (expected=%f, got=%f)",
+		maxErr, maxErrI, maxErrJ, expected[maxErrI*n+maxErrJ], c[maxErrI*n+maxErrJ])
+
+	// If error is non-zero, print the first few mismatches
+	if maxErr > 1e-4 {
+		t.Logf("First mismatches:")
+		count := 0
+		for i := 0; i < m && count < 10; i++ {
+			for j := 0; j < n && count < 10; j++ {
+				idx := i*n + j
+				diff := c[idx] - expected[idx]
+				if diff < 0 {
+					diff = -diff
+				}
+				if diff > 1e-4 {
+					t.Logf("  C[%d,%d]: expected=%f, got=%f, diff=%f", i, j, expected[idx], c[idx], diff)
+					count++
+				}
+			}
+		}
+		t.Errorf("max error %f exceeds threshold", maxErr)
+	}
+}
+
 // TestPackLHS verifies that LHS packing produces the expected layout.
 func TestPackLHS(t *testing.T) {
 	// 6x4 matrix A, Mr=2
@@ -342,6 +428,9 @@ func TestPackRHS(t *testing.T) {
 func TestPackedMatMul(t *testing.T) {
 	t.Logf("Dispatch level: %s", hwy.CurrentName())
 
+	// Use a seeded random source for reproducibility across environments
+	rng := rand.New(rand.NewSource(42))
+
 	sizes := []int{16, 32, 48, 64, 96, 128, 256}
 
 	for _, size := range sizes {
@@ -354,24 +443,27 @@ func TestPackedMatMul(t *testing.T) {
 			expected := make([]float32, m*n)
 
 			for i := range a {
-				a[i] = rand.Float32()*2 - 1
+				a[i] = rng.Float32()*2 - 1
 			}
 			for i := range b {
-				b[i] = rand.Float32()*2 - 1
+				b[i] = rng.Float32()*2 - 1
 			}
 
 			matmulReference(a, b, expected, m, n, k)
 			PackedMatMul(a, b, c, m, n, k)
 
 			var maxErr float32
+			var maxErrIdx int
 			for i := range c {
 				err := float32(math.Abs(float64(c[i] - expected[i])))
 				if err > maxErr {
 					maxErr = err
+					maxErrIdx = i
 				}
 			}
 
-			t.Logf("size %dx%d: max error %e", size, size, maxErr)
+			t.Logf("size %dx%d: max error %e at index %d (expected=%f, got=%f)",
+				size, size, maxErr, maxErrIdx, expected[maxErrIdx], c[maxErrIdx])
 
 			// Allow accumulated floating point error proportional to K
 			tolerance := float32(1e-4) * float32(k)
