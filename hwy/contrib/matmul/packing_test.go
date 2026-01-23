@@ -446,6 +446,97 @@ func TestPackedMatMulDiagnostic(t *testing.T) {
 	}
 }
 
+// TestMicroKernelIRIsolation tests if the bug is in ir parameter handling.
+// Uses SAME packedA data but different ir values to isolate the issue.
+func TestMicroKernelIRIsolation(t *testing.T) {
+	t.Logf("=== Environment ===")
+	t.Logf("HWY_NO_SIMD=%q", os.Getenv("HWY_NO_SIMD"))
+	lanes := hwy.Zero[float32]().NumLanes()
+	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+
+	params := getCacheParams[float32]()
+	mr, nr := params.Mr, params.Nr
+	t.Logf("CacheParams: Mr=%d, Nr=%d, Kc=%d", mr, nr, params.Kc)
+
+	// Test parameters - must accommodate largest ir + mr rows
+	// and jr + nr columns to avoid bounds issues
+	m := 16       // Rows in C
+	n := nr + 16  // Columns in C (jr + nr + buffer)
+	k := 16       // K dimension
+	jr := 0       // Column offset in C (use 0 to avoid bounds issues with large Nr)
+
+	// Create simple packed A data: values 1,2,3,...
+	// Layout: [k][mr] = [16][4] = 64 elements
+	packedA := make([]float32, k*mr)
+	for i := range packedA {
+		packedA[i] = float32(i + 1)
+	}
+	t.Logf("packedA[0:8] = %v", packedA[0:8])
+
+	// Create simple packed B data: values 1,2,3,...
+	// Layout: [k][nr]
+	packedB := make([]float32, k*nr)
+	for i := range packedB {
+		packedB[i] = float32(i + 1)
+	}
+	t.Logf("packedB[0:8] = %v", packedB[0:8])
+
+	// Test 1: ir=0 (should work)
+	t.Logf("=== Test 1: ir=0, jr=%d ===", jr)
+	c1 := make([]float32, m*n) // Large enough for all tests
+	PackedMicroKernel(packedA, packedB, c1, n, 0, jr, k, mr, nr)
+	t.Logf("c1[0*n+jr : 0*n+jr+8] = %v", c1[0*n+jr:0*n+jr+8])
+	t.Logf("c1[1*n+jr : 1*n+jr+8] = %v", c1[1*n+jr:1*n+jr+8])
+
+	// Compute expected C[0,jr] using scalar math
+	var expectedC0jr float32
+	for p := 0; p < k; p++ {
+		expectedC0jr += packedA[p*mr+0] * packedB[p*nr+0] // row 0, col 0 of result
+	}
+	t.Logf("Expected C[0,%d] = %f, got %f", jr, expectedC0jr, c1[0*n+jr])
+
+	// Test 2: ir=12 with SAME packedA and packedB data
+	t.Logf("=== Test 2: ir=12, jr=%d (SAME input data) ===", jr)
+	c2 := make([]float32, m*n)
+	PackedMicroKernel(packedA, packedB, c2, n, 12, jr, k, mr, nr)
+	t.Logf("c2[12*n+jr : 12*n+jr+8] = %v", c2[12*n+jr:12*n+jr+8])
+	t.Logf("c2[13*n+jr : 13*n+jr+8] = %v", c2[13*n+jr:13*n+jr+8])
+
+	// Expected C[12,jr] should equal C[0,jr] since we use same input
+	t.Logf("Expected C[12,%d] = %f, got %f", jr, expectedC0jr, c2[12*n+jr])
+
+	// Check if ir=12 worked
+	if c2[12*n+jr] == 0 && expectedC0jr != 0 {
+		t.Errorf("BUG: ir=12 produces 0 but ir=0 works (expected %f)", expectedC0jr)
+
+		// Additional debugging: check if hwy.Store works at higher offsets
+		t.Logf("=== Debugging hwy.Store at offset 12*n+jr=%d ===", 12*n+jr)
+		testSlice := make([]float32, m*n)
+		testVec := hwy.Set[float32](42.0)
+		hwy.Store(testVec, testSlice[12*n+jr:])
+		t.Logf("After hwy.Store(42.0), testSlice[%d:%d] = %v",
+			12*n+jr, 12*n+jr+lanes, testSlice[12*n+jr:12*n+jr+lanes])
+
+		// Try scalar store for comparison
+		for i := 0; i < lanes; i++ {
+			testSlice[12*n+jr+i] = 99.0
+		}
+		t.Logf("After scalar store(99.0), testSlice[%d:%d] = %v",
+			12*n+jr, 12*n+jr+lanes, testSlice[12*n+jr:12*n+jr+lanes])
+	}
+
+	// Test 3: ir=4 (intermediate value)
+	t.Logf("=== Test 3: ir=4, jr=%d ===", jr)
+	c3 := make([]float32, m*n)
+	PackedMicroKernel(packedA, packedB, c3, n, 4, jr, k, mr, nr)
+	t.Logf("c3[4*n+jr : 4*n+jr+8] = %v", c3[4*n+jr:4*n+jr+8])
+	t.Logf("Expected C[4,%d] = %f, got %f", jr, expectedC0jr, c3[4*n+jr])
+
+	if c3[4*n+jr] == 0 && expectedC0jr != 0 {
+		t.Errorf("BUG: ir=4 also produces 0")
+	}
+}
+
 // TestPackLHS verifies that LHS packing produces the expected layout.
 func TestPackLHS(t *testing.T) {
 	// 6x4 matrix A, Mr=2
