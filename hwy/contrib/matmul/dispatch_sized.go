@@ -14,7 +14,11 @@
 
 package matmul
 
-import "github.com/ajroetker/go-highway/hwy"
+import (
+	"runtime"
+
+	"github.com/ajroetker/go-highway/hwy"
+)
 
 // Size-based dispatch thresholds.
 // Tuned empirically - adjust based on benchmarks on target hardware.
@@ -22,22 +26,43 @@ const (
 	// Below this total ops count, streaming is faster (less overhead)
 	SmallMatrixThreshold = 64 * 64 * 64 // 262144 ops
 
+	// Above this total ops count, use packed matmul for best cache efficiency
+	// 256^3 = 16M ops, where K-blocking benefit outweighs packing overhead
+	LargeMatrixThreshold = 256 * 256 * 256 // 16777216 ops
+
 	// When K/N ratio exceeds this, blocking helps reduce C traffic
 	DeepKRatio = 4
 )
 
 // MatMulAuto automatically selects the best algorithm based on matrix dimensions.
-// For small matrices, uses streaming (lower overhead).
-// For large matrices, uses parallel blocked (cache efficiency + multicore).
+//
+// Algorithm selection based on matrix size (total ops = M * N * K):
+//   - Small (<64^3): Streaming MatMul - lowest overhead, fits in cache
+//   - Medium/Large: Parallel BlockedMatMul - cache tiling + parallelism
+//
+// On AMD64, large matrices (>=256^3) may use PackedMatMul with K-blocking.
+// On ARM64, the SME/NEON blocked implementation is faster due to FMOPA
+// outer product instructions that prefer full-K accumulation over K-blocking.
 func MatMulAuto[T hwy.Floats](a, b, c []T, m, n, k int) {
 	totalOps := m * n * k
 
 	if totalOps < SmallMatrixThreshold {
 		// Small matrices: streaming is faster (no blocking overhead)
 		MatMul(a, b, c, m, n, k)
-	} else {
-		// Large matrices: parallel blocked (handles single-core fallback internally)
+	} else if totalOps < LargeMatrixThreshold {
+		// Medium matrices: parallel blocked
 		ParallelMatMul(a, b, c, m, n, k)
+	} else {
+		// Large matrices: architecture-dependent
+		// On ARM64, SME FMOPA with full-K accumulation is faster than K-blocked packed
+		// On AMD64, packed GEBP with K-blocking can help L1 cache utilization
+		if runtime.GOARCH == "arm64" {
+			// Use blocked (SME FMOPA or NEON) - better for outer product hardware
+			ParallelMatMul(a, b, c, m, n, k)
+		} else {
+			// Use packed GEBP with K-blocking on AMD64
+			ParallelPackedMatMul(a, b, c, m, n, k)
+		}
 	}
 }
 
