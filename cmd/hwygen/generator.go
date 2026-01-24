@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"sort"
 	"strings"
 )
 
@@ -126,10 +127,15 @@ func (g *Generator) Run() error {
 
 		targetFuncs[target.Name] = transformed
 
-		// Convert map to slice
+		// Convert map to slice in deterministic order
 		var hoistedSlice []HoistedConst
-		for _, hc := range hoistedMap {
-			hoistedSlice = append(hoistedSlice, hc)
+		hoistedKeys := make([]string, 0, len(hoistedMap))
+		for k := range hoistedMap {
+			hoistedKeys = append(hoistedKeys, k)
+		}
+		sort.Strings(hoistedKeys)
+		for _, k := range hoistedKeys {
+			hoistedSlice = append(hoistedSlice, hoistedMap[k])
 		}
 		targetHoisted[target.Name] = hoistedSlice
 	}
