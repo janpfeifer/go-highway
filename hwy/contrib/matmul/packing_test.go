@@ -255,6 +255,59 @@ func TestPackedMatMulSmall(t *testing.T) {
 	}
 }
 
+// TestDirectFallbackKernel calls the fallback kernel directly, bypassing dispatch.
+func TestDirectFallbackKernel(t *testing.T) {
+	t.Logf("=== Environment ===")
+	t.Logf("HWY_NO_SIMD=%q", os.Getenv("HWY_NO_SIMD"))
+	lanes := hwy.Zero[float32]().NumLanes()
+	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+
+	mr, nr := 4, 8
+	m, n, k := 16, 16, 16
+
+	packedA := make([]float32, k*mr)
+	for i := range packedA {
+		packedA[i] = float32(i + 1)
+	}
+	packedB := make([]float32, k*nr)
+	for i := range packedB {
+		packedB[i] = float32(i + 1)
+	}
+
+	// Test 1: ir=0, jr=0 via DIRECT call to fallback
+	t.Logf("=== Test 1: Direct fallback call, ir=0, jr=0 ===")
+	c1 := make([]float32, m*n)
+	BasePackedMicroKernel_fallback(packedA, packedB, c1, n, 0, 0, k, mr, nr)
+	t.Logf("c1[0:8] = %v", c1[0:8])
+
+	// Test 2: ir=12, jr=8 via DIRECT call to fallback
+	t.Logf("=== Test 2: Direct fallback call, ir=12, jr=8 ===")
+	c2 := make([]float32, m*n)
+	BasePackedMicroKernel_fallback(packedA, packedB, c2, n, 12, 8, k, mr, nr)
+	t.Logf("c2[12*n+8:12*n+16] = %v", c2[12*n+8:12*n+16])
+
+	if c2[12*n+8] == 0 && c1[0] != 0 {
+		t.Errorf("BUG IN FALLBACK: Direct call with ir=12, jr=8 produces 0!")
+	} else {
+		t.Logf("OK: Direct fallback call works, c2[12*n+8]=%f", c2[12*n+8])
+	}
+
+	// Test 3: ir=12, jr=8 via DISPATCH (what the test was using)
+	t.Logf("=== Test 3: Dispatch call, ir=12, jr=8 ===")
+	c3 := make([]float32, m*n)
+	PackedMicroKernel(packedA, packedB, c3, n, 12, 8, k, mr, nr)
+	t.Logf("c3[12*n+8:12*n+16] = %v", c3[12*n+8:12*n+16])
+
+	if c3[12*n+8] == 0 && c2[12*n+8] != 0 {
+		t.Errorf("BUG IN DISPATCH: Dispatch produces 0 but direct fallback works!")
+		t.Logf("This means the wrong kernel is being dispatched")
+	} else if c3[12*n+8] == 0 {
+		t.Errorf("Both dispatch and fallback fail - bug is in fallback kernel")
+	} else {
+		t.Logf("OK: Dispatch works, c3[12*n+8]=%f", c3[12*n+8])
+	}
+}
+
 // TestKernelWithJR8 tests the micro-kernel specifically with jr=8.
 // This is the failing case from TestPackedMatMul16x16Deterministic.
 func TestKernelWithJR8(t *testing.T) {
@@ -434,6 +487,127 @@ func TestHwyOpsDirectly(t *testing.T) {
 
 	if c4[200] == 0 || c4[204] == 0 {
 		t.Errorf("BUG: Kernel pattern failed! c4[200]=%f, c4[204]=%f", c4[200], c4[204])
+	}
+}
+
+// TestKernelAccumulatorTrace traces through the fallback kernel logic step by step.
+func TestKernelAccumulatorTrace(t *testing.T) {
+	t.Logf("=== Environment ===")
+	t.Logf("HWY_NO_SIMD=%q", os.Getenv("HWY_NO_SIMD"))
+	lanes := hwy.Zero[float32]().NumLanes()
+	t.Logf("lanes=%d, CurrentName=%s", lanes, hwy.CurrentName())
+
+	mr, nr := 4, 8
+	m, n, k := 16, 16, 16
+	ir, jr := 12, 8
+
+	// Create packed data (same as other tests)
+	packedA := make([]float32, k*mr)
+	for i := range packedA {
+		packedA[i] = float32(i + 1)
+	}
+	packedB := make([]float32, k*nr)
+	for i := range packedB {
+		packedB[i] = float32(i + 1)
+	}
+
+	t.Logf("ir=%d, jr=%d, lanes=%d, mr=%d, nr=%d, kc=%d", ir, jr, lanes, mr, nr, k)
+	t.Logf("nr == lanes*2: %v", nr == lanes*2)
+
+	// Check if kernel will use optimized or general path
+	if mr != 4 || nr != lanes*2 {
+		t.Logf("Will use GENERAL path (mr!=4 or nr!=lanes*2)")
+	} else {
+		t.Logf("Will use OPTIMIZED path")
+	}
+
+	// Mimic the optimized fallback kernel exactly
+	acc00 := hwy.Zero[float32]()
+	acc01 := hwy.Zero[float32]()
+	acc10 := hwy.Zero[float32]()
+	acc11 := hwy.Zero[float32]()
+	acc20 := hwy.Zero[float32]()
+	acc21 := hwy.Zero[float32]()
+	acc30 := hwy.Zero[float32]()
+	acc31 := hwy.Zero[float32]()
+
+	aIdx := 0
+	bIdx := 0
+	kc := k
+
+	// Just do first iteration to trace
+	for p := 0; p < kc; p++ {
+		a0 := packedA[aIdx]
+		a1 := packedA[aIdx+1]
+		a2 := packedA[aIdx+2]
+		a3 := packedA[aIdx+3]
+		aIdx += 4
+
+		vA0 := hwy.Set(a0)
+		vA1 := hwy.Set(a1)
+		vA2 := hwy.Set(a2)
+		vA3 := hwy.Set(a3)
+
+		vB0 := hwy.Load(packedB[bIdx:])
+		vB1 := hwy.Load(packedB[bIdx+lanes:])
+		bIdx += nr
+
+		acc00 = hwy.MulAdd(vA0, vB0, acc00)
+		acc01 = hwy.MulAdd(vA0, vB1, acc01)
+		acc10 = hwy.MulAdd(vA1, vB0, acc10)
+		acc11 = hwy.MulAdd(vA1, vB1, acc11)
+		acc20 = hwy.MulAdd(vA2, vB0, acc20)
+		acc21 = hwy.MulAdd(vA2, vB1, acc21)
+		acc30 = hwy.MulAdd(vA3, vB0, acc30)
+		acc31 = hwy.MulAdd(vA3, vB1, acc31)
+
+		if p == 0 {
+			t.Logf("After p=0: a0=%f, a1=%f, a2=%f, a3=%f", a0, a1, a2, a3)
+			t.Logf("  vB0 first 4 elements should be [1,2,3,4]")
+			t.Logf("  vB1 first 4 elements should be [5,6,7,8]")
+		}
+	}
+
+	// Print accumulator values
+	t.Logf("=== Accumulator values after main loop ===")
+	t.Logf("acc00 lanes: %d", acc00.NumLanes())
+	t.Logf("acc01 lanes: %d", acc01.NumLanes())
+
+	// Store to temp to see values
+	temp := make([]float32, 4)
+	hwy.Store(acc00, temp)
+	t.Logf("acc00 = %v", temp)
+	hwy.Store(acc01, temp)
+	t.Logf("acc01 = %v", temp)
+
+	// Now do the store phase
+	c := make([]float32, m*n)
+	cRow0 := ir * n
+	cRow1 := (ir + 1) * n
+	cRow2 := (ir + 2) * n
+	cRow3 := (ir + 3) * n
+
+	t.Logf("=== Store phase ===")
+	t.Logf("cRow0=%d, cRow1=%d, cRow2=%d, cRow3=%d", cRow0, cRow1, cRow2, cRow3)
+	t.Logf("cRow0+jr=%d, cRow0+jr+lanes=%d", cRow0+jr, cRow0+jr+lanes)
+
+	// Row 0
+	vC := hwy.Load(c[cRow0+jr:])
+	t.Logf("Loaded vC from c[%d:]: should be zeros", cRow0+jr)
+	vC = hwy.Add(vC, acc00)
+	hwy.Store(vC, c[cRow0+jr:])
+	t.Logf("After first store: c[%d:%d] = %v", cRow0+jr, cRow0+jr+4, c[cRow0+jr:cRow0+jr+4])
+
+	vC = hwy.Load(c[cRow0+jr+lanes:])
+	vC = hwy.Add(vC, acc01)
+	hwy.Store(vC, c[cRow0+jr+lanes:])
+	t.Logf("After second store: c[%d:%d] = %v", cRow0+jr+lanes, cRow0+jr+lanes+4, c[cRow0+jr+lanes:cRow0+jr+lanes+4])
+
+	// Check results
+	if c[cRow0+jr] == 0 {
+		t.Errorf("BUG: c[%d] = 0 after stores!", cRow0+jr)
+	} else {
+		t.Logf("OK: c[%d] = %f", cRow0+jr, c[cRow0+jr])
 	}
 }
 
