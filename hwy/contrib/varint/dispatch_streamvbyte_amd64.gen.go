@@ -21,12 +21,12 @@ func init() {
 		initStreamvbyteFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initStreamvbyteAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initStreamvbyteAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initStreamvbyteAVX2()
 		return
 	}
 	initStreamvbyteFallback()

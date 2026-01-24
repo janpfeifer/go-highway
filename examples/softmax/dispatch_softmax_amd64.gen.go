@@ -52,12 +52,12 @@ func init() {
 		initSoftmaxFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initSoftmaxAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initSoftmaxAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initSoftmaxAVX2()
 		return
 	}
 	initSoftmaxFallback()

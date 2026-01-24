@@ -54,12 +54,12 @@ func init() {
 		initNormFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initNormAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initNormAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initNormAVX2()
 		return
 	}
 	initNormFallback()

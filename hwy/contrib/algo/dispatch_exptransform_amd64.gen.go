@@ -142,12 +142,12 @@ func init() {
 		initExptransformFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initExptransformAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initExptransformAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initExptransformAVX2()
 		return
 	}
 	initExptransformFallback()

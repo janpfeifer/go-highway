@@ -16,12 +16,12 @@ func init() {
 		initMaskedvbyteFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initMaskedvbyteAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initMaskedvbyteAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initMaskedvbyteAVX2()
 		return
 	}
 	initMaskedvbyteFallback()

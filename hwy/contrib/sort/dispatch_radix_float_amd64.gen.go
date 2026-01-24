@@ -52,12 +52,12 @@ func init() {
 		initRadix_floatFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initRadix_floatAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initRadix_floatAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initRadix_floatAVX2()
 		return
 	}
 	initRadix_floatFallback()

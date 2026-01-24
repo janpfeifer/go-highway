@@ -52,12 +52,12 @@ func init() {
 		initGeluFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initGeluAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initGeluAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initGeluAVX2()
 		return
 	}
 	initGeluFallback()

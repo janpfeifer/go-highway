@@ -58,12 +58,12 @@ func init() {
 		initPrefix_sumFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initPrefix_sumAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initPrefix_sumAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initPrefix_sumAVX2()
 		return
 	}
 	initPrefix_sumFallback()

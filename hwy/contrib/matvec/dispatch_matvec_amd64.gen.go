@@ -34,12 +34,12 @@ func init() {
 		initMatvecFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initMatvecAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initMatvecAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initMatvecAVX2()
 		return
 	}
 	initMatvecFallback()

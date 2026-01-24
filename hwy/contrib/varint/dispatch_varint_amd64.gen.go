@@ -15,12 +15,12 @@ func init() {
 		initVarintFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initVarintAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initVarintAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initVarintAVX2()
 		return
 	}
 	initVarintFallback()

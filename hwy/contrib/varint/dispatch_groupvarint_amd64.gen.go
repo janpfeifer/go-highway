@@ -15,12 +15,12 @@ func init() {
 		initGroupvarintFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initGroupvarintAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initGroupvarintAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initGroupvarintAVX2()
 		return
 	}
 	initGroupvarintFallback()

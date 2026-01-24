@@ -35,12 +35,12 @@ func init() {
 		initDotFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initDotAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initDotAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initDotAVX2()
 		return
 	}
 	initDotFallback()

@@ -196,12 +196,12 @@ func init() {
 		initPointopsFallback()
 		return
 	}
-	if archsimd.X86.AVX2() {
-		initPointopsAVX2()
-		return
-	}
 	if archsimd.X86.AVX512() {
 		initPointopsAVX512()
+		return
+	}
+	if archsimd.X86.AVX2() {
+		initPointopsAVX2()
 		return
 	}
 	initPointopsFallback()
