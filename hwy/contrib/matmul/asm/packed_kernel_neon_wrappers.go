@@ -46,7 +46,8 @@ func PackedMicroKernelNEONF32(packedA, packedB, c []float32, kc, n, mr, nr int) 
 	if kc == 0 || mr == 0 || nr == 0 {
 		return
 	}
-	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < mr*n {
+	// Bounds check: need (mr-1)*n + nr elements for C (last row doesn't need full stride)
+	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < (mr-1)*n+nr {
 		return
 	}
 	kcVal := int64(kc)
@@ -72,7 +73,8 @@ func PackedMicroKernelNEONF64(packedA, packedB, c []float64, kc, n, mr, nr int) 
 	if kc == 0 || mr == 0 || nr == 0 {
 		return
 	}
-	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < mr*n {
+	// Bounds check: need (mr-1)*n + nr elements for C (last row doesn't need full stride)
+	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < (mr-1)*n+nr {
 		return
 	}
 	kcVal := int64(kc)
@@ -99,7 +101,8 @@ func PackedMicroKernelNEONF16(packedA, packedB, c []hwy.Float16, kc, n, mr, nr i
 	if kc == 0 || mr == 0 || nr == 0 {
 		return
 	}
-	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < mr*n {
+	// Bounds check: need (mr-1)*n + nr elements for C (last row doesn't need full stride)
+	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < (mr-1)*n+nr {
 		return
 	}
 	kcVal := int64(kc)
@@ -125,7 +128,8 @@ func PackedMicroKernelNEONBF16(packedA, packedB, c []hwy.BFloat16, kc, n, mr, nr
 	if kc == 0 || mr == 0 || nr == 0 {
 		return
 	}
-	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < mr*n {
+	// Bounds check: need (mr-1)*n + nr elements for C (last row doesn't need full stride)
+	if len(packedA) < mr*kc || len(packedB) < kc*nr || len(c) < (mr-1)*n+nr {
 		return
 	}
 	kcVal := int64(kc)
