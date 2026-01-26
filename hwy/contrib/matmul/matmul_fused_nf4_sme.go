@@ -25,9 +25,9 @@ package matmul
 import (
 	"runtime"
 	"sync"
-	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/matmul/asm"
 )
 
 // Parallel tuning parameters for fused matmul
@@ -119,14 +119,7 @@ func fusedNF4MatMulSME(
 
 		// SME matmul: inputT[K, M]^T @ tileBuf[K, tileN] = input[M, K] @ tile[K, tileN]
 		// Use the optimized FMOPA kernel
-		matmul_fmopa_at_f32(
-			unsafe.Pointer(unsafe.SliceData(inputT)),
-			unsafe.Pointer(unsafe.SliceData(tileBuf[:K*tileN])),
-			unsafe.Pointer(unsafe.SliceData(outputTile[:M*tileN])),
-			int64(M),
-			int64(tileN),
-			int64(K),
-		)
+		asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
 
 		// Copy output tile to final output (scatter to correct columns)
 		for m := 0; m < M; m++ {
@@ -217,14 +210,7 @@ func fusedInt4MatMulSME(
 
 		dequantizeInt4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
 
-		matmul_fmopa_at_f32(
-			unsafe.Pointer(unsafe.SliceData(inputT)),
-			unsafe.Pointer(unsafe.SliceData(tileBuf[:K*tileN])),
-			unsafe.Pointer(unsafe.SliceData(outputTile[:M*tileN])),
-			int64(M),
-			int64(tileN),
-			int64(K),
-		)
+		asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
 
 		for m := 0; m < M; m++ {
 			for j := 0; j < tileN; j++ {
@@ -280,14 +266,7 @@ func processFusedNF4Tile(
 	dequantizeNF4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
 
 	// SME matmul: inputT[K, M]^T @ tileBuf[K, tileN] = input[M, K] @ tile[K, tileN]
-	matmul_fmopa_at_f32(
-		unsafe.Pointer(unsafe.SliceData(inputT)),
-		unsafe.Pointer(unsafe.SliceData(tileBuf[:K*tileN])),
-		unsafe.Pointer(unsafe.SliceData(outputTile[:M*tileN])),
-		int64(M),
-		int64(tileN),
-		int64(K),
-	)
+	asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
 
 	// Copy output tile to final output (scatter to correct columns)
 	for m := 0; m < M; m++ {
@@ -312,14 +291,7 @@ func processFusedInt4Tile(
 
 	dequantizeInt4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
 
-	matmul_fmopa_at_f32(
-		unsafe.Pointer(unsafe.SliceData(inputT)),
-		unsafe.Pointer(unsafe.SliceData(tileBuf[:K*tileN])),
-		unsafe.Pointer(unsafe.SliceData(outputTile[:M*tileN])),
-		int64(M),
-		int64(tileN),
-		int64(K),
-	)
+	asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
 
 	for m := 0; m < M; m++ {
 		for j := 0; j < tileN; j++ {

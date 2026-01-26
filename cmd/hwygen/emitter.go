@@ -720,20 +720,41 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 	// Walk the AST to find which packages are actually referenced
 	usedPkgs := collectUsedPackages(funcs)
 
-	// These are stdlib packages that don't get transformed (unlike hwy -> asm)
-	preservedImports := map[string]bool{
-		"fmt":             true,
-		"unsafe":          true,
-		"math/bits":       true,
-		"encoding/binary": true,
+	// Use blacklist approach: preserve all imports EXCEPT hwy-related ones that get transformed.
+	// This allows users to use any stdlib or third-party package without needing to whitelist it.
+	transformedImports := map[string]bool{
+		"github.com/ajroetker/go-highway/hwy":              true,
+		"github.com/ajroetker/go-highway/hwy/asm":          true,
+		"github.com/ajroetker/go-highway/hwy/contrib/algo": true,
+		"github.com/ajroetker/go-highway/hwy/contrib/math": true,
 	}
+
+	// Preserve imports that are used and not transformed by hwygen
 	for localName, importPath := range sourceImports {
-		if preservedImports[importPath] && usedPkgs[localName] {
+		if transformedImports[importPath] {
+			continue // Skip hwy-related imports that get transformed
+		}
+		if usedPkgs[localName] {
 			if localName == importPath || localName == "" || localName == filepath.Base(importPath) {
 				imports = append(imports, fmt.Sprintf(`"%s"`, importPath))
 			} else {
 				imports = append(imports, fmt.Sprintf(`%s "%s"`, localName, importPath))
 			}
+		}
+	}
+
+	// Always add "unsafe" if it's used in the generated code (e.g. by LoadFull),
+	// even if it wasn't in the source file.
+	if usedPkgs["unsafe"] {
+		alreadyImported := false
+		for _, imp := range imports {
+			if strings.Contains(imp, `"unsafe"`) {
+				alreadyImported = true
+				break
+			}
+		}
+		if !alreadyImported {
+			imports = append(imports, `"unsafe"`)
 		}
 	}
 

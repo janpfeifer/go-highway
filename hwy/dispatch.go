@@ -147,3 +147,14 @@ func MaxLanes[T Lanes]() int {
 	}
 	return currentWidth / elementSize
 }
+
+// NumLanes returns the number of lanes for type T with the current SIMD width.
+// This is an alias for MaxLanes[T]() for API consistency.
+//
+// For example, with AVX2 (256 bits / 32 bytes):
+//   - float32: 32/4 = 8 lanes
+//   - float64: 32/8 = 4 lanes
+//   - int32: 32/4 = 8 lanes
+func NumLanes[T Lanes]() int {
+	return MaxLanes[T]()
+}

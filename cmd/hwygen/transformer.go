@@ -101,6 +101,42 @@ func returnsVecType(returns []Param) bool {
 	return false
 }
 
+// optimizeSliceToPointer converts a slice expression to an optimized address expression.
+// For slice expressions like src[i:], it generates &src[i] instead of &src[i:][0].
+// This avoids the performance overhead where Go doesn't optimize &slice[i:][0] to &slice[i].
+//
+// Examples:
+//   - src[i:]    -> &src[i]      (optimized)
+//   - src[i+n:]  -> &src[i+n]    (optimized)
+//   - src        -> &src[0]      (no slice, use index 0)
+//   - src[i:j]   -> &src[i:j][0] (has high bound, can't optimize)
+func optimizeSliceToPointer(expr ast.Expr) *ast.UnaryExpr {
+	// Check if expr is a slice expression like src[i:]
+	if sliceExpr, ok := expr.(*ast.SliceExpr); ok {
+		// Only optimize src[low:] patterns (no high bound, no max)
+		// src[low:high] needs to keep bounds for safety
+		if sliceExpr.Low != nil && sliceExpr.High == nil && !sliceExpr.Slice3 {
+			// Transform src[low:] to &src[low]
+			return &ast.UnaryExpr{
+				Op: token.AND,
+				X: &ast.IndexExpr{
+					X:     sliceExpr.X,
+					Index: sliceExpr.Low,
+				},
+			}
+		}
+	}
+
+	// Default: use &expr[0]
+	return &ast.UnaryExpr{
+		Op: token.AND,
+		X: &ast.IndexExpr{
+			X:     expr,
+			Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+		},
+	}
+}
+
 // getHalfPrecisionFuncName returns the hwy function name for Float16/BFloat16 operations.
 // For example, "Add" with Float16 returns "AddF16", "Add" with BFloat16 returns "AddBF16".
 // Returns empty string for operations that don't have F16/BF16 specific versions.
@@ -1473,6 +1509,49 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			call.Args = call.Args[1:]
 		}
 
+	case "StoreFull":
+		// Keep hwy.StoreFull(v, dst) as-is for half-precision types
+		// (archsimd doesn't support pointer-based Store for F16/BF16 types yet)
+		if isHalfPrecisionType(ctx.elemType) {
+			return
+		}
+
+		// hwy.StoreFull(v, dst) -> v.Store((*[8]float32)(unsafe.Pointer(&dst[0])))
+		if len(call.Args) >= 2 {
+			methodName := "Store"
+			lanes := ctx.target.LanesFor(ctx.elemType)
+
+			// unsafe.Pointer(&dst[idx]) - optimized to avoid &dst[i:][0]
+			dst := call.Args[1]
+			addrExpr := optimizeSliceToPointer(dst)
+			ptr := &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent("unsafe"),
+					Sel: ast.NewIdent("Pointer"),
+				},
+				Args: []ast.Expr{addrExpr},
+			}
+
+			// (*[lanes]T)(ptr)
+			cast := &ast.CallExpr{
+				Fun: &ast.ParenExpr{
+					X: &ast.StarExpr{
+						X: &ast.ArrayType{
+							Len: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(lanes)},
+							Elt: ast.NewIdent(ctx.elemType),
+						},
+					},
+				},
+				Args: []ast.Expr{ptr},
+			}
+
+			call.Fun = &ast.SelectorExpr{
+				X:   call.Args[0],
+				Sel: ast.NewIdent(methodName),
+			}
+			call.Args = []ast.Expr{cast}
+		}
+
 	case "MaskStore":
 		// hwy.MaskStore(mask, v, dst) -> v.MaskStoreSlice(mask, dst)
 		if len(call.Args) >= 3 {
@@ -2323,6 +2402,57 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		}
 		fullName = fmt.Sprintf("Load%sSlice", loadVecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
+	case "LoadFull":
+		// For half-precision types on SIMD targets, fallback to hwy.Load()
+		// archsimd doesn't support pointer-based Load for Float16/BFloat16 yet.
+		if isHalfPrecisionType(effectiveElemType) {
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = "Load"
+			return
+		}
+
+		if ctx.target.Name == "AVX2" || ctx.target.Name == "AVX512" {
+			// For AVX targets, use unsafe pointer cast to avoid bounds checks
+			// archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[idx])))
+			lanes := ctx.target.LanesFor(effectiveElemType)
+			fullName = fmt.Sprintf("Load%s", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+
+			// Transform argument to pointer cast
+			if len(call.Args) > 0 {
+				src := call.Args[0]
+				// unsafe.Pointer(&src[idx]) - optimized to avoid &src[i:][0]
+				addrExpr := optimizeSliceToPointer(src)
+				ptr := &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   ast.NewIdent("unsafe"),
+						Sel: ast.NewIdent("Pointer"),
+					},
+					Args: []ast.Expr{addrExpr},
+				}
+				// (*[lanes]T)(ptr)
+				cast := &ast.CallExpr{
+					Fun: &ast.ParenExpr{
+						X: &ast.StarExpr{
+							X: &ast.ArrayType{
+								Len: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(lanes)},
+								Elt: ast.NewIdent(effectiveElemType),
+							},
+						},
+					},
+					Args: []ast.Expr{ptr},
+				}
+				call.Args[0] = cast
+			}
+		} else {
+			// NEON/Fallback use generic hwy.LoadFull
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = "LoadFull"
+		}
+	case "StoreFull":
+		// For NEON/Fallback (IsMethod: false), use generic hwy.StoreFull
+		selExpr.X = ast.NewIdent("hwy")
+		selExpr.Sel.Name = "StoreFull"
 	case "Load4":
 		// For Vec types (Float16/BFloat16), use hwy wrapper since asm doesn't have Load4VecSlice
 		if strings.HasPrefix(vecTypeName, "Vec") || strings.HasPrefix(vecTypeName, "hwy.Vec") {
@@ -2756,7 +2886,7 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 			if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
 				if sel, ok := indexExpr.X.(*ast.SelectorExpr); ok {
 					if pkgIdent, ok := sel.X.(*ast.Ident); ok {
-						if pkgIdent.Name == "hwy" && (sel.Sel.Name == "Lanes" || sel.Sel.Name == "MaxLanes") {
+						if pkgIdent.Name == "hwy" && (sel.Sel.Name == "Lanes" || sel.Sel.Name == "MaxLanes" || sel.Sel.Name == "NumLanes") {
 							// Replace with constant lane count
 							lanes := ctx.target.LanesFor(ctx.elemType)
 							stmt.Rhs[i] = &ast.BasicLit{
