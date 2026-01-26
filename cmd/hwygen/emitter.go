@@ -417,22 +417,14 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 			fmt.Fprintf(&buf, "\t\treturn\n")
 			fmt.Fprintf(&buf, "\t}\n")
 		case "NEON":
-			// Check if hwy actually detected NEON (lanes >= 4 for float32).
-			// On emulators or fallback environments, hwy may report scalar mode.
-			fmt.Fprintf(&buf, "\t// Check if hwy actually detected NEON (lanes >= 4 for float32).\n")
-			fmt.Fprintf(&buf, "\t// On emulators or fallback environments, hwy may report scalar mode.\n")
-			fmt.Fprintf(&buf, "\tlanes := hwy.Zero[float32]().NumLanes()\n")
-			fmt.Fprintf(&buf, "\tif lanes < 4 {\n")
-			fmt.Fprintf(&buf, "\t\tinit%sFallback()\n", capPrefix)
-			fmt.Fprintf(&buf, "\t\treturn\n")
-			fmt.Fprintf(&buf, "\t}\n")
+			// NEON is mandatory on ARM64, so always use it
 			fmt.Fprintf(&buf, "\tinit%sNEON()\n", capPrefix)
 			fmt.Fprintf(&buf, "\treturn\n")
 		}
 	}
 
 	// Add fallback at end for x86 (in case no SIMD detected)
-	// ARM64 handles fallback in the NEON case above
+	// ARM64 always uses NEON (mandatory on ARMv8) so doesn't need fallback here
 	if arch != "arm64" && hasFallback {
 		fmt.Fprintf(&buf, "\tinit%sFallback()\n", capPrefix)
 	}
