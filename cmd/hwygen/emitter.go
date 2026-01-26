@@ -722,6 +722,7 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 
 	// These are stdlib packages that don't get transformed (unlike hwy -> asm)
 	preservedImports := map[string]bool{
+		"fmt":             true,
 		"unsafe":          true,
 		"math/bits":       true,
 		"encoding/binary": true,
