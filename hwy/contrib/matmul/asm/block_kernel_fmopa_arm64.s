@@ -10,56 +10,54 @@ TEXT ·block_muladd_fmopa_f32(SB), $0-32
 	MOVD aT+0(FP), R0
 	MOVD b+8(FP), R1
 	MOVD c+16(FP), R2
-	MOVD pblockDim+24(FP), R3
-	WORD $0xf9400068          // ldr	x8, [x3]
-	WORD $0xf100051f          // cmp	x8, #1
+	MOVD blockDim+24(FP), R3
+	WORD $0xf100047f         // cmp	x3, #1
 	BLT  BB0_9
-	WORD $0xd2800009          // mov	x9, #0                          ; =0x0
-	WORD $0xd37ef50a          // lsl	x10, x8, #2
-	WORD $0xd37ae50b          // lsl	x11, x8, #6
-	WORD $0xd503477f          // smstart	sm
-	WORD $0x2598e3e0          // ptrue	p0.s
+	WORD $0xd2800008         // mov	x8, #0                          ; =0x0
+	WORD $0xd37ef469         // lsl	x9, x3, #2
+	WORD $0xd37ae46a         // lsl	x10, x3, #6
+	WORD $0xd503477f         // smstart	sm
+	WORD $0x2598e3e0         // ptrue	p0.s
 
 BB0_2:
-	WORD $0xd280000c // mov	x12, #0                         ; =0x0
-	WORD $0xaa0203ed // mov	x13, x2
-	WORD $0xaa0103ee // mov	x14, x1
+	WORD $0xd280000b // mov	x11, #0                         ; =0x0
+	WORD $0xaa0203ec // mov	x12, x2
+	WORD $0xaa0103ed // mov	x13, x1
 
 BB0_3:
 	WORD $0xc00800ff // zero	{za}
-	WORD $0xaa0003ef // mov	x15, x0
-	WORD $0xaa0e03f0 // mov	x16, x14
-	WORD $0xaa0803f1 // mov	x17, x8
+	WORD $0xaa0303ee // mov	x14, x3
+	WORD $0xaa0d03ef // mov	x15, x13
+	WORD $0xaa0003f0 // mov	x16, x0
 
 BB0_4:
-	WORD $0x858041e0 // ldr	z0, [x15]
-	WORD $0x85804201 // ldr	z1, [x16]
+	WORD $0x85804200 // ldr	z0, [x16]
+	WORD $0x858041e1 // ldr	z1, [x15]
 	WORD $0x80810000 // fmopa	za0.s, p0/m, p0/m, z0.s, z1.s
-	WORD $0x8b0a0210 // add	x16, x16, x10
-	WORD $0x8b0a01ef // add	x15, x15, x10
-	WORD $0xf1000631 // subs	x17, x17, #1
+	WORD $0x8b090210 // add	x16, x16, x9
+	WORD $0x8b0901ef // add	x15, x15, x9
+	WORD $0xf10005ce // subs	x14, x14, #1
 	BNE  BB0_4
-	WORD $0x5280000f // mov	w15, #0                         ; =0x0
-	WORD $0xaa0d03f0 // mov	x16, x13
+	WORD $0xaa0c03ef // mov	x15, x12
 
 BB0_6:
-	WORD $0xc0826000 // mov	z0.s, p0/m, za0h.s[w15, 0]
-	WORD $0x85804201 // ldr	z1, [x16]
+	WORD $0xc0824000 // mov	z0.s, p0/m, za0h.s[w14, 0]
+	WORD $0x858041e1 // ldr	z1, [x15]
 	WORD $0x65810000 // fadd	z0.s, z0.s, z1.s
-	WORD $0xe5804200 // str	z0, [x16]
-	WORD $0x110005ef // add	w15, w15, #1
-	WORD $0x8b0a0210 // add	x16, x16, x10
-	WORD $0x710041ff // cmp	w15, #16
+	WORD $0xe58041e0 // str	z0, [x15]
+	WORD $0x110005ce // add	w14, w14, #1
+	WORD $0x8b0901ef // add	x15, x15, x9
+	WORD $0x710041df // cmp	w14, #16
 	BNE  BB0_6
-	WORD $0x9100418c // add	x12, x12, #16
-	WORD $0x910101ce // add	x14, x14, #64
+	WORD $0x9100416b // add	x11, x11, #16
 	WORD $0x910101ad // add	x13, x13, #64
-	WORD $0xeb08019f // cmp	x12, x8
+	WORD $0x9101018c // add	x12, x12, #64
+	WORD $0xeb03017f // cmp	x11, x3
 	BLT  BB0_3
-	WORD $0x91004129 // add	x9, x9, #16
+	WORD $0x91004108 // add	x8, x8, #16
 	WORD $0x91010000 // add	x0, x0, #64
-	WORD $0x8b0b0042 // add	x2, x2, x11
-	WORD $0xeb08013f // cmp	x9, x8
+	WORD $0x8b0a0042 // add	x2, x2, x10
+	WORD $0xeb03011f // cmp	x8, x3
 	BLT  BB0_2
 
 BB0_9:
@@ -70,56 +68,54 @@ TEXT ·block_muladd_fmopa_f64(SB), $0-32
 	MOVD aT+0(FP), R0
 	MOVD b+8(FP), R1
 	MOVD c+16(FP), R2
-	MOVD pblockDim+24(FP), R3
-	WORD $0xf9400068          // ldr	x8, [x3]
-	WORD $0xf100051f          // cmp	x8, #1
+	MOVD blockDim+24(FP), R3
+	WORD $0xf100047f         // cmp	x3, #1
 	BLT  BB1_9
-	WORD $0xd2800009          // mov	x9, #0                          ; =0x0
-	WORD $0xd37df10a          // lsl	x10, x8, #3
-	WORD $0xd37ae50b          // lsl	x11, x8, #6
-	WORD $0xd503477f          // smstart	sm
-	WORD $0x25d8e3e0          // ptrue	p0.d
+	WORD $0xd2800008         // mov	x8, #0                          ; =0x0
+	WORD $0xd37df069         // lsl	x9, x3, #3
+	WORD $0xd37ae46a         // lsl	x10, x3, #6
+	WORD $0xd503477f         // smstart	sm
+	WORD $0x25d8e3e0         // ptrue	p0.d
 
 BB1_2:
-	WORD $0xd280000c // mov	x12, #0                         ; =0x0
-	WORD $0xaa0203ed // mov	x13, x2
-	WORD $0xaa0103ee // mov	x14, x1
+	WORD $0xd280000b // mov	x11, #0                         ; =0x0
+	WORD $0xaa0203ec // mov	x12, x2
+	WORD $0xaa0103ed // mov	x13, x1
 
 BB1_3:
 	WORD $0xc00800ff // zero	{za}
-	WORD $0xaa0003ef // mov	x15, x0
-	WORD $0xaa0e03f0 // mov	x16, x14
-	WORD $0xaa0803f1 // mov	x17, x8
+	WORD $0xaa0303ee // mov	x14, x3
+	WORD $0xaa0d03ef // mov	x15, x13
+	WORD $0xaa0003f0 // mov	x16, x0
 
 BB1_4:
-	WORD $0x858041e0 // ldr	z0, [x15]
-	WORD $0x85804201 // ldr	z1, [x16]
+	WORD $0x85804200 // ldr	z0, [x16]
+	WORD $0x858041e1 // ldr	z1, [x15]
 	WORD $0x80c10000 // fmopa	za0.d, p0/m, p0/m, z0.d, z1.d
-	WORD $0x8b0a0210 // add	x16, x16, x10
-	WORD $0x8b0a01ef // add	x15, x15, x10
-	WORD $0xf1000631 // subs	x17, x17, #1
+	WORD $0x8b090210 // add	x16, x16, x9
+	WORD $0x8b0901ef // add	x15, x15, x9
+	WORD $0xf10005ce // subs	x14, x14, #1
 	BNE  BB1_4
-	WORD $0x5280000f // mov	w15, #0                         ; =0x0
-	WORD $0xaa0d03f0 // mov	x16, x13
+	WORD $0xaa0c03ef // mov	x15, x12
 
 BB1_6:
-	WORD $0xc0c26000 // mov	z0.d, p0/m, za0h.d[w15, 0]
-	WORD $0x85804201 // ldr	z1, [x16]
+	WORD $0xc0c24000 // mov	z0.d, p0/m, za0h.d[w14, 0]
+	WORD $0x858041e1 // ldr	z1, [x15]
 	WORD $0x65c10000 // fadd	z0.d, z0.d, z1.d
-	WORD $0xe5804200 // str	z0, [x16]
-	WORD $0x110005ef // add	w15, w15, #1
-	WORD $0x8b0a0210 // add	x16, x16, x10
-	WORD $0x710021ff // cmp	w15, #8
+	WORD $0xe58041e0 // str	z0, [x15]
+	WORD $0x110005ce // add	w14, w14, #1
+	WORD $0x8b0901ef // add	x15, x15, x9
+	WORD $0x710021df // cmp	w14, #8
 	BNE  BB1_6
-	WORD $0x9100218c // add	x12, x12, #8
-	WORD $0x910101ce // add	x14, x14, #64
+	WORD $0x9100216b // add	x11, x11, #8
 	WORD $0x910101ad // add	x13, x13, #64
-	WORD $0xeb08019f // cmp	x12, x8
+	WORD $0x9101018c // add	x12, x12, #64
+	WORD $0xeb03017f // cmp	x11, x3
 	BLT  BB1_3
-	WORD $0x91002129 // add	x9, x9, #8
+	WORD $0x91002108 // add	x8, x8, #8
 	WORD $0x91010000 // add	x0, x0, #64
-	WORD $0x8b0b0042 // add	x2, x2, x11
-	WORD $0xeb08013f // cmp	x9, x8
+	WORD $0x8b0a0042 // add	x2, x2, x10
+	WORD $0xeb03011f // cmp	x8, x3
 	BLT  BB1_2
 
 BB1_9:

@@ -11,7 +11,7 @@ package asm
 import "unsafe"
 
 //go:noescape
-func block_muladd_fmopa_f32(aT, b, c, pblockDim unsafe.Pointer)
+func block_muladd_fmopa_f32(aT, b, c unsafe.Pointer, blockDim int64)
 
 //go:noescape
-func block_muladd_fmopa_f64(aT, b, c, pblockDim unsafe.Pointer)
+func block_muladd_fmopa_f64(aT, b, c unsafe.Pointer, blockDim int64)

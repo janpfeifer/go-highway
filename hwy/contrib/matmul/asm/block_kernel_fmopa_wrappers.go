@@ -37,12 +37,11 @@ func BlockMulAddFMOPAF32(aT, b, c []float32, blockDim int) {
 	if len(aT) < n || len(b) < n || len(c) < n {
 		return
 	}
-	blockDimVal := int64(blockDim)
 	block_muladd_fmopa_f32(
 		unsafe.Pointer(&aT[0]),
 		unsafe.Pointer(&b[0]),
 		unsafe.Pointer(&c[0]),
-		unsafe.Pointer(&blockDimVal),
+		int64(blockDim),
 	)
 }
 
@@ -59,12 +58,11 @@ func BlockMulAddFMOPAF64(aT, b, c []float64, blockDim int) {
 	if len(aT) < n || len(b) < n || len(c) < n {
 		return
 	}
-	blockDimVal := int64(blockDim)
 	block_muladd_fmopa_f64(
 		unsafe.Pointer(&aT[0]),
 		unsafe.Pointer(&b[0]),
 		unsafe.Pointer(&c[0]),
-		unsafe.Pointer(&blockDimVal),
+		int64(blockDim),
 	)
 }
 

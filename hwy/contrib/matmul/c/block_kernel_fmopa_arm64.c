@@ -45,10 +45,14 @@
 //   3. C[tile] += ZA
 //
 // func block_muladd_fmopa_f32(aT, b, c unsafe.Pointer, blockDim int64)
-void block_muladd_fmopa_f32(float *aT, float *b, float *c,
-                             long *pblockDim) __arm_streaming __arm_out("za") {
-    long n = *pblockDim;
+void block_muladd_fmopa_f32(float * restrict aT, float * restrict b, float * restrict c,
+                             long blockDim) __arm_streaming __arm_out("za") {
+    long n = blockDim;
 
+    // Predicate for 16-element operations
+    // Note: Clang optimizes two ptrue calls to use same register (p0)
+    // Using separate predicates (p0/m, p1/m) like handwritten version would require
+    // inline assembly since clang's optimizer merges identical ptrue values.
     svbool_t pg = svptrue_b32();
 
     // Process 16×16 tiles
@@ -58,13 +62,18 @@ void block_muladd_fmopa_f32(float *aT, float *b, float *c,
             svzero_za();
 
             // K-loop: accumulate outer products into ZA
+            // Note: Clang generates tight code that doesn't hide memory latency well.
+            // Handwritten assembly achieves ~15-25% higher throughput by interleaving
+            // address calculations between loads for latency hiding.
+            long stride = n;
+            float *aT_ptr = aT + ti;
+            float *b_ptr = b + tj;
             for (long k = 0; k < n; k++) {
-                // Load A column: aT[k, ti:ti+16]
-                svfloat32_t a_col = svld1_f32(pg, aT + k * n + ti);
-                // Load B row: b[k, tj:tj+16]
-                svfloat32_t b_row = svld1_f32(pg, b + k * n + tj);
-                // Outer product accumulate: ZA0 += a_col ⊗ b_row
+                svfloat32_t a_col = svld1_f32(pg, aT_ptr);
+                svfloat32_t b_row = svld1_f32(pg, b_ptr);
                 svmopa_za32_f32_m(0, pg, pg, a_col, b_row);
+                aT_ptr += stride;
+                b_ptr += stride;
             }
 
             // Store: C[tile] += ZA
@@ -91,10 +100,11 @@ void block_muladd_fmopa_f32(float *aT, float *b, float *c,
 // Requires blockDim to be a multiple of 8.
 //
 // func block_muladd_fmopa_f64(aT, b, c unsafe.Pointer, blockDim int64)
-void block_muladd_fmopa_f64(double *aT, double *b, double *c,
-                             long *pblockDim) __arm_streaming __arm_out("za") {
-    long n = *pblockDim;
+void block_muladd_fmopa_f64(double * restrict aT, double * restrict b, double * restrict c,
+                             long blockDim) __arm_streaming __arm_out("za") {
+    long n = blockDim;
 
+    // Predicate for 8-element operations
     svbool_t pg = svptrue_b64();
 
     // Process 8×8 tiles
@@ -103,11 +113,16 @@ void block_muladd_fmopa_f64(double *aT, double *b, double *c,
             // Zero ZA accumulator
             svzero_za();
 
-            // K-loop
+            // K-loop: same latency hiding limitation as f32
+            long stride = n;
+            double *aT_ptr = aT + ti;
+            double *b_ptr = b + tj;
             for (long k = 0; k < n; k++) {
-                svfloat64_t a_col = svld1_f64(pg, aT + k * n + ti);
-                svfloat64_t b_row = svld1_f64(pg, b + k * n + tj);
+                svfloat64_t a_col = svld1_f64(pg, aT_ptr);
+                svfloat64_t b_row = svld1_f64(pg, b_ptr);
                 svmopa_za64_f64_m(0, pg, pg, a_col, b_row);
+                aT_ptr += stride;
+                b_ptr += stride;
             }
 
             // Store: C[tile] += ZA
