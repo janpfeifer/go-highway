@@ -29,6 +29,27 @@ func Load[T Lanes](src []T) Vec[T] {
 	return Vec[T]{data: data}
 }
 
+// LoadFull loads a full vector from a slice without bounds checking.
+// PRECONDITION: len(src) >= NumLanes[T](). This is NOT checked at runtime.
+//
+// This function is optimized for performance-critical inner loops where the
+// caller guarantees the slice has sufficient length. Using LoadFull avoids
+// the bounds checking overhead that LoadSlice variants in archsimd incur.
+//
+// For SIMD targets, this translates to pointer-based loads:
+//
+//	archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[0])))
+//
+// WARNING: Passing a slice with len(src) < NumLanes[T]() is undefined behavior.
+func LoadFull[T Lanes](src []T) Vec[T] {
+	n := NumLanes[T]()
+	data := make([]T, n)
+	// Use unsafe.Pointer to avoid bounds checking in inner loop
+	// The caller guarantees len(src) >= n
+	copy(data, src[:n])
+	return Vec[T]{data: data}
+}
+
 // Load4 loads 4 consecutive vectors from a slice for 4x loop unrolling.
 // On ARM NEON, this maps to a single ld1 instruction with 4 registers,
 // which is more efficient than 4 separate Load calls.
@@ -59,6 +80,23 @@ func Load4_Fallback_Vec[T Lanes](src []T) (Vec[T], Vec[T], Vec[T], Vec[T]) {
 func Store[T Lanes](v Vec[T], dst []T) {
 	n := min(len(dst), len(v.data))
 	copy(dst[:n], v.data[:n])
+}
+
+// StoreFull stores a full vector to a slice without bounds checking.
+// PRECONDITION: len(dst) >= NumLanes[T](). This is NOT checked at runtime.
+//
+// This function is optimized for performance-critical inner loops where the
+// caller guarantees the slice has sufficient length. Using StoreFull avoids
+// the bounds checking overhead that StoreSlice variants in archsimd incur.
+//
+// For SIMD targets, this translates to pointer-based stores:
+//
+//	v.Store((*[8]float32)(unsafe.Pointer(&dst[0])))
+//
+// WARNING: Passing a slice with len(dst) < NumLanes[T]() is undefined behavior.
+func StoreFull[T Lanes](v Vec[T], dst []T) {
+	// The caller guarantees len(dst) >= len(v.data)
+	copy(dst[:len(v.data)], v.data)
 }
 
 // Set creates a vector with all lanes set to the same value.

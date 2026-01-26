@@ -875,3 +875,74 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 		t.Errorf("Unexpected default dispatch file %q was created", defaultDispatch)
 	}
 }
+
+func TestLoadFullStoreFullTransformation(t *testing.T) {
+	// Create a temporary directory for test
+	tmpDir := t.TempDir()
+
+	// Create a test input file using LoadFull and StoreFull
+	// Note: Function must start with "Base" to be processed by hwygen
+	inputFile := filepath.Join(tmpDir, "loadfull.go")
+	content := `package testfull
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseCopyFull[T hwy.FloatsNative](src, dst []T) {
+	n := hwy.NumLanes[T]()
+	for i := 0; i <= len(src)-n; i += n {
+		v := hwy.LoadFull(src[i:])
+		hwy.StoreFull(v, dst[i:])
+	}
+}
+`
+
+	if err := os.WriteFile(inputFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create input file: %v", err)
+	}
+
+	// Create generator for AVX2
+	gen := &Generator{
+		InputFile: inputFile,
+		OutputDir: tmpDir,
+		Targets:   []string{"avx2"},
+	}
+
+	// Run generation
+	if err := gen.Run(); err != nil {
+		t.Fatalf("Generator.Run() failed: %v", err)
+	}
+
+	// Read the generated AVX2 file
+	avx2Path := filepath.Join(tmpDir, "loadfull_avx2.gen.go")
+	avx2Content, err := os.ReadFile(avx2Path)
+	if err != nil {
+		t.Fatalf("Failed to read AVX2 output: %v", err)
+	}
+
+	contentStr := string(avx2Content)
+
+	// Verify LoadFull was transformed to use unsafe.Pointer
+	if !strings.Contains(contentStr, "unsafe.Pointer") {
+		t.Error("Generated code missing unsafe.Pointer for LoadFull/StoreFull")
+	}
+
+	// Verify the pointer-to-array cast pattern exists
+	if !strings.Contains(contentStr, "(*[8]float32)") && !strings.Contains(contentStr, "(*[4]float64)") {
+		t.Error("Generated code missing pointer-to-array cast pattern")
+	}
+
+	// Verify unsafe import was added
+	if !strings.Contains(contentStr, `"unsafe"`) {
+		t.Error("Generated code missing unsafe import")
+	}
+
+	// Verify archsimd.LoadFloat32x8 is called (not LoadFloat32x8Slice)
+	if !strings.Contains(contentStr, "archsimd.LoadFloat32x8(") {
+		t.Error("Generated code should use archsimd.LoadFloat32x8 (pointer-based), not LoadFloat32x8Slice")
+	}
+
+	// Verify v.Store is called with the cast (not StoreSlice)
+	if strings.Contains(contentStr, "StoreSlice") {
+		t.Error("Generated code should use v.Store (pointer-based), not StoreSlice")
+	}
+}

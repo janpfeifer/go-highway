@@ -53,9 +53,11 @@ func AVX2Target() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},      // archsimd.LoadFloat32x8Slice
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4_AVX2_Float32 - 4 separate loads
-			"Store":     {Name: "Store", IsMethod: true},      // v.StoreSlice
+			"Load":      {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x8Slice
+			"LoadFull":  {Name: "LoadFull", IsMethod: false},                  // archsimd.LoadFloat32x8 (pointer based)
+			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX2_Float32 - 4 separate loads
+			"Store":     {Name: "Store", IsMethod: true},                      // v.StoreSlice
+			"StoreFull": {Name: "StoreFull", IsMethod: true},                  // v.Store (pointer based)
 			"Set":       {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8
 			"Const":     {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8 (same as Set)
 			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
@@ -144,6 +146,7 @@ func AVX2Target() Target {
 			"Iota":     {Name: "Iota", IsMethod: false},
 			"SignBit":  {Package: "hwy", Name: "SignBit", IsMethod: false},
 			"MaxLanes": {Package: "special", Name: "MaxLanes", IsMethod: false}, // Transformed to constant
+			"NumLanes": {Package: "special", Name: "NumLanes", IsMethod: false}, // Alias for MaxLanes, transformed to constant
 			"Lanes":    {Package: "special", Name: "Lanes", IsMethod: false},    // Transformed to constant
 
 			// ===== Type references (not functions, but parser captures them) =====
@@ -257,8 +260,10 @@ func AVX512Target() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
 			"Load":      {Name: "Load", IsMethod: false},
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4_AVX512_Float32 - 4 separate loads
+			"LoadFull":  {Name: "LoadFull", IsMethod: false},                  // archsimd.LoadFloat32x16 (pointer based)
+			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX512_Float32 - 4 separate loads
 			"Store":     {Name: "Store", IsMethod: true},
+			"StoreFull": {Name: "StoreFull", IsMethod: true},                  // v.Store (pointer based)
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
@@ -348,6 +353,7 @@ func AVX512Target() Target {
 			"Iota":     {Name: "Iota", IsMethod: false},
 			"SignBit":  {Package: "hwy", Name: "SignBit", IsMethod: false},
 			"MaxLanes": {Package: "special", Name: "MaxLanes", IsMethod: false}, // Transformed to constant
+			"NumLanes": {Package: "special", Name: "NumLanes", IsMethod: false}, // Alias for MaxLanes, transformed to constant
 			"Lanes":    {Package: "special", Name: "Lanes", IsMethod: false},    // Transformed to constant
 
 			// ===== Type references (not functions, but parser captures them) =====
@@ -462,8 +468,10 @@ func FallbackTarget() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations - use hwy package =====
 			"Load":      {Package: "hwy", Name: "Load", IsMethod: false},
+			"LoadFull":  {Package: "hwy", Name: "LoadFull", IsMethod: false}, // hwy.LoadFull (no bounds checking)
 			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4 fallback (4 separate loads)
 			"Store":     {Package: "hwy", Name: "Store", IsMethod: false},
+			"StoreFull": {Package: "hwy", Name: "StoreFull", IsMethod: false}, // hwy.StoreFull (no bounds checking)
 			"Set":       {Package: "hwy", Name: "Set", IsMethod: false},
 			"Zero":      {Package: "hwy", Name: "Zero", IsMethod: false},
 			"MaskLoad":  {Package: "hwy", Name: "MaskLoad", IsMethod: false},
@@ -547,6 +555,7 @@ func FallbackTarget() Target {
 			"Iota":     {Package: "hwy", Name: "Iota", IsMethod: false},
 			"SignBit":  {Package: "hwy", Name: "SignBit", IsMethod: false},
 			"MaxLanes": {Package: "special", Name: "MaxLanes", IsMethod: false}, // Transformed to constant
+			"NumLanes": {Package: "special", Name: "NumLanes", IsMethod: false}, // Alias for MaxLanes, transformed to constant
 			"Lanes":    {Package: "special", Name: "Lanes", IsMethod: false},    // Transformed to constant
 
 			// ===== Type references (not functions, but parser captures them) =====
@@ -656,8 +665,10 @@ func NEONTarget() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
 			"Load":      {Name: "Load", IsMethod: false},
-			"Load4":     {Name: "Load4", IsMethod: false}, // asm.Load4Float32x4Slice - single ld1 instruction
+			"LoadFull":  {Package: "hwy", Name: "LoadFull", IsMethod: false},  // hwy.LoadFull (fallback)
+			"Load4":     {Name: "Load4", IsMethod: false},                     // asm.Load4Float32x4Slice - single ld1 instruction
 			"Store":     {Name: "Store", IsMethod: true},
+			"StoreFull": {Package: "hwy", Name: "StoreFull", IsMethod: false}, // hwy.StoreFull (fallback)
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Name: "Zero", IsMethod: false},
@@ -741,6 +752,7 @@ func NEONTarget() Target {
 			"Iota":     {Name: "Iota", IsMethod: false},
 			"SignBit":  {Name: "SignBit", IsMethod: false},
 			"MaxLanes": {Package: "special", Name: "MaxLanes", IsMethod: false}, // Transformed to constant
+			"NumLanes": {Package: "special", Name: "NumLanes", IsMethod: false}, // Alias for MaxLanes, transformed to constant
 			"Lanes":    {Package: "special", Name: "Lanes", IsMethod: false},    // Transformed to constant
 
 			// ===== Type references (not functions, but parser captures them) =====
