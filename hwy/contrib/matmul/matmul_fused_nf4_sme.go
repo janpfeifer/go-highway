@@ -360,10 +360,10 @@ func parallelFusedNF4MatMulSME(
 			} else {
 				tileBuf = tileBuf[:tileSize]
 			}
-			defer func() {
-				clear(tileBuf) // Zero before returning to pool
-				fusedTilePool.Put(tileBuf)
-			}()
+			// Clear AFTER getting from pool to ensure no stale data
+			// (sync.Pool may return buffers from different threads' caches)
+			clear(tileBuf)
+			defer fusedTilePool.Put(tileBuf)
 
 			outputTile := fusedOutputTilePool.Get().([]float32)
 			outputTileSize := M * 16
@@ -372,10 +372,9 @@ func parallelFusedNF4MatMulSME(
 			} else {
 				outputTile = outputTile[:outputTileSize]
 			}
-			defer func() {
-				clear(outputTile) // Zero before returning to pool
-				fusedOutputTilePool.Put(outputTile)
-			}()
+			// Clear AFTER getting from pool to ensure no stale data
+			clear(outputTile)
+			defer fusedOutputTilePool.Put(outputTile)
 
 			for nTile := range work {
 				processFusedNF4Tile(inputT, packed, scales, output, tileBuf, outputTile,
@@ -434,6 +433,7 @@ func parallelFusedInt4MatMulSME(
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Go(func() {
+			// Get thread-local buffers from pool
 			tileBuf := fusedTilePool.Get().([]float32)
 			tileSize := K * 16
 			if cap(tileBuf) < tileSize {
@@ -441,10 +441,9 @@ func parallelFusedInt4MatMulSME(
 			} else {
 				tileBuf = tileBuf[:tileSize]
 			}
-			defer func() {
-				clear(tileBuf) // Zero before returning to pool
-				fusedTilePool.Put(tileBuf)
-			}()
+			// Clear AFTER getting from pool to ensure no stale data
+			clear(tileBuf)
+			defer fusedTilePool.Put(tileBuf)
 
 			outputTile := fusedOutputTilePool.Get().([]float32)
 			outputTileSize := M * 16
@@ -453,10 +452,9 @@ func parallelFusedInt4MatMulSME(
 			} else {
 				outputTile = outputTile[:outputTileSize]
 			}
-			defer func() {
-				clear(outputTile) // Zero before returning to pool
-				fusedOutputTilePool.Put(outputTile)
-			}()
+			// Clear AFTER getting from pool to ensure no stale data
+			clear(outputTile)
+			defer fusedOutputTilePool.Put(outputTile)
 
 			for nTile := range work {
 				processFusedInt4Tile(inputT, packed, scales, output, tileBuf, outputTile,
