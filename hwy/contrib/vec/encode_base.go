@@ -48,7 +48,7 @@ func BaseEncodeFloat32s(dst []byte, src []float32) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.Load[uint8](srcBytes[i:])
+		v := hwy.LoadFull[uint8](srcBytes[i:])
 		hwy.Store(v, dst[i:])
 	}
 
@@ -84,7 +84,7 @@ func BaseDecodeFloat32s(dst []float32, src []byte) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.Load[uint8](src[i:])
+		v := hwy.LoadFull[uint8](src[i:])
 		hwy.Store(v, dstBytes[i:])
 	}
 
@@ -116,7 +116,7 @@ func BaseEncodeFloat64s(dst []byte, src []float64) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.Load[uint8](srcBytes[i:])
+		v := hwy.LoadFull[uint8](srcBytes[i:])
 		hwy.Store(v, dst[i:])
 	}
 
@@ -148,7 +148,7 @@ func BaseDecodeFloat64s(dst []float64, src []byte) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.Load[uint8](src[i:])
+		v := hwy.LoadFull[uint8](src[i:])
 		hwy.Store(v, dstBytes[i:])
 	}
 

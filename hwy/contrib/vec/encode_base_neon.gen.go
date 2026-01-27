@@ -21,7 +21,7 @@ func BaseEncodeFloat32s_neon(dst []byte, src []float32) {
 	lanes := 16
 	i := 0
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := asm.LoadUint8x16Slice(srcBytes[i:])
+		v := asm.LoadUint8x16((*[16]uint8)(unsafe.Pointer(&srcBytes[i])))
 		v.StoreSlice(dst[i:])
 	}
 	for ; i < totalBytes; i++ {
@@ -41,7 +41,7 @@ func BaseDecodeFloat32s_neon(dst []float32, src []byte) {
 	lanes := 16
 	i := 0
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := asm.LoadUint8x16Slice(src[i:])
+		v := asm.LoadUint8x16((*[16]uint8)(unsafe.Pointer(&src[i])))
 		v.StoreSlice(dstBytes[i:])
 	}
 	for ; i < totalBytes; i++ {
@@ -61,7 +61,7 @@ func BaseEncodeFloat64s_neon(dst []byte, src []float64) {
 	lanes := 16
 	i := 0
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := asm.LoadUint8x16Slice(srcBytes[i:])
+		v := asm.LoadUint8x16((*[16]uint8)(unsafe.Pointer(&srcBytes[i])))
 		v.StoreSlice(dst[i:])
 	}
 	for ; i < totalBytes; i++ {
@@ -81,7 +81,7 @@ func BaseDecodeFloat64s_neon(dst []float64, src []byte) {
 	lanes := 16
 	i := 0
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := asm.LoadUint8x16Slice(src[i:])
+		v := asm.LoadUint8x16((*[16]uint8)(unsafe.Pointer(&src[i])))
 		v.StoreSlice(dstBytes[i:])
 	}
 	for ; i < totalBytes; i++ {

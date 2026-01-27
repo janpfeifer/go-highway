@@ -7,6 +7,7 @@ package bitpack
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+	"unsafe"
 )
 
 func BasePack32_avx512(src []uint32, bitWidth int, dst []byte) int {
@@ -23,19 +24,19 @@ func BasePack32_avx512(src []uint32, bitWidth int, dst []byte) int {
 	bytePos := 0
 	var i int
 	for i = 0; i+lanes*3 <= len(src); i += lanes * 3 {
-		v := archsimd.LoadUint32x16Slice(src[i:])
+		v := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i])))
 		v = v.And(maskVec)
 		for lane := range lanes {
 			val := hwy.GetLane_AVX512_Uint32x16(v, lane)
 			packValue32(val, bitWidth, &bitPos, &bytePos, dst)
 		}
-		v1 := archsimd.LoadUint32x16Slice(src[i+16:])
+		v1 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i+16])))
 		v1 = v1.And(maskVec)
 		for lane := range lanes {
 			val1 := hwy.GetLane_AVX512_Uint32x16(v1, lane)
 			packValue32(val1, bitWidth, &bitPos, &bytePos, dst)
 		}
-		v2 := archsimd.LoadUint32x16Slice(src[i+32:])
+		v2 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i+32])))
 		v2 = v2.And(maskVec)
 		for lane := range lanes {
 			val2 := hwy.GetLane_AVX512_Uint32x16(v2, lane)
@@ -94,19 +95,19 @@ func BasePack64_avx512(src []uint64, bitWidth int, dst []byte) int {
 	bytePos := 0
 	var i int
 	for i = 0; i+lanes*3 <= len(src); i += lanes * 3 {
-		v := archsimd.LoadUint64x8Slice(src[i:])
+		v := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i])))
 		v = v.And(maskVec)
 		for lane := range lanes {
 			val := hwy.GetLane_AVX512_Uint64x8(v, lane)
 			packValue64(val, bitWidth, &bitPos, &bytePos, dst)
 		}
-		v1 := archsimd.LoadUint64x8Slice(src[i+8:])
+		v1 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i+8])))
 		v1 = v1.And(maskVec)
 		for lane := range lanes {
 			val1 := hwy.GetLane_AVX512_Uint64x8(v1, lane)
 			packValue64(val1, bitWidth, &bitPos, &bytePos, dst)
 		}
-		v2 := archsimd.LoadUint64x8Slice(src[i+16:])
+		v2 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i+16])))
 		v2 = v2.And(maskVec)
 		for lane := range lanes {
 			val2 := hwy.GetLane_AVX512_Uint64x8(v2, lane)
@@ -163,26 +164,21 @@ func BaseDeltaEncode32_avx512(src []uint32, base uint32, dst []uint32) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*4 <= len(src); i += lanes * 4 {
-		curr := archsimd.LoadUint32x16Slice(src[i:])
-		prevVec := archsimd.LoadUint32x16Slice(src[i-1:])
+	for ; i+lanes*3 <= len(src); i += lanes * 3 {
+		curr := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i])))
+		prevVec := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
-		delta.StoreSlice(dst[i:])
+		delta.Store((*[16]uint32)(unsafe.Pointer(&dst[i])))
 		prev = src[i+lanes-1]
-		curr1 := archsimd.LoadUint32x16Slice(src[i+16:])
-		prevVec1 := archsimd.LoadUint32x16Slice(src[i-1:])
+		curr1 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i+16])))
+		prevVec1 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i-1+16])))
 		delta1 := curr1.Sub(prevVec1)
-		delta1.StoreSlice(dst[i+16:])
+		delta1.Store((*[16]uint32)(unsafe.Pointer(&dst[i+16])))
 		prev = src[i+lanes-1]
-		curr2 := archsimd.LoadUint32x16Slice(src[i+32:])
-		prevVec2 := archsimd.LoadUint32x16Slice(src[i-1:])
+		curr2 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i+32])))
+		prevVec2 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i-1+32])))
 		delta2 := curr2.Sub(prevVec2)
-		delta2.StoreSlice(dst[i+32:])
-		prev = src[i+lanes-1]
-		curr3 := archsimd.LoadUint32x16Slice(src[i+48:])
-		prevVec3 := archsimd.LoadUint32x16Slice(src[i-1:])
-		delta3 := curr3.Sub(prevVec3)
-		delta3.StoreSlice(dst[i+48:])
+		delta2.Store((*[16]uint32)(unsafe.Pointer(&dst[i+32])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {
@@ -203,26 +199,21 @@ func BaseDeltaEncode64_avx512(src []uint64, base uint64, dst []uint64) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*4 <= len(src); i += lanes * 4 {
-		curr := archsimd.LoadUint64x8Slice(src[i:])
-		prevVec := archsimd.LoadUint64x8Slice(src[i-1:])
+	for ; i+lanes*3 <= len(src); i += lanes * 3 {
+		curr := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i])))
+		prevVec := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
-		delta.StoreSlice(dst[i:])
+		delta.Store((*[8]uint64)(unsafe.Pointer(&dst[i])))
 		prev = src[i+lanes-1]
-		curr1 := archsimd.LoadUint64x8Slice(src[i+8:])
-		prevVec1 := archsimd.LoadUint64x8Slice(src[i-1:])
+		curr1 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i+8])))
+		prevVec1 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i-1+8])))
 		delta1 := curr1.Sub(prevVec1)
-		delta1.StoreSlice(dst[i+8:])
+		delta1.Store((*[8]uint64)(unsafe.Pointer(&dst[i+8])))
 		prev = src[i+lanes-1]
-		curr2 := archsimd.LoadUint64x8Slice(src[i+16:])
-		prevVec2 := archsimd.LoadUint64x8Slice(src[i-1:])
+		curr2 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i+16])))
+		prevVec2 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i-1+16])))
 		delta2 := curr2.Sub(prevVec2)
-		delta2.StoreSlice(dst[i+16:])
-		prev = src[i+lanes-1]
-		curr3 := archsimd.LoadUint64x8Slice(src[i+24:])
-		prevVec3 := archsimd.LoadUint64x8Slice(src[i-1:])
-		delta3 := curr3.Sub(prevVec3)
-		delta3.StoreSlice(dst[i+24:])
+		delta2.Store((*[8]uint64)(unsafe.Pointer(&dst[i+16])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {

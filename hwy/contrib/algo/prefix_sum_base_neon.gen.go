@@ -6,6 +6,7 @@ package algo
 
 import (
 	"github.com/ajroetker/go-highway/hwy/asm"
+	"unsafe"
 )
 
 func BasePrefixSum_neon(data []float32) {
@@ -17,15 +18,15 @@ func BasePrefixSum_neon(data []float32) {
 	carry := float32(0)
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadFloat32x4Slice(data[i:])
+		v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon(v)
 		prefixed = prefixed.Add(asm.BroadcastFloat32x4(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[4]float32)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadFloat32x4Slice(data[i+4:])
+		v1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&data[i+4])))
 		prefixed1 := BasePrefixSumVec_neon(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastFloat32x4(carry))
-		prefixed1.StoreSlice(data[i+4:])
+		prefixed1.Store((*[4]float32)(unsafe.Pointer(&data[i+4])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -43,15 +44,15 @@ func BasePrefixSum_neon_Float64(data []float64) {
 	carry := float64(0)
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadFloat64x2Slice(data[i:])
+		v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Float64(v)
 		prefixed = prefixed.Add(asm.BroadcastFloat64x2(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[2]float64)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadFloat64x2Slice(data[i+2:])
+		v1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&data[i+2])))
 		prefixed1 := BasePrefixSumVec_neon_Float64(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastFloat64x2(carry))
-		prefixed1.StoreSlice(data[i+2:])
+		prefixed1.Store((*[2]float64)(unsafe.Pointer(&data[i+2])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -69,15 +70,15 @@ func BasePrefixSum_neon_Int32(data []int32) {
 	carry := int32(0)
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadInt32x4Slice(data[i:])
+		v := asm.LoadInt32x4((*[4]int32)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Int32(v)
 		prefixed = prefixed.Add(asm.BroadcastInt32x4(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[4]int32)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadInt32x4Slice(data[i+4:])
+		v1 := asm.LoadInt32x4((*[4]int32)(unsafe.Pointer(&data[i+4])))
 		prefixed1 := BasePrefixSumVec_neon_Int32(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastInt32x4(carry))
-		prefixed1.StoreSlice(data[i+4:])
+		prefixed1.Store((*[4]int32)(unsafe.Pointer(&data[i+4])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -95,15 +96,15 @@ func BasePrefixSum_neon_Int64(data []int64) {
 	carry := int64(0)
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadInt64x2Slice(data[i:])
+		v := asm.LoadInt64x2((*[2]int64)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Int64(v)
 		prefixed = prefixed.Add(asm.BroadcastInt64x2(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[2]int64)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadInt64x2Slice(data[i+2:])
+		v1 := asm.LoadInt64x2((*[2]int64)(unsafe.Pointer(&data[i+2])))
 		prefixed1 := BasePrefixSumVec_neon_Int64(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastInt64x2(carry))
-		prefixed1.StoreSlice(data[i+2:])
+		prefixed1.Store((*[2]int64)(unsafe.Pointer(&data[i+2])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -121,15 +122,15 @@ func BasePrefixSum_neon_Uint32(data []uint32) {
 	carry := uint32(0)
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadUint32x4Slice(data[i:])
+		v := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Uint32(v)
 		prefixed = prefixed.Add(asm.BroadcastUint32x4(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[4]uint32)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadUint32x4Slice(data[i+4:])
+		v1 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&data[i+4])))
 		prefixed1 := BasePrefixSumVec_neon_Uint32(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastUint32x4(carry))
-		prefixed1.StoreSlice(data[i+4:])
+		prefixed1.Store((*[4]uint32)(unsafe.Pointer(&data[i+4])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -147,15 +148,15 @@ func BasePrefixSum_neon_Uint64(data []uint64) {
 	carry := uint64(0)
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadUint64x2Slice(data[i:])
+		v := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Uint64(v)
 		prefixed = prefixed.Add(asm.BroadcastUint64x2(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[2]uint64)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadUint64x2Slice(data[i+2:])
+		v1 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&data[i+2])))
 		prefixed1 := BasePrefixSumVec_neon_Uint64(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastUint64x2(carry))
-		prefixed1.StoreSlice(data[i+2:])
+		prefixed1.Store((*[2]uint64)(unsafe.Pointer(&data[i+2])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -173,15 +174,15 @@ func BaseDeltaDecode_neon_Int32(data []int32, base int32) {
 	carry := base
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadInt32x4Slice(data[i:])
+		v := asm.LoadInt32x4((*[4]int32)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Int32(v)
 		prefixed = prefixed.Add(asm.BroadcastInt32x4(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[4]int32)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadInt32x4Slice(data[i+4:])
+		v1 := asm.LoadInt32x4((*[4]int32)(unsafe.Pointer(&data[i+4])))
 		prefixed1 := BasePrefixSumVec_neon_Int32(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastInt32x4(carry))
-		prefixed1.StoreSlice(data[i+4:])
+		prefixed1.Store((*[4]int32)(unsafe.Pointer(&data[i+4])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -199,15 +200,15 @@ func BaseDeltaDecode_neon_Int64(data []int64, base int64) {
 	carry := base
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadInt64x2Slice(data[i:])
+		v := asm.LoadInt64x2((*[2]int64)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Int64(v)
 		prefixed = prefixed.Add(asm.BroadcastInt64x2(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[2]int64)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadInt64x2Slice(data[i+2:])
+		v1 := asm.LoadInt64x2((*[2]int64)(unsafe.Pointer(&data[i+2])))
 		prefixed1 := BasePrefixSumVec_neon_Int64(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastInt64x2(carry))
-		prefixed1.StoreSlice(data[i+2:])
+		prefixed1.Store((*[2]int64)(unsafe.Pointer(&data[i+2])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -225,15 +226,15 @@ func BaseDeltaDecode_neon_Uint32(data []uint32, base uint32) {
 	carry := base
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadUint32x4Slice(data[i:])
+		v := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Uint32(v)
 		prefixed = prefixed.Add(asm.BroadcastUint32x4(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[4]uint32)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadUint32x4Slice(data[i+4:])
+		v1 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&data[i+4])))
 		prefixed1 := BasePrefixSumVec_neon_Uint32(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastUint32x4(carry))
-		prefixed1.StoreSlice(data[i+4:])
+		prefixed1.Store((*[4]uint32)(unsafe.Pointer(&data[i+4])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {
@@ -251,15 +252,15 @@ func BaseDeltaDecode_neon_Uint64(data []uint64, base uint64) {
 	carry := base
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		v := asm.LoadUint64x2Slice(data[i:])
+		v := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&data[i])))
 		prefixed := BasePrefixSumVec_neon_Uint64(v)
 		prefixed = prefixed.Add(asm.BroadcastUint64x2(carry))
-		prefixed.StoreSlice(data[i:])
+		prefixed.Store((*[2]uint64)(unsafe.Pointer(&data[i])))
 		carry = prefixed.Get(lanes - 1)
-		v1 := asm.LoadUint64x2Slice(data[i+2:])
+		v1 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&data[i+2])))
 		prefixed1 := BasePrefixSumVec_neon_Uint64(v1)
 		prefixed1 = prefixed1.Add(asm.BroadcastUint64x2(carry))
-		prefixed1.StoreSlice(data[i+2:])
+		prefixed1.Store((*[2]uint64)(unsafe.Pointer(&data[i+2])))
 		carry = prefixed1.Get(lanes - 1)
 	}
 	for ; i < n; i++ {

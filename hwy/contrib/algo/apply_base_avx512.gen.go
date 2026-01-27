@@ -7,25 +7,24 @@ package algo
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+	"unsafe"
 )
 
 func BaseApply_avx512_Float16(in []hwy.Float16, out []hwy.Float16, fn func(hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16]) {
 	n := min(len(in), len(out))
 	lanes := 32
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
+	for ; i+lanes*3 <= n; i += lanes * 3 {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 		x1 := hwy.Load(in[i+32:])
-		hwy.Store(fn(x1), out[i+32:])
+		hwy.StoreFull(fn(x1), out[i+32:])
 		x2 := hwy.Load(in[i+64:])
-		hwy.Store(fn(x2), out[i+64:])
-		x3 := hwy.Load(in[i+96:])
-		hwy.Store(fn(x3), out[i+96:])
+		hwy.StoreFull(fn(x2), out[i+64:])
 	}
 	for ; i+lanes <= n; i += lanes {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [32]hwy.Float16{}
@@ -40,19 +39,17 @@ func BaseApply_avx512_BFloat16(in []hwy.BFloat16, out []hwy.BFloat16, fn func(hw
 	n := min(len(in), len(out))
 	lanes := 32
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
+	for ; i+lanes*3 <= n; i += lanes * 3 {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 		x1 := hwy.Load(in[i+32:])
-		hwy.Store(fn(x1), out[i+32:])
+		hwy.StoreFull(fn(x1), out[i+32:])
 		x2 := hwy.Load(in[i+64:])
-		hwy.Store(fn(x2), out[i+64:])
-		x3 := hwy.Load(in[i+96:])
-		hwy.Store(fn(x3), out[i+96:])
+		hwy.StoreFull(fn(x2), out[i+64:])
 	}
 	for ; i+lanes <= n; i += lanes {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [32]hwy.BFloat16{}
@@ -67,19 +64,17 @@ func BaseApply_avx512(in []float32, out []float32, fn func(archsimd.Float32x16) 
 	n := min(len(in), len(out))
 	lanes := 16
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
-		x := archsimd.LoadFloat32x16Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
-		x1 := archsimd.LoadFloat32x16Slice(in[i+16:])
-		fn(x1).StoreSlice(out[i+16:])
-		x2 := archsimd.LoadFloat32x16Slice(in[i+32:])
-		fn(x2).StoreSlice(out[i+32:])
-		x3 := archsimd.LoadFloat32x16Slice(in[i+48:])
-		fn(x3).StoreSlice(out[i+48:])
+	for ; i+lanes*3 <= n; i += lanes * 3 {
+		x := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[16]float32)(unsafe.Pointer(&out[i])))
+		x1 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&in[i+16])))
+		fn(x1).Store((*[16]float32)(unsafe.Pointer(&out[i+16])))
+		x2 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&in[i+32])))
+		fn(x2).Store((*[16]float32)(unsafe.Pointer(&out[i+32])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := archsimd.LoadFloat32x16Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
+		x := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[16]float32)(unsafe.Pointer(&out[i])))
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [16]float32{}
@@ -94,19 +89,17 @@ func BaseApply_avx512_Float64(in []float64, out []float64, fn func(archsimd.Floa
 	n := min(len(in), len(out))
 	lanes := 8
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
-		x := archsimd.LoadFloat64x8Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
-		x1 := archsimd.LoadFloat64x8Slice(in[i+8:])
-		fn(x1).StoreSlice(out[i+8:])
-		x2 := archsimd.LoadFloat64x8Slice(in[i+16:])
-		fn(x2).StoreSlice(out[i+16:])
-		x3 := archsimd.LoadFloat64x8Slice(in[i+24:])
-		fn(x3).StoreSlice(out[i+24:])
+	for ; i+lanes*3 <= n; i += lanes * 3 {
+		x := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[8]float64)(unsafe.Pointer(&out[i])))
+		x1 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&in[i+8])))
+		fn(x1).Store((*[8]float64)(unsafe.Pointer(&out[i+8])))
+		x2 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&in[i+16])))
+		fn(x2).Store((*[8]float64)(unsafe.Pointer(&out[i+16])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := archsimd.LoadFloat64x8Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
+		x := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[8]float64)(unsafe.Pointer(&out[i])))
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]float64{}

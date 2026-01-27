@@ -7,6 +7,7 @@ package vec
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
+	"unsafe"
 )
 
 func BaseSum_neon_Float16(v []hwy.Float16) hwy.Float16 {
@@ -57,9 +58,9 @@ func BaseSum_neon(v []float32) float32 {
 	lanes := 4
 	var i int
 	for i = 0; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat32x4Slice(v[i:])
+		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i])))
 		sum = sum.Add(va)
-		va1 := asm.LoadFloat32x4Slice(v[i+4:])
+		va1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i+4])))
 		sum = sum.Add(va1)
 	}
 	result := sum.ReduceSum()
@@ -77,9 +78,9 @@ func BaseSum_neon_Float64(v []float64) float64 {
 	lanes := 2
 	var i int
 	for i = 0; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat64x2Slice(v[i:])
+		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i])))
 		sum = sum.Add(va)
-		va1 := asm.LoadFloat64x2Slice(v[i+2:])
+		va1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i+2])))
 		sum = sum.Add(va1)
 	}
 	result := sum.ReduceSum()
@@ -168,9 +169,9 @@ func BaseMin_neon(v []float32) float32 {
 	minVec := asm.LoadFloat32x4Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat32x4Slice(v[i:])
+		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i])))
 		minVec = minVec.Min(va)
-		va1 := asm.LoadFloat32x4Slice(v[i+4:])
+		va1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i+4])))
 		minVec = minVec.Min(va1)
 	}
 	result := minVec.ReduceMin()
@@ -199,9 +200,9 @@ func BaseMin_neon_Float64(v []float64) float64 {
 	minVec := asm.LoadFloat64x2Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat64x2Slice(v[i:])
+		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i])))
 		minVec = minVec.Min(va)
-		va1 := asm.LoadFloat64x2Slice(v[i+2:])
+		va1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i+2])))
 		minVec = minVec.Min(va1)
 	}
 	result := minVec.ReduceMin()
@@ -230,9 +231,9 @@ func BaseMax_neon(v []float32) float32 {
 	maxVec := asm.LoadFloat32x4Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat32x4Slice(v[i:])
+		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i])))
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadFloat32x4Slice(v[i+4:])
+		va1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i+4])))
 		maxVec = maxVec.Max(va1)
 	}
 	result := maxVec.ReduceMax()
@@ -261,9 +262,9 @@ func BaseMax_neon_Float64(v []float64) float64 {
 	maxVec := asm.LoadFloat64x2Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat64x2Slice(v[i:])
+		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i])))
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadFloat64x2Slice(v[i+2:])
+		va1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i+2])))
 		maxVec = maxVec.Max(va1)
 	}
 	result := maxVec.ReduceMax()
@@ -292,9 +293,9 @@ func BaseMax_neon_Int32(v []int32) int32 {
 	maxVec := asm.LoadInt32x4Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadInt32x4Slice(v[i:])
+		va := asm.LoadInt32x4((*[4]int32)(unsafe.Pointer(&v[i])))
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadInt32x4Slice(v[i+4:])
+		va1 := asm.LoadInt32x4((*[4]int32)(unsafe.Pointer(&v[i+4])))
 		maxVec = maxVec.Max(va1)
 	}
 	result := maxVec.ReduceMax()
@@ -323,9 +324,9 @@ func BaseMax_neon_Int64(v []int64) int64 {
 	maxVec := asm.LoadInt64x2Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadInt64x2Slice(v[i:])
+		va := asm.LoadInt64x2((*[2]int64)(unsafe.Pointer(&v[i])))
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadInt64x2Slice(v[i+2:])
+		va1 := asm.LoadInt64x2((*[2]int64)(unsafe.Pointer(&v[i+2])))
 		maxVec = maxVec.Max(va1)
 	}
 	result := maxVec.ReduceMax()
@@ -354,9 +355,9 @@ func BaseMax_neon_Uint32(v []uint32) uint32 {
 	maxVec := asm.LoadUint32x4Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadUint32x4Slice(v[i:])
+		va := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&v[i])))
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadUint32x4Slice(v[i+4:])
+		va1 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&v[i+4])))
 		maxVec = maxVec.Max(va1)
 	}
 	result := maxVec.ReduceMax()
@@ -385,9 +386,9 @@ func BaseMax_neon_Uint64(v []uint64) uint64 {
 	maxVec := asm.LoadUint64x2Slice(v)
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadUint64x2Slice(v[i:])
+		va := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&v[i])))
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadUint64x2Slice(v[i+2:])
+		va1 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&v[i+2])))
 		maxVec = maxVec.Max(va1)
 	}
 	result := maxVec.ReduceMax()
@@ -505,10 +506,10 @@ func BaseMinMax_neon(v []float32) (min float32, max float32) {
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat32x4Slice(v[i:])
+		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i])))
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadFloat32x4Slice(v[i+4:])
+		va1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&v[i+4])))
 		minVec = minVec.Min(va1)
 		maxVec = maxVec.Max(va1)
 	}
@@ -547,10 +548,10 @@ func BaseMinMax_neon_Float64(v []float64) (min float64, max float64) {
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat64x2Slice(v[i:])
+		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i])))
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadFloat64x2Slice(v[i+2:])
+		va1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&v[i+2])))
 		minVec = minVec.Min(va1)
 		maxVec = maxVec.Max(va1)
 	}

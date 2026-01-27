@@ -8,6 +8,7 @@ import (
 	"github.com/ajroetker/go-highway/hwy"
 	stdmath "math"
 	"simd/archsimd"
+	"unsafe"
 )
 
 func BaseNormalize_avx2_Float16(dst []hwy.Float16) {
@@ -27,10 +28,10 @@ func BaseNormalize_avx2_Float16(dst []hwy.Float16) {
 	for ; i+lanes*2 <= len(dst); i += lanes * 2 {
 		vec := hwy.Load(dst[i:])
 		result := hwy.MulF16(vec, scaleVec)
-		hwy.Store(result, dst[i:])
+		hwy.StoreFull(result, dst[i:])
 		vec1 := hwy.Load(dst[i+16:])
 		result1 := hwy.MulF16(vec1, scaleVec)
-		hwy.Store(result1, dst[i+16:])
+		hwy.StoreFull(result1, dst[i+16:])
 	}
 	for ; i < len(dst); i++ {
 		dst[i] = hwy.Float32ToFloat16(dst[i].Float32() * scale)
@@ -54,10 +55,10 @@ func BaseNormalize_avx2_BFloat16(dst []hwy.BFloat16) {
 	for ; i+lanes*2 <= len(dst); i += lanes * 2 {
 		vec := hwy.Load(dst[i:])
 		result := hwy.MulBF16(vec, scaleVec)
-		hwy.Store(result, dst[i:])
+		hwy.StoreFull(result, dst[i:])
 		vec1 := hwy.Load(dst[i+16:])
 		result1 := hwy.MulBF16(vec1, scaleVec)
-		hwy.Store(result1, dst[i+16:])
+		hwy.StoreFull(result1, dst[i+16:])
 	}
 	for ; i < len(dst); i++ {
 		dst[i] = hwy.Float32ToBFloat16(dst[i].Float32() * scale)
@@ -79,12 +80,12 @@ func BaseNormalize_avx2(dst []float32) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= len(dst); i += lanes * 2 {
-		vec := archsimd.LoadFloat32x8Slice(dst[i:])
+		vec := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&dst[i])))
 		result := vec.Mul(scaleVec)
-		result.StoreSlice(dst[i:])
-		vec1 := archsimd.LoadFloat32x8Slice(dst[i+8:])
+		result.Store((*[8]float32)(unsafe.Pointer(&dst[i])))
+		vec1 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&dst[i+8])))
 		result1 := vec1.Mul(scaleVec)
-		result1.StoreSlice(dst[i+8:])
+		result1.Store((*[8]float32)(unsafe.Pointer(&dst[i+8])))
 	}
 	for ; i < len(dst); i++ {
 		dst[i] *= scale
@@ -106,12 +107,12 @@ func BaseNormalize_avx2_Float64(dst []float64) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= len(dst); i += lanes * 2 {
-		vec := archsimd.LoadFloat64x4Slice(dst[i:])
+		vec := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&dst[i])))
 		result := vec.Mul(scaleVec)
-		result.StoreSlice(dst[i:])
-		vec1 := archsimd.LoadFloat64x4Slice(dst[i+4:])
+		result.Store((*[4]float64)(unsafe.Pointer(&dst[i])))
+		vec1 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&dst[i+4])))
 		result1 := vec1.Mul(scaleVec)
-		result1.StoreSlice(dst[i+4:])
+		result1.Store((*[4]float64)(unsafe.Pointer(&dst[i+4])))
 	}
 	for ; i < len(dst); i++ {
 		dst[i] *= scale
@@ -137,10 +138,10 @@ func BaseNormalizeTo_avx2_Float16(dst []hwy.Float16, src []hwy.Float16) {
 	for ; i+lanes*2 <= n; i += lanes * 2 {
 		vec := hwy.Load(src[i:])
 		result := hwy.MulF16(vec, scaleVec)
-		hwy.Store(result, dst[i:])
+		hwy.StoreFull(result, dst[i:])
 		vec1 := hwy.Load(src[i+16:])
 		result1 := hwy.MulF16(vec1, scaleVec)
-		hwy.Store(result1, dst[i+16:])
+		hwy.StoreFull(result1, dst[i+16:])
 	}
 	for ; i < n; i++ {
 		dst[i] = hwy.Float32ToFloat16(src[i].Float32() * scale)
@@ -166,10 +167,10 @@ func BaseNormalizeTo_avx2_BFloat16(dst []hwy.BFloat16, src []hwy.BFloat16) {
 	for ; i+lanes*2 <= n; i += lanes * 2 {
 		vec := hwy.Load(src[i:])
 		result := hwy.MulBF16(vec, scaleVec)
-		hwy.Store(result, dst[i:])
+		hwy.StoreFull(result, dst[i:])
 		vec1 := hwy.Load(src[i+16:])
 		result1 := hwy.MulBF16(vec1, scaleVec)
-		hwy.Store(result1, dst[i+16:])
+		hwy.StoreFull(result1, dst[i+16:])
 	}
 	for ; i < n; i++ {
 		dst[i] = hwy.Float32ToBFloat16(src[i].Float32() * scale)
@@ -193,12 +194,12 @@ func BaseNormalizeTo_avx2(dst []float32, src []float32) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vec := archsimd.LoadFloat32x8Slice(src[i:])
+		vec := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[i])))
 		result := vec.Mul(scaleVec)
-		result.StoreSlice(dst[i:])
-		vec1 := archsimd.LoadFloat32x8Slice(src[i+8:])
+		result.Store((*[8]float32)(unsafe.Pointer(&dst[i])))
+		vec1 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[i+8])))
 		result1 := vec1.Mul(scaleVec)
-		result1.StoreSlice(dst[i+8:])
+		result1.Store((*[8]float32)(unsafe.Pointer(&dst[i+8])))
 	}
 	for ; i < n; i++ {
 		dst[i] = src[i] * scale
@@ -222,12 +223,12 @@ func BaseNormalizeTo_avx2_Float64(dst []float64, src []float64) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vec := archsimd.LoadFloat64x4Slice(src[i:])
+		vec := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[i])))
 		result := vec.Mul(scaleVec)
-		result.StoreSlice(dst[i:])
-		vec1 := archsimd.LoadFloat64x4Slice(src[i+4:])
+		result.Store((*[4]float64)(unsafe.Pointer(&dst[i])))
+		vec1 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&src[i+4])))
 		result1 := vec1.Mul(scaleVec)
-		result1.StoreSlice(dst[i+4:])
+		result1.Store((*[4]float64)(unsafe.Pointer(&dst[i+4])))
 	}
 	for ; i < n; i++ {
 		dst[i] = src[i] * scale

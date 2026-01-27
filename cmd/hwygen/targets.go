@@ -676,10 +676,10 @@ func NEONTarget() Target {
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
 			"Load":      {Name: "Load", IsMethod: false},
-			"LoadFull":  {Package: "hwy", Name: "LoadFull", IsMethod: false},  // hwy.LoadFull (fallback)
-			"Load4":     {Name: "Load4", IsMethod: false},                     // asm.Load4Float32x4Slice - single ld1 instruction
+			"LoadFull":  {Name: "LoadFull", IsMethod: false},  // asm.LoadFloat32x4 (pointer based)
+			"Load4":     {Name: "Load4", IsMethod: false},    // asm.Load4Float32x4Slice - single ld1 instruction
 			"Store":     {Name: "Store", IsMethod: true},
-			"StoreFull": {Package: "hwy", Name: "StoreFull", IsMethod: false}, // hwy.StoreFull (fallback)
+			"StoreFull": {Name: "StoreFull", IsMethod: true}, // v.Store (pointer based)
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Name: "Zero", IsMethod: false},

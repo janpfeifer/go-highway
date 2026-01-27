@@ -9,6 +9,7 @@ import (
 	"github.com/ajroetker/go-highway/hwy/asm"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
 	stdmath "math"
+	"unsafe"
 )
 
 func BaseGELU_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
@@ -29,7 +30,7 @@ func BaseGELU_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
 			onePlusErf := hwy.AddF16(vOne, erfX)
 			halfOnePlusErf := hwy.MulF16(vHalf, onePlusErf)
 			result := hwy.MulF16(x, halfOnePlusErf)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -44,7 +45,7 @@ func BaseGELU_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
 			onePlusErf1 := hwy.AddF16(vOne, erfX1)
 			halfOnePlusErf1 := hwy.MulF16(vHalf, onePlusErf1)
 			result1 := hwy.MulF16(x1, halfOnePlusErf1)
-			hwy.Store(result1, output[ii+8:])
+			hwy.StoreFull(result1, output[ii+8:])
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -61,7 +62,7 @@ func BaseGELU_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
 			onePlusErf := hwy.AddF16(vOne, erfX)
 			halfOnePlusErf := hwy.MulF16(vHalf, onePlusErf)
 			result := hwy.MulF16(x, halfOnePlusErf)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -89,7 +90,7 @@ func BaseGELU_neon_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			onePlusErf := hwy.AddBF16(vOne, erfX)
 			halfOnePlusErf := hwy.MulBF16(vHalf, onePlusErf)
 			result := hwy.MulBF16(x, halfOnePlusErf)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -104,7 +105,7 @@ func BaseGELU_neon_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			onePlusErf1 := hwy.AddBF16(vOne, erfX1)
 			halfOnePlusErf1 := hwy.MulBF16(vHalf, onePlusErf1)
 			result1 := hwy.MulBF16(x1, halfOnePlusErf1)
-			hwy.Store(result1, output[ii+8:])
+			hwy.StoreFull(result1, output[ii+8:])
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -121,7 +122,7 @@ func BaseGELU_neon_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			onePlusErf := hwy.AddBF16(vOne, erfX)
 			halfOnePlusErf := hwy.MulBF16(vHalf, onePlusErf)
 			result := hwy.MulBF16(x, halfOnePlusErf)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -143,13 +144,13 @@ func BaseGELU_neon(input []float32, output []float32) {
 	for ; ii+8 <= size; ii += 8 {
 		remaining := size - ii
 		if remaining >= 4 {
-			x := asm.LoadFloat32x4Slice(input[ii:])
+			x := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_neon(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(output[ii:])
+			result.Store((*[4]float32)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -158,13 +159,13 @@ func BaseGELU_neon(input []float32, output []float32) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 4 {
-			x1 := asm.LoadFloat32x4Slice(input[ii+4:])
+			x1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&input[ii+4])))
 			xScaled1 := x1.Mul(vInvSqrt2)
 			erfX1 := math.BaseErfVec_neon(xScaled1)
 			onePlusErf1 := vOne.Add(erfX1)
 			halfOnePlusErf1 := vHalf.Mul(onePlusErf1)
 			result1 := x1.Mul(halfOnePlusErf1)
-			result1.StoreSlice(output[ii+4:])
+			result1.Store((*[4]float32)(unsafe.Pointer(&output[ii+4])))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1])
@@ -175,13 +176,13 @@ func BaseGELU_neon(input []float32, output []float32) {
 	for ; ii+4 <= size; ii += 4 {
 		remaining := size - ii
 		if remaining >= 4 {
-			x := asm.LoadFloat32x4Slice(input[ii:])
+			x := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_neon(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(output[ii:])
+			result.Store((*[4]float32)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -203,13 +204,13 @@ func BaseGELU_neon_Float64(input []float64, output []float64) {
 	for ; ii+4 <= size; ii += 4 {
 		remaining := size - ii
 		if remaining >= 2 {
-			x := asm.LoadFloat64x2Slice(input[ii:])
+			x := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_neon_Float64(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(output[ii:])
+			result.Store((*[2]float64)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -218,13 +219,13 @@ func BaseGELU_neon_Float64(input []float64, output []float64) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 2 {
-			x1 := asm.LoadFloat64x2Slice(input[ii+2:])
+			x1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&input[ii+2])))
 			xScaled1 := x1.Mul(vInvSqrt2)
 			erfX1 := math.BaseErfVec_neon_Float64(xScaled1)
 			onePlusErf1 := vOne.Add(erfX1)
 			halfOnePlusErf1 := vHalf.Mul(onePlusErf1)
 			result1 := x1.Mul(halfOnePlusErf1)
-			result1.StoreSlice(output[ii+2:])
+			result1.Store((*[2]float64)(unsafe.Pointer(&output[ii+2])))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1])
@@ -235,13 +236,13 @@ func BaseGELU_neon_Float64(input []float64, output []float64) {
 	for ; ii+2 <= size; ii += 2 {
 		remaining := size - ii
 		if remaining >= 2 {
-			x := asm.LoadFloat64x2Slice(input[ii:])
+			x := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_neon_Float64(xScaled)
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(output[ii:])
+			result.Store((*[2]float64)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -265,7 +266,7 @@ func BaseGELUApprox_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
 			xScaled := hwy.MulF16(x, vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon_Float16(xScaled)
 			result := hwy.MulF16(x, sigmoidX)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -279,7 +280,7 @@ func BaseGELUApprox_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
 			xScaled1 := hwy.MulF16(x1, vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_neon_Float16(xScaled1)
 			result1 := hwy.MulF16(x1, sigmoidX1)
-			hwy.Store(result1, output[ii+8:])
+			hwy.StoreFull(result1, output[ii+8:])
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -295,7 +296,7 @@ func BaseGELUApprox_neon_Float16(input []hwy.Float16, output []hwy.Float16) {
 			xScaled := hwy.MulF16(x, vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon_Float16(xScaled)
 			result := hwy.MulF16(x, sigmoidX)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -320,7 +321,7 @@ func BaseGELUApprox_neon_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			xScaled := hwy.MulBF16(x, vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon_BFloat16(xScaled)
 			result := hwy.MulBF16(x, sigmoidX)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -334,7 +335,7 @@ func BaseGELUApprox_neon_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			xScaled1 := hwy.MulBF16(x1, vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_neon_BFloat16(xScaled1)
 			result1 := hwy.MulBF16(x1, sigmoidX1)
-			hwy.Store(result1, output[ii+8:])
+			hwy.StoreFull(result1, output[ii+8:])
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -350,7 +351,7 @@ func BaseGELUApprox_neon_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			xScaled := hwy.MulBF16(x, vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon_BFloat16(xScaled)
 			result := hwy.MulBF16(x, sigmoidX)
-			hwy.Store(result, output[ii:])
+			hwy.StoreFull(result, output[ii:])
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -371,11 +372,11 @@ func BaseGELUApprox_neon(input []float32, output []float32) {
 	for ; ii+8 <= size; ii += 8 {
 		remaining := size - ii
 		if remaining >= 4 {
-			x := asm.LoadFloat32x4Slice(input[ii:])
+			x := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(output[ii:])
+			result.Store((*[4]float32)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -385,11 +386,11 @@ func BaseGELUApprox_neon(input []float32, output []float32) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 4 {
-			x1 := asm.LoadFloat32x4Slice(input[ii+4:])
+			x1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&input[ii+4])))
 			xScaled1 := x1.Mul(vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_neon(xScaled1)
 			result1 := x1.Mul(sigmoidX1)
-			result1.StoreSlice(output[ii+4:])
+			result1.Store((*[4]float32)(unsafe.Pointer(&output[ii+4])))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1])
@@ -401,11 +402,11 @@ func BaseGELUApprox_neon(input []float32, output []float32) {
 	for ; ii+4 <= size; ii += 4 {
 		remaining := size - ii
 		if remaining >= 4 {
-			x := asm.LoadFloat32x4Slice(input[ii:])
+			x := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(output[ii:])
+			result.Store((*[4]float32)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -426,11 +427,11 @@ func BaseGELUApprox_neon_Float64(input []float64, output []float64) {
 	for ; ii+4 <= size; ii += 4 {
 		remaining := size - ii
 		if remaining >= 2 {
-			x := asm.LoadFloat64x2Slice(input[ii:])
+			x := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon_Float64(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(output[ii:])
+			result.Store((*[2]float64)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -440,11 +441,11 @@ func BaseGELUApprox_neon_Float64(input []float64, output []float64) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 2 {
-			x1 := asm.LoadFloat64x2Slice(input[ii+2:])
+			x1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&input[ii+2])))
 			xScaled1 := x1.Mul(vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_neon_Float64(xScaled1)
 			result1 := x1.Mul(sigmoidX1)
-			result1.StoreSlice(output[ii+2:])
+			result1.Store((*[2]float64)(unsafe.Pointer(&output[ii+2])))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1])
@@ -456,11 +457,11 @@ func BaseGELUApprox_neon_Float64(input []float64, output []float64) {
 	for ; ii+2 <= size; ii += 2 {
 		remaining := size - ii
 		if remaining >= 2 {
-			x := asm.LoadFloat64x2Slice(input[ii:])
+			x := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&input[ii])))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_neon_Float64(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(output[ii:])
+			result.Store((*[2]float64)(unsafe.Pointer(&output[ii])))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])

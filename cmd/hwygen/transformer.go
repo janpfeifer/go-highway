@@ -777,7 +777,7 @@ func adjustLoopIndices(stmt ast.Stmt, iterator string, iteration int, lanes int)
 }
 
 // addOffsetToExpr adds an offset to an expression if it references the iterator.
-// E.g., if iterator="i" and offset=8: i -> i+8, i+lanes -> i+lanes+8
+// E.g., if iterator="i" and offset=8: i -> i+8, i+lanes -> i+lanes+8, i-1 -> i-1+8
 func addOffsetToExpr(expr ast.Expr, iterator string, offset int) ast.Expr {
 	// Check if expr directly references the iterator
 	if ident, ok := expr.(*ast.Ident); ok && ident.Name == iterator {
@@ -788,10 +788,10 @@ func addOffsetToExpr(expr ast.Expr, iterator string, offset int) ast.Expr {
 		}
 	}
 
-	// Check if expr is i+something
-	if binExpr, ok := expr.(*ast.BinaryExpr); ok && binExpr.Op == token.ADD {
+	// Check if expr is i+something or i-something
+	if binExpr, ok := expr.(*ast.BinaryExpr); ok && (binExpr.Op == token.ADD || binExpr.Op == token.SUB) {
 		if ident, ok := binExpr.X.(*ast.Ident); ok && ident.Name == iterator {
-			// Transform i+N to i+N+offset
+			// Transform i+N to i+N+offset, i-N to i-N+offset
 			return &ast.BinaryExpr{
 				X:  binExpr,
 				Op: token.ADD,
@@ -2881,13 +2881,46 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				call.Args[0] = cast
 			}
+		} else if ctx.target.Name == "NEON" {
+			// For NEON, use asm pointer cast to avoid bounds checks
+			// asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&src[idx])))
+			lanes := ctx.target.LanesFor(effectiveElemType)
+			fullName = fmt.Sprintf("Load%s", vecTypeName)
+			selExpr.X = ast.NewIdent(pkgName)
+
+			// Transform argument to pointer cast
+			if len(call.Args) > 0 {
+				src := call.Args[0]
+				addrExpr := optimizeSliceToPointer(src)
+				ptr := &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   ast.NewIdent("unsafe"),
+						Sel: ast.NewIdent("Pointer"),
+					},
+					Args: []ast.Expr{addrExpr},
+				}
+				// (*[lanes]T)(ptr)
+				cast := &ast.CallExpr{
+					Fun: &ast.ParenExpr{
+						X: &ast.StarExpr{
+							X: &ast.ArrayType{
+								Len: &ast.BasicLit{Kind: token.INT, Value: strconv.Itoa(lanes)},
+								Elt: ast.NewIdent(effectiveElemType),
+							},
+						},
+					},
+					Args: []ast.Expr{ptr},
+				}
+				call.Args[0] = cast
+			}
 		} else {
-			// NEON/Fallback use generic hwy.LoadFull
+			// Fallback: keep generic hwy.LoadFull
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "LoadFull"
 		}
 	case "StoreFull":
-		// For NEON/Fallback (IsMethod: false), use generic hwy.StoreFull
+		// For Fallback (IsMethod: false), use generic hwy.StoreFull
+		// NEON/AVX use IsMethod: true, handled in transformToMethod
 		selExpr.X = ast.NewIdent("hwy")
 		selExpr.Sel.Name = "StoreFull"
 	case "Load4":

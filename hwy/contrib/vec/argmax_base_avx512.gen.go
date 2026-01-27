@@ -7,6 +7,7 @@ package vec
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+	"unsafe"
 )
 
 func BaseArgmax_avx512_Float16(v []hwy.Float16) int {
@@ -153,17 +154,17 @@ func BaseArgmax_avx512(v []float32) int {
 	maxIdxs := hwy.Iota_AVX512_F32x16()
 	i := lanes
 	for ; i+lanes*3 <= len(v); i += lanes * 3 {
-		vals := archsimd.LoadFloat32x16Slice(v[i:])
+		vals := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&v[i])))
 		curIdxs := archsimd.BroadcastFloat32x16(float32(i)).Add(hwy.Iota_AVX512_F32x16())
 		mask := vals.Greater(maxVals)
 		maxVals = hwy.IfThenElse_AVX512_F32x16(mask, vals, maxVals)
 		maxIdxs = hwy.IfThenElse_AVX512_F32x16(mask, curIdxs, maxIdxs)
-		vals1 := archsimd.LoadFloat32x16Slice(v[i+16:])
+		vals1 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&v[i+16])))
 		curIdxs1 := archsimd.BroadcastFloat32x16(float32(i)).Add(hwy.Iota_AVX512_F32x16())
 		mask1 := vals1.Greater(maxVals)
 		maxVals = hwy.IfThenElse_AVX512_F32x16(mask1, vals1, maxVals)
 		maxIdxs = hwy.IfThenElse_AVX512_F32x16(mask1, curIdxs1, maxIdxs)
-		vals2 := archsimd.LoadFloat32x16Slice(v[i+32:])
+		vals2 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&v[i+32])))
 		curIdxs2 := archsimd.BroadcastFloat32x16(float32(i)).Add(hwy.Iota_AVX512_F32x16())
 		mask2 := vals2.Greater(maxVals)
 		maxVals = hwy.IfThenElse_AVX512_F32x16(mask2, vals2, maxVals)
@@ -219,17 +220,17 @@ func BaseArgmax_avx512_Float64(v []float64) int {
 	maxIdxs := hwy.Iota_AVX512_F64x8()
 	i := lanes
 	for ; i+lanes*3 <= len(v); i += lanes * 3 {
-		vals := archsimd.LoadFloat64x8Slice(v[i:])
+		vals := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&v[i])))
 		curIdxs := archsimd.BroadcastFloat64x8(float64(i)).Add(hwy.Iota_AVX512_F64x8())
 		mask := vals.Greater(maxVals)
 		maxVals = hwy.IfThenElse_AVX512_F64x8(mask, vals, maxVals)
 		maxIdxs = hwy.IfThenElse_AVX512_F64x8(mask, curIdxs, maxIdxs)
-		vals1 := archsimd.LoadFloat64x8Slice(v[i+8:])
+		vals1 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&v[i+8])))
 		curIdxs1 := archsimd.BroadcastFloat64x8(float64(i)).Add(hwy.Iota_AVX512_F64x8())
 		mask1 := vals1.Greater(maxVals)
 		maxVals = hwy.IfThenElse_AVX512_F64x8(mask1, vals1, maxVals)
 		maxIdxs = hwy.IfThenElse_AVX512_F64x8(mask1, curIdxs1, maxIdxs)
-		vals2 := archsimd.LoadFloat64x8Slice(v[i+16:])
+		vals2 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&v[i+16])))
 		curIdxs2 := archsimd.BroadcastFloat64x8(float64(i)).Add(hwy.Iota_AVX512_F64x8())
 		mask2 := vals2.Greater(maxVals)
 		maxVals = hwy.IfThenElse_AVX512_F64x8(mask2, vals2, maxVals)
@@ -417,17 +418,17 @@ func BaseArgmin_avx512(v []float32) int {
 	minIdxs := hwy.Iota_AVX512_F32x16()
 	i := lanes
 	for ; i+lanes*3 <= len(v); i += lanes * 3 {
-		vals := archsimd.LoadFloat32x16Slice(v[i:])
+		vals := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&v[i])))
 		curIdxs := archsimd.BroadcastFloat32x16(float32(i)).Add(hwy.Iota_AVX512_F32x16())
 		mask := vals.Less(minVals)
 		minVals = hwy.IfThenElse_AVX512_F32x16(mask, vals, minVals)
 		minIdxs = hwy.IfThenElse_AVX512_F32x16(mask, curIdxs, minIdxs)
-		vals1 := archsimd.LoadFloat32x16Slice(v[i+16:])
+		vals1 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&v[i+16])))
 		curIdxs1 := archsimd.BroadcastFloat32x16(float32(i)).Add(hwy.Iota_AVX512_F32x16())
 		mask1 := vals1.Less(minVals)
 		minVals = hwy.IfThenElse_AVX512_F32x16(mask1, vals1, minVals)
 		minIdxs = hwy.IfThenElse_AVX512_F32x16(mask1, curIdxs1, minIdxs)
-		vals2 := archsimd.LoadFloat32x16Slice(v[i+32:])
+		vals2 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&v[i+32])))
 		curIdxs2 := archsimd.BroadcastFloat32x16(float32(i)).Add(hwy.Iota_AVX512_F32x16())
 		mask2 := vals2.Less(minVals)
 		minVals = hwy.IfThenElse_AVX512_F32x16(mask2, vals2, minVals)
@@ -483,17 +484,17 @@ func BaseArgmin_avx512_Float64(v []float64) int {
 	minIdxs := hwy.Iota_AVX512_F64x8()
 	i := lanes
 	for ; i+lanes*3 <= len(v); i += lanes * 3 {
-		vals := archsimd.LoadFloat64x8Slice(v[i:])
+		vals := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&v[i])))
 		curIdxs := archsimd.BroadcastFloat64x8(float64(i)).Add(hwy.Iota_AVX512_F64x8())
 		mask := vals.Less(minVals)
 		minVals = hwy.IfThenElse_AVX512_F64x8(mask, vals, minVals)
 		minIdxs = hwy.IfThenElse_AVX512_F64x8(mask, curIdxs, minIdxs)
-		vals1 := archsimd.LoadFloat64x8Slice(v[i+8:])
+		vals1 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&v[i+8])))
 		curIdxs1 := archsimd.BroadcastFloat64x8(float64(i)).Add(hwy.Iota_AVX512_F64x8())
 		mask1 := vals1.Less(minVals)
 		minVals = hwy.IfThenElse_AVX512_F64x8(mask1, vals1, minVals)
 		minIdxs = hwy.IfThenElse_AVX512_F64x8(mask1, curIdxs1, minIdxs)
-		vals2 := archsimd.LoadFloat64x8Slice(v[i+16:])
+		vals2 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&v[i+16])))
 		curIdxs2 := archsimd.BroadcastFloat64x8(float64(i)).Add(hwy.Iota_AVX512_F64x8())
 		mask2 := vals2.Less(minVals)
 		minVals = hwy.IfThenElse_AVX512_F64x8(mask2, vals2, minVals)

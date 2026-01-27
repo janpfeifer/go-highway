@@ -7,25 +7,22 @@ package algo
 import (
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
+	"unsafe"
 )
 
 func BaseApply_neon_Float16(in []hwy.Float16, out []hwy.Float16, fn func(hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16]) {
 	n := min(len(in), len(out))
 	lanes := 8
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
+	for ; i+lanes*2 <= n; i += lanes * 2 {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 		x1 := hwy.Load(in[i+8:])
-		hwy.Store(fn(x1), out[i+8:])
-		x2 := hwy.Load(in[i+16:])
-		hwy.Store(fn(x2), out[i+16:])
-		x3 := hwy.Load(in[i+24:])
-		hwy.Store(fn(x3), out[i+24:])
+		hwy.StoreFull(fn(x1), out[i+8:])
 	}
 	for ; i+lanes <= n; i += lanes {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]hwy.Float16{}
@@ -40,19 +37,15 @@ func BaseApply_neon_BFloat16(in []hwy.BFloat16, out []hwy.BFloat16, fn func(hwy.
 	n := min(len(in), len(out))
 	lanes := 8
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
+	for ; i+lanes*2 <= n; i += lanes * 2 {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 		x1 := hwy.Load(in[i+8:])
-		hwy.Store(fn(x1), out[i+8:])
-		x2 := hwy.Load(in[i+16:])
-		hwy.Store(fn(x2), out[i+16:])
-		x3 := hwy.Load(in[i+24:])
-		hwy.Store(fn(x3), out[i+24:])
+		hwy.StoreFull(fn(x1), out[i+8:])
 	}
 	for ; i+lanes <= n; i += lanes {
 		x := hwy.Load(in[i:])
-		hwy.Store(fn(x), out[i:])
+		hwy.StoreFull(fn(x), out[i:])
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]hwy.BFloat16{}
@@ -67,19 +60,15 @@ func BaseApply_neon(in []float32, out []float32, fn func(asm.Float32x4) asm.Floa
 	n := min(len(in), len(out))
 	lanes := 4
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
-		x := asm.LoadFloat32x4Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
-		x1 := asm.LoadFloat32x4Slice(in[i+4:])
-		fn(x1).StoreSlice(out[i+4:])
-		x2 := asm.LoadFloat32x4Slice(in[i+8:])
-		fn(x2).StoreSlice(out[i+8:])
-		x3 := asm.LoadFloat32x4Slice(in[i+12:])
-		fn(x3).StoreSlice(out[i+12:])
+	for ; i+lanes*2 <= n; i += lanes * 2 {
+		x := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[4]float32)(unsafe.Pointer(&out[i])))
+		x1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&in[i+4])))
+		fn(x1).Store((*[4]float32)(unsafe.Pointer(&out[i+4])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := asm.LoadFloat32x4Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
+		x := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[4]float32)(unsafe.Pointer(&out[i])))
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [4]float32{}
@@ -94,19 +83,15 @@ func BaseApply_neon_Float64(in []float64, out []float64, fn func(asm.Float64x2) 
 	n := min(len(in), len(out))
 	lanes := 2
 	i := 0
-	for ; i+lanes*4 <= n; i += lanes * 4 {
-		x := asm.LoadFloat64x2Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
-		x1 := asm.LoadFloat64x2Slice(in[i+2:])
-		fn(x1).StoreSlice(out[i+2:])
-		x2 := asm.LoadFloat64x2Slice(in[i+4:])
-		fn(x2).StoreSlice(out[i+4:])
-		x3 := asm.LoadFloat64x2Slice(in[i+6:])
-		fn(x3).StoreSlice(out[i+6:])
+	for ; i+lanes*2 <= n; i += lanes * 2 {
+		x := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[2]float64)(unsafe.Pointer(&out[i])))
+		x1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&in[i+2])))
+		fn(x1).Store((*[2]float64)(unsafe.Pointer(&out[i+2])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := asm.LoadFloat64x2Slice(in[i:])
-		fn(x).StoreSlice(out[i:])
+		x := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&in[i])))
+		fn(x).Store((*[2]float64)(unsafe.Pointer(&out[i])))
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [2]float64{}
