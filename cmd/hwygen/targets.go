@@ -14,7 +14,11 @@
 
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // Target represents an architecture-specific code generation target.
 type Target struct {
@@ -853,20 +857,31 @@ func NEONTarget() Target {
 	}
 }
 
+// targetRegistry maps target names to their constructor functions.
+var targetRegistry = map[string]func() Target{
+	"avx2":     AVX2Target,
+	"avx512":   AVX512Target,
+	"neon":     NEONTarget,
+	"fallback": FallbackTarget,
+}
+
+// AvailableTargets returns a sorted list of valid target names.
+func AvailableTargets() []string {
+	names := make([]string, 0, len(targetRegistry))
+	for name := range targetRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // GetTarget returns the target configuration for the given name.
 func GetTarget(name string) (Target, error) {
-	switch name {
-	case "avx2":
-		return AVX2Target(), nil
-	case "avx512":
-		return AVX512Target(), nil
-	case "neon":
-		return NEONTarget(), nil
-	case "fallback":
-		return FallbackTarget(), nil
-	default:
-		return Target{}, fmt.Errorf("unknown target: %s (valid: avx2, avx512, neon, fallback)", name)
+	factory, ok := targetRegistry[name]
+	if !ok {
+		return Target{}, fmt.Errorf("unknown target: %s (valid: %s)", name, strings.Join(AvailableTargets(), ", "))
 	}
+	return factory(), nil
 }
 
 // Suffix returns the filename suffix for this target (e.g., "_avx2").

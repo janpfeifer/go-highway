@@ -1311,21 +1311,30 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 				hasExplicitTypeParam = true
 			}
 		}
-		// Transform hwy.Const[T](val) to hwy.Set(val) for non-float32 types
-		// ONLY when val is a named constant (identifier), not a literal.
-		// Named constants have been suffix-transformed to the correct type.
-		// Literals should stay with Const which handles the conversion.
+		// Transform hwy.Const[T](val) to hwy.Set(val) for non-float32 types.
+		// hwy.Const takes float32, which loses precision for float64 targets.
+		// Named constants are suffix-transformed to the correct type by the generator.
+		// Literals (like 0.5) are untyped in Go, so Set[float64](0.5) preserves
+		// full precision. For half-precision types, literals must stay with Const
+		// since Set[Float16](0.5) won't compile (no implicit conversion).
 		// Note: We don't return here - let the transformation continue so Set gets
 		// transformed to asm.Broadcast* for SIMD targets.
 		if selExpr.Sel.Name == "Const" {
 			if ident, ok := selExpr.X.(*ast.Ident); ok && ident.Name == "hwy" {
 				if ctx.elemType != "float32" && len(call.Args) > 0 {
-					// Only transform if the argument is an identifier (named constant)
-					// or binary expression like `constant * 2`
+					// Named constants and binary expressions: always convert to Set
 					if _, isIdent := call.Args[0].(*ast.Ident); isIdent {
 						selExpr.Sel.Name = "Set"
 					} else if _, isBinary := call.Args[0].(*ast.BinaryExpr); isBinary {
 						selExpr.Sel.Name = "Set"
+					}
+					// Literals: convert to Set for native types (float64) to avoid
+					// float32 precision truncation. Half-precision types must keep
+					// Const because Go can't convert untyped floats to Float16/BFloat16.
+					if !isHalfPrecisionType(ctx.elemType) {
+						if _, isLit := call.Args[0].(*ast.BasicLit); isLit {
+							selExpr.Sel.Name = "Set"
+						}
 					}
 				}
 			}
@@ -1866,8 +1875,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				Index: ast.NewIdent(ctx.elemType),
 			}
 			return
-		case "Set", "Zero":
-			// Keep hwy.Set[T](val) and hwy.Zero[T]() as-is/generic for half-precision
+		case "Set", "Zero", "Const":
+			// Keep hwy.Set[T](val), hwy.Zero[T](), and hwy.Const[T](val) as-is for half-precision
 			return
 		}
 

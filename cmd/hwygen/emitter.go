@@ -341,22 +341,10 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 	fmt.Fprintf(&buf, "//go:build %s\n", buildTag)
 	fmt.Fprintf(&buf, "\npackage %s\n\n", pkgName)
 
-	// Check if any function has type params (needs hwy import for generic dispatcher)
-	hasGenerics := false
-	for _, pf := range dispatchableFuncs {
-		if len(pf.TypeParams) > 0 {
-			hasGenerics = true
-			break
-		}
-	}
-
 	// Imports - amd64 needs archsimd, arm64 doesn't
-	// hwy needed for generic dispatcher type constraint
+	// hwy always needed for NoSimdEnv() and generic dispatcher type constraint
 	fmt.Fprintf(&buf, "import (\n")
-	fmt.Fprintf(&buf, "\t\"os\"\n")
-	if hasGenerics {
-		fmt.Fprintf(&buf, "\n\t\"github.com/ajroetker/go-highway/hwy\"\n")
-	}
+	fmt.Fprintf(&buf, "\t\"github.com/ajroetker/go-highway/hwy\"\n")
 	if arch == "amd64" {
 		fmt.Fprintf(&buf, "\t\"simd/archsimd\"\n")
 	}
@@ -392,7 +380,7 @@ func emitArchDispatcher(funcs []ParsedFunc, archTargets []Target, hasFallback bo
 
 	// Generate init() function
 	fmt.Fprintf(&buf, "func init() {\n")
-	fmt.Fprintf(&buf, "\tif os.Getenv(\"HWY_NO_SIMD\") != \"\" {\n")
+	fmt.Fprintf(&buf, "\tif hwy.NoSimdEnv() {\n")
 	fmt.Fprintf(&buf, "\t\tinit%sFallback()\n", capPrefix)
 	fmt.Fprintf(&buf, "\t\treturn\n")
 	fmt.Fprintf(&buf, "\t}\n")
@@ -522,15 +510,6 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath, prefix, su
 
 	var buf bytes.Buffer
 
-	// Check if any function has type params (needs hwy import for generic dispatcher)
-	hasGenerics := false
-	for _, pf := range dispatchableFuncs {
-		if len(pf.TypeParams) > 0 {
-			hasGenerics = true
-			break
-		}
-	}
-
 	fmt.Fprintf(&buf, HeaderNote)
 	if buildTag != "" {
 		fmt.Fprintf(&buf, "//go:build %s\n", buildTag)
@@ -538,10 +517,7 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath, prefix, su
 	fmt.Fprintf(&buf, "\npackage %s\n\n", pkgName)
 
 	fmt.Fprintf(&buf, "import (\n")
-	fmt.Fprintf(&buf, "\t\"os\"\n")
-	if hasGenerics {
-		fmt.Fprintf(&buf, "\n\t\"github.com/ajroetker/go-highway/hwy\"\n")
-	}
+	fmt.Fprintf(&buf, "\t\"github.com/ajroetker/go-highway/hwy\"\n")
 	fmt.Fprintf(&buf, ")\n\n")
 
 	// Declare function variables
@@ -574,7 +550,7 @@ func emitFallbackOnlyDispatcher(funcs []ParsedFunc, pkgName, outPath, prefix, su
 
 	// Simple init that just uses fallback
 	fmt.Fprintf(&buf, "func init() {\n")
-	fmt.Fprintf(&buf, "\t_ = os.Getenv // silence unused import\n")
+	fmt.Fprintf(&buf, "\t_ = hwy.NoSimdEnv // silence unused import\n")
 	fmt.Fprintf(&buf, "\tinit%sFallback()\n", capPrefix)
 	fmt.Fprintf(&buf, "}\n\n")
 
@@ -899,8 +875,21 @@ func emitGenericDispatcher(buf *bytes.Buffer, pf ParsedFunc) {
 	genericName := buildGenericFuncName(pf.Name, hasInterfaceParams)
 	concreteTypes := GetConcreteTypes(pf.TypeParams[0].Constraint)
 
-	// Function signature with type parameters
-	fmt.Fprintf(buf, "// %s is the generic API that dispatches to the appropriate SIMD implementation.\n", genericName)
+	// Copy doc comments from the base function, then add dispatch note
+	if pf.Doc != nil {
+		for _, comment := range pf.Doc.List {
+			// Rewrite the first line to use the dispatch function name instead of the base name
+			text := comment.Text
+			if strings.HasPrefix(text, "// "+pf.Name+" ") {
+				text = "// " + genericName + " " + strings.TrimPrefix(text, "// "+pf.Name+" ")
+			}
+			fmt.Fprintf(buf, "%s\n", text)
+		}
+		fmt.Fprintf(buf, "//\n")
+		fmt.Fprintf(buf, "// This function dispatches to the appropriate SIMD implementation at runtime.\n")
+	} else {
+		fmt.Fprintf(buf, "// %s is the generic API that dispatches to the appropriate SIMD implementation.\n", genericName)
+	}
 	fmt.Fprintf(buf, "func %s[", genericName)
 
 	// Build type parameter list - include all type parameters
