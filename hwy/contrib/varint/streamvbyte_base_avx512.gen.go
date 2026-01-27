@@ -5,9 +5,10 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseDecodeStreamVByte32_avx512(control []byte, data []uint8, n int) []uint32 {

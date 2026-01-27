@@ -5,9 +5,10 @@
 package image
 
 import (
+	"simd/archsimd"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
-	"simd/archsimd"
 )
 
 func BaseBrightnessContrast_avx512_Float16(img *Image[hwy.Float16], out *Image[hwy.Float16], scale hwy.Float16, offset hwy.Float16) {

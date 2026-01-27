@@ -3,9 +3,10 @@
 package gelu
 
 import (
+	stdmath "math"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
-	stdmath "math"
 )
 
 func BaseGELU_fallback_Float16(input []hwy.Float16, output []hwy.Float16) {
@@ -67,19 +68,19 @@ func BaseGELU_fallback(input []float32, output []float32) {
 	if size == 0 {
 		return
 	}
-	vHalf := hwy.Const[float32](0.5)
-	vOne := hwy.Const[float32](1.0)
-	vInvSqrt2 := hwy.Const[float32](0.7071067811865476)
-	for ii := 0; ii < size; ii += vOne.NumLanes() {
+	vHalf := float32(0.5)
+	vOne := float32(1.0)
+	vInvSqrt2 := float32(0.7071067811865476)
+	for ii := 0; ii < size; ii++ {
 		remaining := size - ii
-		if remaining >= vOne.NumLanes() {
-			x := hwy.LoadFull(input[ii:])
-			xScaled := hwy.Mul(x, vInvSqrt2)
-			erfX := math.BaseErfVec_fallback(xScaled)
-			onePlusErf := hwy.Add(vOne, erfX)
-			halfOnePlusErf := hwy.Mul(vHalf, onePlusErf)
-			result := hwy.Mul(x, halfOnePlusErf)
-			hwy.StoreFull(result, output[ii:])
+		if remaining >= 1 {
+			x := input[ii]
+			xScaled := x * vInvSqrt2
+			erfX := float32(stdmath.Erf(float64(xScaled)))
+			onePlusErf := vOne + erfX
+			halfOnePlusErf := vHalf * onePlusErf
+			result := x * halfOnePlusErf
+			output[ii] = result
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -94,19 +95,19 @@ func BaseGELU_fallback_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vHalf := hwy.Const[float64](0.5)
-	vOne := hwy.Const[float64](1.0)
-	vInvSqrt2 := hwy.Const[float64](0.7071067811865476)
-	for ii := 0; ii < size; ii += vOne.NumLanes() {
+	vHalf := float64(0.5)
+	vOne := float64(1.0)
+	vInvSqrt2 := float64(0.7071067811865476)
+	for ii := 0; ii < size; ii++ {
 		remaining := size - ii
-		if remaining >= vOne.NumLanes() {
-			x := hwy.LoadFull(input[ii:])
-			xScaled := hwy.Mul(x, vInvSqrt2)
-			erfX := math.BaseErfVec_fallback_Float64(xScaled)
-			onePlusErf := hwy.Add(vOne, erfX)
-			halfOnePlusErf := hwy.Mul(vHalf, onePlusErf)
-			result := hwy.Mul(x, halfOnePlusErf)
-			hwy.StoreFull(result, output[ii:])
+		if remaining >= 1 {
+			x := input[ii]
+			xScaled := x * vInvSqrt2
+			erfX := float64(stdmath.Erf(float64(xScaled)))
+			onePlusErf := vOne + erfX
+			halfOnePlusErf := vHalf * onePlusErf
+			result := x * halfOnePlusErf
+			output[ii] = result
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i])
@@ -193,7 +194,7 @@ func BaseGELUApprox_fallback_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vCoeff := hwy.Const[float64](1.702)
+	vCoeff := hwy.Set[float64](1.702)
 	for ii := 0; ii < size; ii += vCoeff.NumLanes() {
 		remaining := size - ii
 		if remaining >= vCoeff.NumLanes() {

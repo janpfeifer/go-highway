@@ -5,8 +5,9 @@
 package matmul
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BasePackedMicroKernel4x2_avx2_Float16(packedA []hwy.Float16, packedB []hwy.Float16, output []hwy.Float16, outputStride int, outRowStart int, outColStart int, panelK int, lanes int) {

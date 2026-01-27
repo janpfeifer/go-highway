@@ -5,9 +5,10 @@
 package bitpack
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BasePack32_avx512(src []uint32, bitWidth int, dst []byte) int {

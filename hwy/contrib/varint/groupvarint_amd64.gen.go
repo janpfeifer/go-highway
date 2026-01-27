@@ -5,14 +5,15 @@
 package varint
 
 import (
-	"os"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var DecodeGroupVarint32 func(src []byte) (values [4]uint32, consumed int)
 
 func init() {
-	if os.Getenv("HWY_NO_SIMD") != "" {
+	if hwy.NoSimdEnv() {
 		initGroupvarintFallback()
 		return
 	}

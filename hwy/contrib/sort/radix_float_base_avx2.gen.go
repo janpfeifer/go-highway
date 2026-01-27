@@ -5,8 +5,9 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseFloatToSortable_avx2_Float16(data []hwy.Float16) {

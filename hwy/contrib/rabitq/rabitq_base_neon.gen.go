@@ -5,9 +5,10 @@
 package rabitq
 
 import (
+	"math/bits"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
-	"math/bits"
 )
 
 func BaseBitProduct_neon(code []uint64, q1 []uint64, q2 []uint64, q3 []uint64, q4 []uint64) uint32 {

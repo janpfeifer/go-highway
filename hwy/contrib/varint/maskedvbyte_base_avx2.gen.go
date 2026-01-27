@@ -5,8 +5,9 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 // Hoisted constants - pre-broadcasted at package init time
@@ -65,4 +66,22 @@ func BaseMaskedVByteDecodeGroup_avx2(src []byte, dst []uint32) (decoded int, con
 	dst[2] = uint32(result[8]&0x7f) | uint32(result[9]&0x7f)<<7 | uint32(result[10]&0x7f)<<14 | uint32(result[11])<<21
 	dst[3] = uint32(result[12]&0x7f) | uint32(result[13]&0x7f)<<7 | uint32(result[14]&0x7f)<<14 | uint32(result[15])<<21
 	return int(lookup.numValues), int(lookup.bytesConsumed)
+}
+
+func BaseMaskedVByteDecodeBatch64_avx2(src []byte, dst []uint64, n int) (decoded int, consumed int) {
+	if len(src) == 0 || n == 0 || len(dst) == 0 {
+		return 0, 0
+	}
+	maxDecode := min(n, len(dst))
+	pos := 0
+	for decoded < maxDecode && pos < len(src) {
+		val, bytesRead := baseMaskedVByteDecodeOne64(src[pos:])
+		if bytesRead == 0 {
+			break
+		}
+		dst[decoded] = val
+		decoded++
+		pos += bytesRead
+	}
+	return decoded, pos
 }

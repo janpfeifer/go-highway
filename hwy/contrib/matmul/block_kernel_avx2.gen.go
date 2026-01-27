@@ -5,8 +5,9 @@
 package matmul
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseBlockMulAdd_avx2_Float16(aT []hwy.Float16, b []hwy.Float16, c []hwy.Float16, blockDim int) {

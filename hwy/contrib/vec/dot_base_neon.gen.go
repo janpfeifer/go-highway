@@ -5,9 +5,10 @@
 package vec
 
 import (
+	"unsafe"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
-	"unsafe"
 )
 
 func BaseDot_neon_Float16(a []hwy.Float16, b []hwy.Float16) hwy.Float16 {

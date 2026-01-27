@@ -5,18 +5,20 @@
 package varint
 
 import (
-	"os"
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var MaskedVByteDecodeBatch32 func(src []byte, dst []uint32, n int) (decoded int, consumed int)
 var MaskedVByteDecodeGroup func(src []byte, dst []uint32) (decoded int, consumed int)
+var MaskedVByteDecodeBatch64 func(src []byte, dst []uint64, n int) (decoded int, consumed int)
 
 func init() {
-	_ = os.Getenv // silence unused import
+	_ = hwy.NoSimdEnv // silence unused import
 	initMaskedvbyteFallback()
 }
 
 func initMaskedvbyteFallback() {
 	MaskedVByteDecodeBatch32 = BaseMaskedVByteDecodeBatch32_fallback
 	MaskedVByteDecodeGroup = BaseMaskedVByteDecodeGroup_fallback
+	MaskedVByteDecodeBatch64 = BaseMaskedVByteDecodeBatch64_fallback
 }

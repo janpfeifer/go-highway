@@ -5,10 +5,9 @@
 package sort
 
 import (
-	"os"
+	"simd/archsimd"
 
 	"github.com/ajroetker/go-highway/hwy"
-	"simd/archsimd"
 )
 
 var FloatToSortableFloat16 func(data []hwy.Float16)
@@ -20,7 +19,10 @@ var SortableToFloatBFloat16 func(data []hwy.BFloat16)
 var SortableToFloatFloat32 func(data []float32)
 var SortableToFloatFloat64 func(data []float64)
 
-// FloatToSortable is the generic API that dispatches to the appropriate SIMD implementation.
+// FloatToSortable transforms float values to sortable order in-place.
+// Positive floats: flip sign bit. Negative floats: flip all bits.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func FloatToSortable[T hwy.Floats](data []T) {
 	switch any(data).(type) {
 	case []hwy.Float16:
@@ -34,7 +36,9 @@ func FloatToSortable[T hwy.Floats](data []T) {
 	}
 }
 
-// SortableToFloat is the generic API that dispatches to the appropriate SIMD implementation.
+// SortableToFloat transforms sortable values back to float in-place.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func SortableToFloat[T hwy.Floats](data []T) {
 	switch any(data).(type) {
 	case []hwy.Float16:
@@ -49,7 +53,7 @@ func SortableToFloat[T hwy.Floats](data []T) {
 }
 
 func init() {
-	if os.Getenv("HWY_NO_SIMD") != "" {
+	if hwy.NoSimdEnv() {
 		initRadix_floatFallback()
 		return
 	}

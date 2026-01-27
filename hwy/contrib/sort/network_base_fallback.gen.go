@@ -15,12 +15,11 @@ func BaseSortSmall_fallback(data []float32) {
 		InsertionSortSmall(data)
 		return
 	}
-	lanes := hwy.MaxLanes[float32]()
-	if n <= lanes {
+	if n <= 1 {
 		SortSingleVector(data)
 		return
 	}
-	if n <= lanes*2 {
+	if n <= 1*2 {
 		SortTwoVectors(data)
 		return
 	}
@@ -36,12 +35,11 @@ func BaseSortSmall_fallback_Float64(data []float64) {
 		InsertionSortSmall(data)
 		return
 	}
-	lanes := hwy.MaxLanes[float64]()
-	if n <= lanes {
+	if n <= 1 {
 		SortSingleVector(data)
 		return
 	}
-	if n <= lanes*2 {
+	if n <= 1*2 {
 		SortTwoVectors(data)
 		return
 	}
@@ -57,12 +55,11 @@ func BaseSortSmall_fallback_Int32(data []int32) {
 		InsertionSortSmall(data)
 		return
 	}
-	lanes := hwy.MaxLanes[int32]()
-	if n <= lanes {
+	if n <= 1 {
 		SortSingleVector(data)
 		return
 	}
-	if n <= lanes*2 {
+	if n <= 1*2 {
 		SortTwoVectors(data)
 		return
 	}
@@ -78,12 +75,11 @@ func BaseSortSmall_fallback_Int64(data []int64) {
 		InsertionSortSmall(data)
 		return
 	}
-	lanes := hwy.MaxLanes[int64]()
-	if n <= lanes {
+	if n <= 1 {
 		SortSingleVector(data)
 		return
 	}
-	if n <= lanes*2 {
+	if n <= 1*2 {
 		SortTwoVectors(data)
 		return
 	}
@@ -99,12 +95,11 @@ func BaseSortSmall_fallback_Uint32(data []uint32) {
 		InsertionSortSmall(data)
 		return
 	}
-	lanes := hwy.MaxLanes[uint32]()
-	if n <= lanes {
+	if n <= 1 {
 		SortSingleVector(data)
 		return
 	}
-	if n <= lanes*2 {
+	if n <= 1*2 {
 		SortTwoVectors(data)
 		return
 	}
@@ -120,12 +115,11 @@ func BaseSortSmall_fallback_Uint64(data []uint64) {
 		InsertionSortSmall(data)
 		return
 	}
-	lanes := hwy.MaxLanes[uint64]()
-	if n <= lanes {
+	if n <= 1 {
 		SortSingleVector(data)
 		return
 	}
-	if n <= lanes*2 {
+	if n <= 1*2 {
 		SortTwoVectors(data)
 		return
 	}

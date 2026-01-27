@@ -5,8 +5,9 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseRadixPass_neon_Int32(src []int32, dst []int32, shift int) {

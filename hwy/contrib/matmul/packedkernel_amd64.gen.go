@@ -5,22 +5,50 @@
 package matmul
 
 import (
-	"os"
+	"simd/archsimd"
 
 	"github.com/ajroetker/go-highway/hwy"
-	"simd/archsimd"
 )
 
 var PackedMicroKernelFloat16 func(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int)
 var PackedMicroKernelBFloat16 func(packedA []hwy.BFloat16, packedB []hwy.BFloat16, c []hwy.BFloat16, n int, ir int, jr int, kc int, mr int, nr int)
 var PackedMicroKernelFloat32 func(packedA []float32, packedB []float32, c []float32, n int, ir int, jr int, kc int, mr int, nr int)
 var PackedMicroKernelFloat64 func(packedA []float64, packedB []float64, c []float64, n int, ir int, jr int, kc int, mr int, nr int)
+var packedMicroKernelGeneralFloat16 func(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int)
+var packedMicroKernelGeneralBFloat16 func(packedA []hwy.BFloat16, packedB []hwy.BFloat16, c []hwy.BFloat16, n int, ir int, jr int, kc int, mr int, nr int)
+var packedMicroKernelGeneralFloat32 func(packedA []float32, packedB []float32, c []float32, n int, ir int, jr int, kc int, mr int, nr int)
+var packedMicroKernelGeneralFloat64 func(packedA []float64, packedB []float64, c []float64, n int, ir int, jr int, kc int, mr int, nr int)
 var PackedMicroKernelPartialFloat16 func(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int)
 var PackedMicroKernelPartialBFloat16 func(packedA []hwy.BFloat16, packedB []hwy.BFloat16, c []hwy.BFloat16, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int)
 var PackedMicroKernelPartialFloat32 func(packedA []float32, packedB []float32, c []float32, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int)
 var PackedMicroKernelPartialFloat64 func(packedA []float64, packedB []float64, c []float64, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int)
 
-// PackedMicroKernel is the generic API that dispatches to the appropriate SIMD implementation.
+// PackedMicroKernel computes C[ir:ir+Mr, jr:jr+Nr] += packedA * packedB
+// where packedA and packedB are in the packed layout from BasePackLHS/BasePackRHS.
+//
+// This is the innermost kernel of the GotoBLAS 5-loop algorithm. It operates on
+// pre-packed data to achieve maximum memory bandwidth utilization:
+//
+//   - packedA: Kc values for Mr rows, laid out as [Kc, Mr] (K-first)
+//   - packedB: Kc values for Nr cols, laid out as [Kc, Nr] (K-first)
+//
+// The kernel uses a 4×2-vector accumulator pattern:
+//   - 4 rows (Mr=4) × 2 vector widths (Nr=2*lanes)
+//   - 8 FMA operations per K iteration
+//   - Accumulators held in registers across entire Kc loop
+//
+// Parameters:
+//   - packedA: Packed A micro-panel, size Kc * Mr
+//   - packedB: Packed B micro-panel, size Kc * Nr
+//   - c: Output matrix C in row-major order
+//   - n: Leading dimension of C (number of columns)
+//   - ir: Starting row in C
+//   - jr: Starting column in C
+//   - kc: K-dimension of the packed panels
+//   - mr: Number of rows (must be 4 for this kernel)
+//   - nr: Number of columns (must be 2*lanes for this kernel)
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func PackedMicroKernel[T hwy.Floats](packedA []T, packedB []T, c []T, n int, ir int, jr int, kc int, mr int, nr int) {
 	switch any(packedA).(type) {
 	case []hwy.Float16:
@@ -34,7 +62,34 @@ func PackedMicroKernel[T hwy.Floats](packedA []T, packedB []T, c []T, n int, ir 
 	}
 }
 
-// PackedMicroKernelPartial is the generic API that dispatches to the appropriate SIMD implementation.
+// packedMicroKernelGeneral handles arbitrary micro-tile sizes.
+// Used as fallback when Mr != 4 or Nr != 2*lanes.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
+func packedMicroKernelGeneral[T hwy.Floats](packedA []T, packedB []T, c []T, n int, ir int, jr int, kc int, mr int, nr int) {
+	switch any(packedA).(type) {
+	case []hwy.Float16:
+		packedMicroKernelGeneralFloat16(any(packedA).([]hwy.Float16), any(packedB).([]hwy.Float16), any(c).([]hwy.Float16), n, ir, jr, kc, mr, nr)
+	case []hwy.BFloat16:
+		packedMicroKernelGeneralBFloat16(any(packedA).([]hwy.BFloat16), any(packedB).([]hwy.BFloat16), any(c).([]hwy.BFloat16), n, ir, jr, kc, mr, nr)
+	case []float32:
+		packedMicroKernelGeneralFloat32(any(packedA).([]float32), any(packedB).([]float32), any(c).([]float32), n, ir, jr, kc, mr, nr)
+	case []float64:
+		packedMicroKernelGeneralFloat64(any(packedA).([]float64), any(packedB).([]float64), any(c).([]float64), n, ir, jr, kc, mr, nr)
+	}
+}
+
+// PackedMicroKernelPartial handles edge cases where the micro-tile
+// extends beyond the matrix bounds.
+//
+// Parameters:
+//   - activeRows: Actual number of valid rows (may be < Mr)
+//   - activeCols: Actual number of valid columns (may be < Nr)
+//
+// The packed data is still Mr × Nr with zero padding, but we only
+// write back the active portion to C.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func PackedMicroKernelPartial[T hwy.Floats](packedA []T, packedB []T, c []T, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int) {
 	switch any(packedA).(type) {
 	case []hwy.Float16:
@@ -49,7 +104,7 @@ func PackedMicroKernelPartial[T hwy.Floats](packedA []T, packedB []T, c []T, n i
 }
 
 func init() {
-	if os.Getenv("HWY_NO_SIMD") != "" {
+	if hwy.NoSimdEnv() {
 		initPackedkernelFallback()
 		return
 	}
@@ -69,6 +124,10 @@ func initPackedkernelAVX2() {
 	PackedMicroKernelBFloat16 = BasePackedMicroKernel_avx2_BFloat16
 	PackedMicroKernelFloat32 = BasePackedMicroKernel_avx2
 	PackedMicroKernelFloat64 = BasePackedMicroKernel_avx2_Float64
+	packedMicroKernelGeneralFloat16 = basePackedMicroKernelGeneral_avx2_Float16
+	packedMicroKernelGeneralBFloat16 = basePackedMicroKernelGeneral_avx2_BFloat16
+	packedMicroKernelGeneralFloat32 = basePackedMicroKernelGeneral_avx2
+	packedMicroKernelGeneralFloat64 = basePackedMicroKernelGeneral_avx2_Float64
 	PackedMicroKernelPartialFloat16 = BasePackedMicroKernelPartial_avx2_Float16
 	PackedMicroKernelPartialBFloat16 = BasePackedMicroKernelPartial_avx2_BFloat16
 	PackedMicroKernelPartialFloat32 = BasePackedMicroKernelPartial_avx2
@@ -80,6 +139,10 @@ func initPackedkernelAVX512() {
 	PackedMicroKernelBFloat16 = BasePackedMicroKernel_avx512_BFloat16
 	PackedMicroKernelFloat32 = BasePackedMicroKernel_avx512
 	PackedMicroKernelFloat64 = BasePackedMicroKernel_avx512_Float64
+	packedMicroKernelGeneralFloat16 = basePackedMicroKernelGeneral_avx512_Float16
+	packedMicroKernelGeneralBFloat16 = basePackedMicroKernelGeneral_avx512_BFloat16
+	packedMicroKernelGeneralFloat32 = basePackedMicroKernelGeneral_avx512
+	packedMicroKernelGeneralFloat64 = basePackedMicroKernelGeneral_avx512_Float64
 	PackedMicroKernelPartialFloat16 = BasePackedMicroKernelPartial_avx512_Float16
 	PackedMicroKernelPartialBFloat16 = BasePackedMicroKernelPartial_avx512_BFloat16
 	PackedMicroKernelPartialFloat32 = BasePackedMicroKernelPartial_avx512
@@ -91,6 +154,10 @@ func initPackedkernelFallback() {
 	PackedMicroKernelBFloat16 = BasePackedMicroKernel_fallback_BFloat16
 	PackedMicroKernelFloat32 = BasePackedMicroKernel_fallback
 	PackedMicroKernelFloat64 = BasePackedMicroKernel_fallback_Float64
+	packedMicroKernelGeneralFloat16 = basePackedMicroKernelGeneral_fallback_Float16
+	packedMicroKernelGeneralBFloat16 = basePackedMicroKernelGeneral_fallback_BFloat16
+	packedMicroKernelGeneralFloat32 = basePackedMicroKernelGeneral_fallback
+	packedMicroKernelGeneralFloat64 = basePackedMicroKernelGeneral_fallback_Float64
 	PackedMicroKernelPartialFloat16 = BasePackedMicroKernelPartial_fallback_Float16
 	PackedMicroKernelPartialBFloat16 = BasePackedMicroKernelPartial_fallback_BFloat16
 	PackedMicroKernelPartialFloat32 = BasePackedMicroKernelPartial_fallback

@@ -5,9 +5,10 @@
 package rabitq
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"math/bits"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseBitProduct_avx2(code []uint64, q1 []uint64, q2 []uint64, q3 []uint64, q4 []uint64) uint32 {

@@ -58,3 +58,21 @@ func BaseMaskedVByteDecodeGroup_fallback(src []byte, dst []uint32) (decoded int,
 	dst[3] = uint32(result[12]&0x7f) | uint32(result[13]&0x7f)<<7 | uint32(result[14]&0x7f)<<14 | uint32(result[15])<<21
 	return int(lookup.numValues), int(lookup.bytesConsumed)
 }
+
+func BaseMaskedVByteDecodeBatch64_fallback(src []byte, dst []uint64, n int) (decoded int, consumed int) {
+	if len(src) == 0 || n == 0 || len(dst) == 0 {
+		return 0, 0
+	}
+	maxDecode := min(n, len(dst))
+	pos := 0
+	for decoded < maxDecode && pos < len(src) {
+		val, bytesRead := baseMaskedVByteDecodeOne64(src[pos:])
+		if bytesRead == 0 {
+			break
+		}
+		dst[decoded] = val
+		decoded++
+		pos += bytesRead
+	}
+	return decoded, pos
+}

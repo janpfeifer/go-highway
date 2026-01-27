@@ -5,8 +5,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	stdmath "math"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseSquaredNorm_avx2_Float16(v []hwy.Float16) hwy.Float16 {

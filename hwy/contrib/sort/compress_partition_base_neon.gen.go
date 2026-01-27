@@ -5,8 +5,9 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseCompressPartition3Way_neon(data []float32, pivot float32) (int, int) {

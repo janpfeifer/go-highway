@@ -5,11 +5,12 @@
 package activation
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
-	"github.com/ajroetker/go-highway/hwy/contrib/math"
 	stdmath "math"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/math"
 )
 
 func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {

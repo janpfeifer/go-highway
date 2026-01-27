@@ -3,7 +3,6 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"unsafe"
 )
 
@@ -16,11 +15,10 @@ func BaseEncodeFloat32s_fallback(dst []byte, src []float32) {
 		panic("dst is too short")
 	}
 	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(&src[0])), totalBytes)
-	lanes := hwy.NumLanes[uint8]()
 	i := 0
-	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](srcBytes[i:])
-		hwy.Store(v, dst[i:])
+	for ; i < totalBytes; i++ {
+		v := srcBytes[i]
+		dst[i] = v
 	}
 	for ; i < totalBytes; i++ {
 		dst[i] = srcBytes[i]
@@ -36,11 +34,10 @@ func BaseDecodeFloat32s_fallback(dst []float32, src []byte) {
 		panic("src is too short")
 	}
 	dstBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dst[0])), totalBytes)
-	lanes := hwy.NumLanes[uint8]()
 	i := 0
-	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](src[i:])
-		hwy.Store(v, dstBytes[i:])
+	for ; i < totalBytes; i++ {
+		v := src[i]
+		dstBytes[i] = v
 	}
 	for ; i < totalBytes; i++ {
 		dstBytes[i] = src[i]
@@ -56,11 +53,10 @@ func BaseEncodeFloat64s_fallback(dst []byte, src []float64) {
 		panic("dst is too short")
 	}
 	srcBytes := unsafe.Slice((*byte)(unsafe.Pointer(&src[0])), totalBytes)
-	lanes := hwy.NumLanes[uint8]()
 	i := 0
-	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](srcBytes[i:])
-		hwy.Store(v, dst[i:])
+	for ; i < totalBytes; i++ {
+		v := srcBytes[i]
+		dst[i] = v
 	}
 	for ; i < totalBytes; i++ {
 		dst[i] = srcBytes[i]
@@ -76,11 +72,10 @@ func BaseDecodeFloat64s_fallback(dst []float64, src []byte) {
 		panic("src is too short")
 	}
 	dstBytes := unsafe.Slice((*byte)(unsafe.Pointer(&dst[0])), totalBytes)
-	lanes := hwy.NumLanes[uint8]()
 	i := 0
-	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](src[i:])
-		hwy.Store(v, dstBytes[i:])
+	for ; i < totalBytes; i++ {
+		v := src[i]
+		dstBytes[i] = v
 	}
 	for ; i < totalBytes; i++ {
 		dstBytes[i] = src[i]

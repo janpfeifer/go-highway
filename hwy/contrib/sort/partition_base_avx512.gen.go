@@ -5,9 +5,10 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BasePartition3Way_avx512(data []float32, pivot float32) (int, int) {

@@ -5,10 +5,9 @@
 package sort
 
 import (
-	"os"
+	"simd/archsimd"
 
 	"github.com/ajroetker/go-highway/hwy"
-	"simd/archsimd"
 )
 
 var Partition3WayFloat32 func(data []float32, pivot float32) (int, int)
@@ -24,7 +23,13 @@ var PartitionInt64 func(data []int64, pivot int64) int
 var PartitionUint32 func(data []uint32, pivot uint32) int
 var PartitionUint64 func(data []uint64, pivot uint64) int
 
-// Partition3Way is the generic API that dispatches to the appropriate SIMD implementation.
+// Partition3Way performs 3-way partitioning around a pivot.
+// Returns (lt, gt) indices where:
+//   - data[0:lt] < pivot
+//   - data[lt:gt] == pivot
+//   - data[gt:n] > pivot
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func Partition3Way[T hwy.Lanes](data []T, pivot T) (int, int) {
 	switch any(data).(type) {
 	case []float32:
@@ -43,7 +48,10 @@ func Partition3Way[T hwy.Lanes](data []T, pivot T) (int, int) {
 	panic("unreachable")
 }
 
-// Partition is the generic API that dispatches to the appropriate SIMD implementation.
+// Partition performs 2-way partitioning around a pivot.
+// Returns index where data[0:idx] <= pivot and data[idx:n] > pivot.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
 func Partition[T hwy.Lanes](data []T, pivot T) int {
 	switch any(data).(type) {
 	case []float32:
@@ -63,7 +71,7 @@ func Partition[T hwy.Lanes](data []T, pivot T) int {
 }
 
 func init() {
-	if os.Getenv("HWY_NO_SIMD") != "" {
+	if hwy.NoSimdEnv() {
 		initPartitionFallback()
 		return
 	}

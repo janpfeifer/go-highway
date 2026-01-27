@@ -5,8 +5,9 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseDecodeStreamVByte32_neon(control []byte, data []uint8, n int) []uint32 {

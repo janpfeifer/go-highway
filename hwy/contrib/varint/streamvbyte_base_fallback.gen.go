@@ -3,8 +3,9 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseDecodeStreamVByte32_fallback(control []byte, data []uint8, n int) []uint32 {

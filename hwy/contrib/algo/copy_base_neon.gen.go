@@ -5,8 +5,9 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseCopyIf_neon(src []float32, dst []float32, pred func(asm.Float32x4) asm.Int32x4) int {

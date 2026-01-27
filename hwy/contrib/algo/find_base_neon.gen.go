@@ -5,8 +5,9 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseFind_neon(slice []float32, value float32) int {

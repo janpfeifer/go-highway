@@ -183,7 +183,7 @@ func BaseMax[T hwy.Lanes](v []T) T {
 //
 //	data := []float32{3, 1, 4, 1, 5}
 //	min, max := MinMax(data)  // min=1, max=5
-func BaseMinMax[T hwy.Floats](v []T) (min, max T) {
+func BaseMinMax[T hwy.Floats](v []T) (minVal, maxVal T) {
 	if len(v) == 0 {
 		panic("vec: MinMax called on empty slice")
 	}
@@ -193,17 +193,17 @@ func BaseMinMax[T hwy.Floats](v []T) (min, max T) {
 
 	// If slice is shorter than one vector, handle with scalar code
 	if len(v) < lanes {
-		min = v[0]
-		max = v[0]
+		minVal = v[0]
+		maxVal = v[0]
 		for i := 1; i < len(v); i++ {
-			if v[i] < min {
-				min = v[i]
+			if v[i] < minVal {
+				minVal = v[i]
 			}
-			if v[i] > max {
-				max = v[i]
+			if v[i] > maxVal {
+				maxVal = v[i]
 			}
 		}
-		return min, max
+		return minVal, maxVal
 	}
 
 	minVec := hwy.Load(v)
@@ -218,18 +218,18 @@ func BaseMinMax[T hwy.Floats](v []T) (min, max T) {
 	}
 
 	// Reduce vector min/max to scalar
-	min = hwy.ReduceMin(minVec)
-	max = hwy.ReduceMax(maxVec)
+	minVal = hwy.ReduceMin(minVec)
+	maxVal = hwy.ReduceMax(maxVec)
 
 	// Handle tail elements with scalar code
 	for ; i < len(v); i++ {
-		if v[i] < min {
-			min = v[i]
+		if v[i] < minVal {
+			minVal = v[i]
 		}
-		if v[i] > max {
-			max = v[i]
+		if v[i] > maxVal {
+			maxVal = v[i]
 		}
 	}
 
-	return min, max
+	return minVal, maxVal
 }

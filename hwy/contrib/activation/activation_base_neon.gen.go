@@ -5,11 +5,12 @@
 package activation
 
 import (
+	stdmath "math"
+	"unsafe"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
-	stdmath "math"
-	"unsafe"
 )
 
 func BaseGELU_neon_Float16(input []hwy.Float16, output []hwy.Float16) {

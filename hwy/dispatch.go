@@ -96,6 +96,13 @@ func CurrentName() string {
 	return currentLevel.String()
 }
 
+// HasSIMD returns true if hardware SIMD acceleration is available.
+// Returns false when running in scalar fallback mode (e.g., when
+// GOEXPERIMENT=simd is not enabled or HWY_NO_SIMD is set).
+func HasSIMD() bool {
+	return currentLevel != DispatchScalar
+}
+
 // NoSimdEnv checks if the HWY_NO_SIMD environment variable is set.
 // When set, Highway will use scalar fallback regardless of CPU capabilities.
 // This is useful for testing and debugging.

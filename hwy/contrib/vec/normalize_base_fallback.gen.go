@@ -3,8 +3,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	stdmath "math"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseNormalize_fallback_Float16(dst []hwy.Float16) {
@@ -63,13 +64,12 @@ func BaseNormalize_fallback(dst []float32) {
 	}
 	norm := float32(stdmath.Sqrt(float64(squaredNorm)))
 	scale := float32(1) / norm
-	scaleVec := hwy.Set(scale)
-	lanes := scaleVec.NumLanes()
+	scaleVec := float32(scale)
 	var i int
-	for i = 0; i+lanes <= len(dst); i += lanes {
-		vec := hwy.LoadFull(dst[i:])
-		result := hwy.Mul(vec, scaleVec)
-		hwy.StoreFull(result, dst[i:])
+	for i = 0; i < len(dst); i++ {
+		vec := dst[i]
+		result := vec * scaleVec
+		dst[i] = result
 	}
 	for ; i < len(dst); i++ {
 		dst[i] *= scale
@@ -86,13 +86,12 @@ func BaseNormalize_fallback_Float64(dst []float64) {
 	}
 	norm := float64(stdmath.Sqrt(float64(squaredNorm)))
 	scale := float64(1) / norm
-	scaleVec := hwy.Set(scale)
-	lanes := scaleVec.NumLanes()
+	scaleVec := float64(scale)
 	var i int
-	for i = 0; i+lanes <= len(dst); i += lanes {
-		vec := hwy.LoadFull(dst[i:])
-		result := hwy.Mul(vec, scaleVec)
-		hwy.StoreFull(result, dst[i:])
+	for i = 0; i < len(dst); i++ {
+		vec := dst[i]
+		result := vec * scaleVec
+		dst[i] = result
 	}
 	for ; i < len(dst); i++ {
 		dst[i] *= scale
@@ -161,13 +160,12 @@ func BaseNormalizeTo_fallback(dst []float32, src []float32) {
 	}
 	norm := float32(stdmath.Sqrt(float64(squaredNorm)))
 	scale := float32(1) / norm
-	scaleVec := hwy.Set(scale)
-	lanes := scaleVec.NumLanes()
+	scaleVec := float32(scale)
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
-		vec := hwy.LoadFull(src[i:])
-		result := hwy.Mul(vec, scaleVec)
-		hwy.StoreFull(result, dst[i:])
+	for i = 0; i < n; i++ {
+		vec := src[i]
+		result := vec * scaleVec
+		dst[i] = result
 	}
 	for ; i < n; i++ {
 		dst[i] = src[i] * scale
@@ -186,13 +184,12 @@ func BaseNormalizeTo_fallback_Float64(dst []float64, src []float64) {
 	}
 	norm := float64(stdmath.Sqrt(float64(squaredNorm)))
 	scale := float64(1) / norm
-	scaleVec := hwy.Set(scale)
-	lanes := scaleVec.NumLanes()
+	scaleVec := float64(scale)
 	var i int
-	for i = 0; i+lanes <= n; i += lanes {
-		vec := hwy.LoadFull(src[i:])
-		result := hwy.Mul(vec, scaleVec)
-		hwy.StoreFull(result, dst[i:])
+	for i = 0; i < n; i++ {
+		vec := src[i]
+		result := vec * scaleVec
+		dst[i] = result
 	}
 	for ; i < n; i++ {
 		dst[i] = src[i] * scale
