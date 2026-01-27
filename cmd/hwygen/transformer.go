@@ -1866,6 +1866,9 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				Index: ast.NewIdent(ctx.elemType),
 			}
 			return
+		case "Set", "Zero":
+			// Keep hwy.Set[T](val) and hwy.Zero[T]() as-is/generic for half-precision
+			return
 		}
 
 		// For operations without F16/BF16 variants, fall through to regular handling
@@ -6091,7 +6094,18 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 
 	case *ast.CallExpr:
 		// Check for type conversions like hwy.Float16(1.0)
-		if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+		var sel *ast.SelectorExpr
+		switch fun := e.Fun.(type) {
+		case *ast.SelectorExpr:
+			sel = fun
+		case *ast.IndexExpr:
+			// Handle generic calls like hwy.Set[T](x)
+			if s, ok := fun.X.(*ast.SelectorExpr); ok {
+				sel = s
+			}
+		}
+
+		if sel != nil {
 			if pkgIdent, ok := sel.X.(*ast.Ident); ok {
 				if pkgIdent.Name == "hwy" {
 					funcName := sel.Sel.Name
@@ -6220,4 +6234,3 @@ func isHalfPrecisionSliceExpr(indexExpr *ast.IndexExpr, ctx *transformContext) b
 	}
 	return false
 }
-

@@ -75,11 +75,9 @@ var currentLevel DispatchLevel
 
 // currentWidth is the SIMD register width in bytes for the current level.
 // Set by init() in dispatch_*.go files.
+//
+// For DispatchScalar this is set to 16.
 var currentWidth int
-
-// currentName is the human-readable name of the current SIMD level.
-// Set by init() in dispatch_*.go files.
-var currentName string
 
 // CurrentLevel returns the SIMD instruction set being used.
 func CurrentLevel() DispatchLevel {
@@ -95,7 +93,7 @@ func CurrentWidth() int {
 // CurrentName returns a human-readable name for the current SIMD target.
 // For example: "avx2", "neon", "scalar".
 func CurrentName() string {
-	return currentName
+	return currentLevel.String()
 }
 
 // NoSimdEnv checks if the HWY_NO_SIMD environment variable is set.
