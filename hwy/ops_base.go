@@ -99,7 +99,9 @@ func StoreFull[T Lanes](v Vec[T], dst []T) {
 	copy(dst[:len(v.data)], v.data)
 }
 
-// Set creates a vector with all lanes set to the same value.
+// Set returns a vector with all lanes set to the given value.
+// For creating vectors from float literals without explicit type conversion,
+// use [Const] which accepts float32 and handles type conversion automatically.
 func Set[T Lanes](value T) Vec[T] {
 	n := MaxLanes[T]()
 	data := make([]T, n)
@@ -109,9 +111,14 @@ func Set[T Lanes](value T) Vec[T] {
 	return Vec[T]{data: data}
 }
 
-// Const creates a vector with all lanes set to the given float32 constant.
-// This allows writing generic code without T(constant) conversions.
-// Usage: hwy.Const[T](1.0) creates a Vec[T] with all lanes set to 1.0
+// Const returns a vector with all lanes set to the given float32 constant.
+// Unlike [Set], Const accepts a float32 and converts it to type T, making it
+// convenient for use with float literals: hwy.Const[T](0.5).
+// For Float16/BFloat16, the conversion goes through the appropriate hardware
+// or software conversion path.
+//
+// Note: for float64 targets, the code generator transforms Const calls with
+// literal arguments to Set calls, avoiding precision loss through float32.
 func Const[T Lanes](val float32) Vec[T] {
 	return Set(ConstValue[T](val))
 }
@@ -125,7 +132,6 @@ func ConstValue[T Lanes](val float32) T {
 	case BFloat16:
 		return any(Float32ToBFloat16(val)).(T)
 	}
-	// Native types support direct conversion from float32
 	return T(val)
 }
 
