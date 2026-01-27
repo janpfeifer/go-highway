@@ -5,8 +5,9 @@
 package matmul
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var FusedNF4MatMul func(input []float32, packed []uint8, scales []float32, output []float32, M int, K int, N int, groupSize int)

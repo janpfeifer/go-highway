@@ -5,8 +5,9 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var RadixPassInt32 func(src []int32, dst []int32, shift int)

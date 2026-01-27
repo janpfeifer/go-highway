@@ -94,24 +94,23 @@ func BaseMatMul_fallback(a []float32, b []float32, c []float32, m int, n int, k 
 	}
 	for i := range m {
 		cRow := c[i*n : (i+1)*n]
-		vZero := hwy.Zero[float32]()
-		lanes := vZero.NumLanes()
+		vZero := float32(0)
 		var j int
-		for j = 0; j+lanes <= n; j += lanes {
-			hwy.Store(vZero, cRow[j:])
+		for j = 0; j < n; j++ {
+			cRow[j] = vZero
 		}
 		for ; j < n; j++ {
 			cRow[j] = 0
 		}
 		for p := range k {
 			aip := a[i*k+p]
-			vA := hwy.Set(aip)
+			vA := float32(aip)
 			bRow := b[p*n : (p+1)*n]
-			for j = 0; j+lanes <= n; j += lanes {
-				vB := hwy.Load(bRow[j:])
-				vC := hwy.Load(cRow[j:])
-				vC = hwy.MulAdd(vA, vB, vC)
-				hwy.Store(vC, cRow[j:])
+			for j = 0; j < n; j++ {
+				vB := bRow[j]
+				vC := cRow[j]
+				vC = vA*vB + vC
+				cRow[j] = vC
 			}
 			for ; j < n; j++ {
 				cRow[j] += aip * bRow[j]
@@ -132,24 +131,23 @@ func BaseMatMul_fallback_Float64(a []float64, b []float64, c []float64, m int, n
 	}
 	for i := range m {
 		cRow := c[i*n : (i+1)*n]
-		vZero := hwy.Zero[float64]()
-		lanes := vZero.NumLanes()
+		vZero := float64(0)
 		var j int
-		for j = 0; j+lanes <= n; j += lanes {
-			hwy.Store(vZero, cRow[j:])
+		for j = 0; j < n; j++ {
+			cRow[j] = vZero
 		}
 		for ; j < n; j++ {
 			cRow[j] = 0
 		}
 		for p := range k {
 			aip := a[i*k+p]
-			vA := hwy.Set(aip)
+			vA := float64(aip)
 			bRow := b[p*n : (p+1)*n]
-			for j = 0; j+lanes <= n; j += lanes {
-				vB := hwy.Load(bRow[j:])
-				vC := hwy.Load(cRow[j:])
-				vC = hwy.MulAdd(vA, vB, vC)
-				hwy.Store(vC, cRow[j:])
+			for j = 0; j < n; j++ {
+				vB := bRow[j]
+				vC := cRow[j]
+				vC = vA*vB + vC
+				cRow[j] = vC
 			}
 			for ; j < n; j++ {
 				cRow[j] += aip * bRow[j]

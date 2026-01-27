@@ -5,8 +5,9 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var SortSmallFloat32 func(data []float32)

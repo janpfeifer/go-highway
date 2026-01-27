@@ -5,8 +5,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var SumFloat16 func(v []hwy.Float16) hwy.Float16
@@ -23,10 +24,10 @@ var MaxInt32 func(v []int32) int32
 var MaxInt64 func(v []int64) int64
 var MaxUint32 func(v []uint32) uint32
 var MaxUint64 func(v []uint64) uint64
-var MinMaxFloat16 func(v []hwy.Float16) (min hwy.Float16, max hwy.Float16)
-var MinMaxBFloat16 func(v []hwy.BFloat16) (min hwy.BFloat16, max hwy.BFloat16)
-var MinMaxFloat32 func(v []float32) (min float32, max float32)
-var MinMaxFloat64 func(v []float64) (min float64, max float64)
+var MinMaxFloat16 func(v []hwy.Float16) (minVal hwy.Float16, maxVal hwy.Float16)
+var MinMaxBFloat16 func(v []hwy.BFloat16) (minVal hwy.BFloat16, maxVal hwy.BFloat16)
+var MinMaxFloat32 func(v []float32) (minVal float32, maxVal float32)
+var MinMaxFloat64 func(v []float64) (minVal float64, maxVal float64)
 
 // Sum computes the sum of all elements in a slice using hwy primitives.
 //
@@ -139,7 +140,7 @@ func Max[T hwy.Lanes](v []T) T {
 //	min, max := MinMax(data)  // min=1, max=5
 //
 // This function dispatches to the appropriate SIMD implementation at runtime.
-func MinMax[T hwy.Floats](v []T) (min T, max T) {
+func MinMax[T hwy.Floats](v []T) (minVal T, maxVal T) {
 	switch any(v).(type) {
 	case []hwy.Float16:
 		_r0, _r1 := MinMaxFloat16(any(v).([]hwy.Float16))

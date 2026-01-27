@@ -5,8 +5,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var ArgmaxFloat16 func(v []hwy.Float16) int

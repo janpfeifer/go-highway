@@ -5,8 +5,9 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var DecodeGroupVarint32 func(src []byte) (values [4]uint32, consumed int)

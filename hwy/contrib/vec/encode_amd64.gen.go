@@ -5,8 +5,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var EncodeFloat32s func(dst []byte, src []float32)

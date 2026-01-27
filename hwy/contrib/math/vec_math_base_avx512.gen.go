@@ -5,9 +5,10 @@
 package math
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"sync"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 // Hoisted constants - lazily initialized on first use to avoid init-time crashes

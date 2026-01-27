@@ -5,10 +5,11 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
-	"github.com/ajroetker/go-highway/hwy/asm"
 	stdmath "math"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseNormalize_neon_Float16(dst []hwy.Float16) {

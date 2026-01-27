@@ -5,9 +5,10 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseArgmax_avx2_Float16(v []hwy.Float16) int {

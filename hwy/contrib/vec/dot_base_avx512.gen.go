@@ -5,9 +5,10 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseDot_avx512_Float16(a []hwy.Float16, b []hwy.Float16) hwy.Float16 {

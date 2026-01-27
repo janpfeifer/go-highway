@@ -5,8 +5,9 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var PrefixSumFloat32 func(data []float32)

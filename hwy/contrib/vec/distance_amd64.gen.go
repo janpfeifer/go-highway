@@ -5,8 +5,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var L2SquaredDistanceFloat16 func(a []hwy.Float16, b []hwy.Float16) hwy.Float16

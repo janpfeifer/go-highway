@@ -5,9 +5,10 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BasePrefixSum_avx512(data []float32) {

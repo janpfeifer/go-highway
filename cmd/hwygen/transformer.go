@@ -344,6 +344,16 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 
 	transformNode(funcDecl.Body, ctx)
 
+	// Post-process: scalarize fallback functions that only use simple ops.
+	// This converts hwy.Vec operations to pure scalar Go code for better performance
+	// by eliminating the allocation overhead of 1-element Vec wrappers.
+	// Skip half-precision types as they have complex conversion requirements.
+	if target.Name == "Fallback" && !isHalfPrecisionType(elemType) {
+		if canScalarizeFallback(funcDecl) {
+			scalarizeFallback(funcDecl, elemType)
+		}
+	}
+
 	// Post-process to replace NumLanes() calls and ReduceSum() calls
 	if target.Name != "Fallback" {
 		postProcessSIMD(funcDecl.Body, ctx)

@@ -5,8 +5,9 @@
 package matmul
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var PackedMatMulFloat16 func(a []hwy.Float16, b []hwy.Float16, c []hwy.Float16, m int, n int, k int)

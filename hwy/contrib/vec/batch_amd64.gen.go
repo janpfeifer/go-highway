@@ -5,8 +5,9 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var BatchL2SquaredDistanceFloat16 func(query []hwy.Float16, data []hwy.Float16, distances []hwy.Float16, count int, dims int)

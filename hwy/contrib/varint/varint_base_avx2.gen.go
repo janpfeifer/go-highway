@@ -5,8 +5,9 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 // Hoisted constants - pre-broadcasted at package init time

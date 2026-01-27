@@ -5,8 +5,9 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var DecodeStreamVByte32 func(control []byte, data []uint8, n int) []uint32

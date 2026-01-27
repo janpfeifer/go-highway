@@ -281,6 +281,114 @@ func BasePackedMicroKernel_neon_Float64(packedA []float64, packedB []float64, c 
 	vC.StoreSlice(c[cRow3+jr+lanes:])
 }
 
+func basePackedMicroKernelGeneral_neon_Float16(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 8
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := hwy.Zero[hwy.Float16]()
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := hwy.Set(aVal)
+				vB := hwy.Load(packedB[p*nr+col:])
+				acc = hwy.FMAF16(vA, vB, acc)
+			}
+			vC := hwy.Load(c[cRowStart+jr+col:])
+			vC = hwy.AddF16(vC, acc)
+			hwy.Store(vC, c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r].Float32() * packedB[p*nr+col].Float32()
+			}
+			c[cRowStart+jr+col] = hwy.Float32ToFloat16(c[cRowStart+jr+col].Float32() + sum)
+		}
+	}
+}
+
+func basePackedMicroKernelGeneral_neon_BFloat16(packedA []hwy.BFloat16, packedB []hwy.BFloat16, c []hwy.BFloat16, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 8
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := hwy.Zero[hwy.BFloat16]()
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := hwy.Set(aVal)
+				vB := hwy.Load(packedB[p*nr+col:])
+				acc = hwy.FMABF16(vA, vB, acc)
+			}
+			vC := hwy.Load(c[cRowStart+jr+col:])
+			vC = hwy.AddBF16(vC, acc)
+			hwy.Store(vC, c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r].Float32() * packedB[p*nr+col].Float32()
+			}
+			c[cRowStart+jr+col] = hwy.Float32ToBFloat16(c[cRowStart+jr+col].Float32() + sum)
+		}
+	}
+}
+
+func basePackedMicroKernelGeneral_neon(packedA []float32, packedB []float32, c []float32, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 4
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := asm.ZeroFloat32x4()
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := asm.BroadcastFloat32x4(aVal)
+				vB := asm.LoadFloat32x4Slice(packedB[p*nr+col:])
+				acc = vA.MulAdd(vB, acc)
+			}
+			vC := asm.LoadFloat32x4Slice(c[cRowStart+jr+col:])
+			vC = vC.Add(acc)
+			vC.StoreSlice(c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r] * packedB[p*nr+col]
+			}
+			c[cRowStart+jr+col] += sum
+		}
+	}
+}
+
+func basePackedMicroKernelGeneral_neon_Float64(packedA []float64, packedB []float64, c []float64, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 2
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := asm.ZeroFloat64x2()
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := asm.BroadcastFloat64x2(aVal)
+				vB := asm.LoadFloat64x2Slice(packedB[p*nr+col:])
+				acc = vA.MulAdd(vB, acc)
+			}
+			vC := asm.LoadFloat64x2Slice(c[cRowStart+jr+col:])
+			vC = vC.Add(acc)
+			vC.StoreSlice(c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float64
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r] * packedB[p*nr+col]
+			}
+			c[cRowStart+jr+col] += sum
+		}
+	}
+}
+
 func BasePackedMicroKernelPartial_neon_Float16(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int) {
 	lanes := 8
 	for r := 0; r < activeRows; r++ {

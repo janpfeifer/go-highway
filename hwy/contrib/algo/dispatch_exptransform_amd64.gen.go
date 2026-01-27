@@ -5,8 +5,9 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var ExpTransformFloat16 func(in []hwy.Float16, out []hwy.Float16)

@@ -3,8 +3,9 @@
 package rabitq
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"math/bits"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseBitProduct_fallback(code []uint64, q1 []uint64, q2 []uint64, q3 []uint64, q4 []uint64) uint32 {

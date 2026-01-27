@@ -5,8 +5,9 @@
 package image
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var BrightnessContrastFloat16 func(img *Image[hwy.Float16], out *Image[hwy.Float16], scale hwy.Float16, offset hwy.Float16)

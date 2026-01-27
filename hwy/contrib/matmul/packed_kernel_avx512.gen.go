@@ -5,8 +5,9 @@
 package matmul
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BasePackedMicroKernel_avx512_Float16(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int) {
@@ -279,6 +280,114 @@ func BasePackedMicroKernel_avx512_Float64(packedA []float64, packedB []float64, 
 	vC = archsimd.LoadFloat64x8Slice(c[cRow3+jr+lanes:])
 	vC = vC.Add(acc31)
 	vC.StoreSlice(c[cRow3+jr+lanes:])
+}
+
+func basePackedMicroKernelGeneral_avx512_Float16(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 32
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := hwy.Zero[hwy.Float16]()
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := hwy.Set(aVal)
+				vB := hwy.Load(packedB[p*nr+col:])
+				acc = hwy.FMAF16(vA, vB, acc)
+			}
+			vC := hwy.Load(c[cRowStart+jr+col:])
+			vC = hwy.AddF16(vC, acc)
+			hwy.Store(vC, c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r].Float32() * packedB[p*nr+col].Float32()
+			}
+			c[cRowStart+jr+col] = hwy.Float32ToFloat16(c[cRowStart+jr+col].Float32() + sum)
+		}
+	}
+}
+
+func basePackedMicroKernelGeneral_avx512_BFloat16(packedA []hwy.BFloat16, packedB []hwy.BFloat16, c []hwy.BFloat16, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 32
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := hwy.Zero[hwy.BFloat16]()
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := hwy.Set(aVal)
+				vB := hwy.Load(packedB[p*nr+col:])
+				acc = hwy.FMABF16(vA, vB, acc)
+			}
+			vC := hwy.Load(c[cRowStart+jr+col:])
+			vC = hwy.AddBF16(vC, acc)
+			hwy.Store(vC, c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r].Float32() * packedB[p*nr+col].Float32()
+			}
+			c[cRowStart+jr+col] = hwy.Float32ToBFloat16(c[cRowStart+jr+col].Float32() + sum)
+		}
+	}
+}
+
+func basePackedMicroKernelGeneral_avx512(packedA []float32, packedB []float32, c []float32, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 16
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := archsimd.BroadcastFloat32x16(0)
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := archsimd.BroadcastFloat32x16(aVal)
+				vB := archsimd.LoadFloat32x16Slice(packedB[p*nr+col:])
+				acc = vA.MulAdd(vB, acc)
+			}
+			vC := archsimd.LoadFloat32x16Slice(c[cRowStart+jr+col:])
+			vC = vC.Add(acc)
+			vC.StoreSlice(c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float32
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r] * packedB[p*nr+col]
+			}
+			c[cRowStart+jr+col] += sum
+		}
+	}
+}
+
+func basePackedMicroKernelGeneral_avx512_Float64(packedA []float64, packedB []float64, c []float64, n int, ir int, jr int, kc int, mr int, nr int) {
+	lanes := 8
+	for r := 0; r < mr; r++ {
+		cRowStart := (ir + r) * n
+		var col int
+		for col = 0; col+lanes <= nr; col += lanes {
+			acc := archsimd.BroadcastFloat64x8(0)
+			for p := 0; p < kc; p++ {
+				aVal := packedA[p*mr+r]
+				vA := archsimd.BroadcastFloat64x8(aVal)
+				vB := archsimd.LoadFloat64x8Slice(packedB[p*nr+col:])
+				acc = vA.MulAdd(vB, acc)
+			}
+			vC := archsimd.LoadFloat64x8Slice(c[cRowStart+jr+col:])
+			vC = vC.Add(acc)
+			vC.StoreSlice(c[cRowStart+jr+col:])
+		}
+		for ; col < nr; col++ {
+			var sum float64
+			for p := 0; p < kc; p++ {
+				sum += packedA[p*mr+r] * packedB[p*nr+col]
+			}
+			c[cRowStart+jr+col] += sum
+		}
+	}
 }
 
 func BasePackedMicroKernelPartial_avx512_Float16(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int, activeRows int, activeCols int) {

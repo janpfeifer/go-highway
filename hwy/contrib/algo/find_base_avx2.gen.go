@@ -5,9 +5,10 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseFind_avx2(slice []float32, value float32) int {

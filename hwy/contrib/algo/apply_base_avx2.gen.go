@@ -5,9 +5,10 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseApply_avx2_Float16(in []hwy.Float16, out []hwy.Float16, fn func(hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16]) {

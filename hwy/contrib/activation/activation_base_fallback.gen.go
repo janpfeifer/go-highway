@@ -3,9 +3,10 @@
 package activation
 
 import (
+	stdmath "math"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
-	stdmath "math"
 )
 
 func BaseGELU_fallback_Float16(input []hwy.Float16, output []hwy.Float16) {
@@ -63,19 +64,18 @@ func BaseGELU_fallback(input []float32, output []float32) {
 	if size == 0 {
 		return
 	}
-	vHalf := hwy.Const[float32](0.5)
-	vOne := hwy.Const[float32](1.0)
-	vInvSqrt2 := hwy.Const[float32](0.7071067811865476)
-	lanes := vOne.NumLanes()
+	vHalf := float32(0.5)
+	vOne := float32(1.0)
+	vInvSqrt2 := float32(0.7071067811865476)
 	ii := 0
-	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
-		xScaled := hwy.Mul(x, vInvSqrt2)
-		erfX := math.BaseErfVec_fallback(xScaled)
-		onePlusErf := hwy.Add(vOne, erfX)
-		halfOnePlusErf := hwy.Mul(vHalf, onePlusErf)
-		result := hwy.Mul(x, halfOnePlusErf)
-		hwy.StoreFull(result, output[ii:])
+	for ; ii < size; ii++ {
+		x := input[ii]
+		xScaled := x * vInvSqrt2
+		erfX := float32(stdmath.Erf(float64(xScaled)))
+		onePlusErf := vOne + erfX
+		halfOnePlusErf := vHalf * onePlusErf
+		result := x * halfOnePlusErf
+		output[ii] = result
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i])
@@ -88,19 +88,18 @@ func BaseGELU_fallback_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vHalf := hwy.Set[float64](0.5)
-	vOne := hwy.Set[float64](1.0)
-	vInvSqrt2 := hwy.Set[float64](0.7071067811865476)
-	lanes := vOne.NumLanes()
+	vHalf := float64(0.5)
+	vOne := float64(1.0)
+	vInvSqrt2 := float64(0.7071067811865476)
 	ii := 0
-	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
-		xScaled := hwy.Mul(x, vInvSqrt2)
-		erfX := math.BaseErfVec_fallback_Float64(xScaled)
-		onePlusErf := hwy.Add(vOne, erfX)
-		halfOnePlusErf := hwy.Mul(vHalf, onePlusErf)
-		result := hwy.Mul(x, halfOnePlusErf)
-		hwy.StoreFull(result, output[ii:])
+	for ; ii < size; ii++ {
+		x := input[ii]
+		xScaled := x * vInvSqrt2
+		erfX := float64(stdmath.Erf(float64(xScaled)))
+		onePlusErf := vOne + erfX
+		halfOnePlusErf := vHalf * onePlusErf
+		result := x * halfOnePlusErf
+		output[ii] = result
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i])
@@ -245,13 +244,12 @@ func BaseReLU_fallback(input []float32, output []float32) {
 	if size == 0 {
 		return
 	}
-	vZero := hwy.Const[float32](0.0)
-	lanes := vZero.NumLanes()
+	vZero := float32(0.0)
 	ii := 0
-	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
-		result := hwy.Max(x, vZero)
-		hwy.StoreFull(result, output[ii:])
+	for ; ii < size; ii++ {
+		x := input[ii]
+		result := max(x, vZero)
+		output[ii] = result
 	}
 	for i := ii; i < size; i++ {
 		if input[i] > 0 {
@@ -267,13 +265,12 @@ func BaseReLU_fallback_Float64(input []float64, output []float64) {
 	if size == 0 {
 		return
 	}
-	vZero := hwy.Set[float64](0.0)
-	lanes := vZero.NumLanes()
+	vZero := float64(0.0)
 	ii := 0
-	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
-		result := hwy.Max(x, vZero)
-		hwy.StoreFull(result, output[ii:])
+	for ; ii < size; ii++ {
+		x := input[ii]
+		result := max(x, vZero)
+		output[ii] = result
 	}
 	for i := ii; i < size; i++ {
 		if input[i] > 0 {
@@ -415,14 +412,13 @@ func BaseLeakyReLU_fallback(input []float32, output []float32, alpha float32) {
 	if size == 0 {
 		return
 	}
-	vAlpha := hwy.Set(alpha)
-	lanes := hwy.MaxLanes[float32]()
+	vAlpha := float32(alpha)
 	ii := 0
-	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
-		negPart := hwy.Mul(x, vAlpha)
-		result := hwy.Max(x, negPart)
-		hwy.StoreFull(result, output[ii:])
+	for ; ii < size; ii++ {
+		x := input[ii]
+		negPart := x * vAlpha
+		result := max(x, negPart)
+		output[ii] = result
 	}
 	for i := ii; i < size; i++ {
 		if input[i] > 0 {
@@ -438,14 +434,13 @@ func BaseLeakyReLU_fallback_Float64(input []float64, output []float64, alpha flo
 	if size == 0 {
 		return
 	}
-	vAlpha := hwy.Set(alpha)
-	lanes := hwy.MaxLanes[float64]()
+	vAlpha := float64(alpha)
 	ii := 0
-	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
-		negPart := hwy.Mul(x, vAlpha)
-		result := hwy.Max(x, negPart)
-		hwy.StoreFull(result, output[ii:])
+	for ; ii < size; ii++ {
+		x := input[ii]
+		negPart := x * vAlpha
+		result := max(x, negPart)
+		output[ii] = result
 	}
 	for i := ii; i < size; i++ {
 		if input[i] > 0 {

@@ -5,9 +5,10 @@
 package vec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseBatchL2SquaredDistance_avx512_Float16(query []hwy.Float16, data []hwy.Float16, distances []hwy.Float16, count int, dims int) {

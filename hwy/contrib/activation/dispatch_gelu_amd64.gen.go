@@ -5,8 +5,9 @@
 package activation
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var GELUFloat16 func(input []hwy.Float16, output []hwy.Float16)

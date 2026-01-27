@@ -5,8 +5,9 @@
 package bitpack
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BasePack32_neon(src []uint32, bitWidth int, dst []byte) int {

@@ -5,8 +5,9 @@
 package sort
 
 import (
-	"github.com/ajroetker/go-highway/hwy/asm"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseSortSmall_neon(data []float32) {

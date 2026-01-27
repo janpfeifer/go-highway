@@ -5,10 +5,11 @@
 package nn
 
 import (
+	stdmath "math"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/algo"
 	"github.com/ajroetker/go-highway/hwy/contrib/math"
-	stdmath "math"
 )
 
 func BaseSoftmax_neon_Float16(input []hwy.Float16, output []hwy.Float16) {

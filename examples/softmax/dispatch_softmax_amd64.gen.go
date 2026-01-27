@@ -5,8 +5,9 @@
 package softmax
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var SoftmaxFloat16 func(input []hwy.Float16, output []hwy.Float16)

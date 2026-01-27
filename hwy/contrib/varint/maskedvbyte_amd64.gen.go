@@ -5,12 +5,14 @@
 package varint
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var MaskedVByteDecodeBatch32 func(src []byte, dst []uint32, n int) (decoded int, consumed int)
 var MaskedVByteDecodeGroup func(src []byte, dst []uint32) (decoded int, consumed int)
+var MaskedVByteDecodeBatch64 func(src []byte, dst []uint64, n int) (decoded int, consumed int)
 
 func init() {
 	if hwy.NoSimdEnv() {
@@ -31,14 +33,17 @@ func init() {
 func initMaskedvbyteAVX2() {
 	MaskedVByteDecodeBatch32 = BaseMaskedVByteDecodeBatch32_avx2
 	MaskedVByteDecodeGroup = BaseMaskedVByteDecodeGroup_avx2
+	MaskedVByteDecodeBatch64 = BaseMaskedVByteDecodeBatch64_avx2
 }
 
 func initMaskedvbyteAVX512() {
 	MaskedVByteDecodeBatch32 = BaseMaskedVByteDecodeBatch32_avx512
 	MaskedVByteDecodeGroup = BaseMaskedVByteDecodeGroup_avx512
+	MaskedVByteDecodeBatch64 = BaseMaskedVByteDecodeBatch64_avx512
 }
 
 func initMaskedvbyteFallback() {
 	MaskedVByteDecodeBatch32 = BaseMaskedVByteDecodeBatch32_fallback
 	MaskedVByteDecodeGroup = BaseMaskedVByteDecodeGroup_fallback
+	MaskedVByteDecodeBatch64 = BaseMaskedVByteDecodeBatch64_fallback
 }

@@ -44,7 +44,6 @@ func BaseUnpack32_fallback(src []byte, bitWidth int, dst []uint32) int {
 	if bitWidth > 32 {
 		bitWidth = 32
 	}
-	lanes := hwy.Zero[uint32]().NumLanes()
 	mask := uint32((1 << bitWidth) - 1)
 	bitPos := 0
 	bytePos := 0
@@ -56,7 +55,7 @@ func BaseUnpack32_fallback(src []byte, bitWidth int, dst []uint32) int {
 		}
 		dst[i] = unpackValue32(mask, bitWidth, &bitPos, &bytePos, src)
 	}
-	_ = lanes
+	_ = 1
 	return i
 }
 
@@ -103,7 +102,6 @@ func BaseUnpack64_fallback(src []byte, bitWidth int, dst []uint64) int {
 	if bitWidth > 64 {
 		bitWidth = 64
 	}
-	lanes := hwy.Zero[uint64]().NumLanes()
 	var mask uint64
 	if bitWidth == 64 {
 		mask = ^uint64(0)
@@ -120,7 +118,7 @@ func BaseUnpack64_fallback(src []byte, bitWidth int, dst []uint64) int {
 		}
 		dst[i] = unpackValue64(mask, bitWidth, &bitPos, &bytePos, src)
 	}
-	_ = lanes
+	_ = 1
 	return i
 }
 

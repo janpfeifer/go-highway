@@ -5,8 +5,9 @@
 package rabitq
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var BitProduct func(code []uint64, q1 []uint64, q2 []uint64, q3 []uint64, q4 []uint64) uint32

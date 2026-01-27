@@ -5,8 +5,9 @@
 package matmul
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var PackLHSFloat16 func(a []hwy.Float16, packed []hwy.Float16, m int, k int, rowStart int, colStart int, panelRows int, panelK int, mr int) int

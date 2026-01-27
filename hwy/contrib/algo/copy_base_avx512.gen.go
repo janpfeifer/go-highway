@@ -5,9 +5,10 @@
 package algo
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
 	"unsafe"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseCopyIf_avx512(src []float32, dst []float32, pred func(archsimd.Float32x16) archsimd.Mask32x16) int {

@@ -5,8 +5,9 @@
 package bitpack
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 var Pack32 func(src []uint32, bitWidth int, dst []byte) int

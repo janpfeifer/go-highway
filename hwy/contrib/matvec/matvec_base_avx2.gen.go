@@ -5,8 +5,9 @@
 package matvec
 
 import (
-	"github.com/ajroetker/go-highway/hwy"
 	"simd/archsimd"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 func BaseMatVec_avx2_Float16(m []hwy.Float16, rows int, cols int, v []hwy.Float16, result []hwy.Float16) {
