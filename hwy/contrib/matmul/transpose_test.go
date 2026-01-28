@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/workerpool"
 )
 
 func TestTranspose2D(t *testing.T) {
@@ -203,6 +204,167 @@ func BenchmarkTransposeFloat16(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				Transpose2DFloat16(src, size, size, dst)
+			}
+		})
+	}
+}
+
+func TestParallelTranspose2D(t *testing.T) {
+	sizes := []struct{ m, k int }{
+		{64, 64}, {128, 128}, {256, 256}, {512, 512},
+		{100, 200}, {200, 100}, // Non-square
+		{17, 23}, {127, 255},   // Non-aligned
+	}
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("%dx%d", size.m, size.k), func(t *testing.T) {
+			src := make([]float32, size.m*size.k)
+			for i := range src {
+				src[i] = float32(i)
+			}
+
+			got := make([]float32, size.k*size.m)
+			want := make([]float32, size.k*size.m)
+
+			// Reference scalar transpose
+			for i := 0; i < size.m; i++ {
+				for j := 0; j < size.k; j++ {
+					want[j*size.m+i] = src[i*size.k+j]
+				}
+			}
+
+			ParallelTranspose2DFloat32(src, size.m, size.k, got)
+
+			if !slices.Equal(got, want) {
+				t.Errorf("mismatch at size %dx%d", size.m, size.k)
+				for i := range got {
+					if got[i] != want[i] {
+						t.Errorf("first difference at index %d: got %v, want %v", i, got[i], want[i])
+						break
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestParallelTranspose2DWithPool(t *testing.T) {
+	pool := workerpool.New(0)
+	defer pool.Close()
+
+	sizes := []struct{ m, k int }{
+		{64, 64}, {128, 128}, {256, 256},
+		{100, 200}, {17, 23},
+	}
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("%dx%d", size.m, size.k), func(t *testing.T) {
+			src := make([]float32, size.m*size.k)
+			for i := range src {
+				src[i] = float32(i)
+			}
+
+			got := make([]float32, size.k*size.m)
+			want := make([]float32, size.k*size.m)
+
+			for i := 0; i < size.m; i++ {
+				for j := 0; j < size.k; j++ {
+					want[j*size.m+i] = src[i*size.k+j]
+				}
+			}
+
+			ParallelTranspose2DWithPoolFloat32(pool, src, size.m, size.k, got)
+
+			if !slices.Equal(got, want) {
+				t.Errorf("mismatch at size %dx%d", size.m, size.k)
+			}
+		})
+	}
+}
+
+func TestTranspose2DStrided(t *testing.T) {
+	sizes := []struct{ m, k int }{
+		{64, 64}, {128, 128}, {256, 256},
+		{100, 200}, {17, 23}, {127, 255},
+	}
+	for _, size := range sizes {
+		t.Run(fmt.Sprintf("%dx%d", size.m, size.k), func(t *testing.T) {
+			src := make([]float32, size.m*size.k)
+			for i := range src {
+				src[i] = float32(i)
+			}
+
+			got := make([]float32, size.k*size.m)
+			want := make([]float32, size.k*size.m)
+
+			// Reference scalar transpose
+			for i := 0; i < size.m; i++ {
+				for j := 0; j < size.k; j++ {
+					want[j*size.m+i] = src[i*size.k+j]
+				}
+			}
+
+			// Test full matrix with strided transpose
+			Transpose2DStridedFloat32(src, 0, size.m, size.k, size.m, got)
+
+			if !slices.Equal(got, want) {
+				t.Errorf("full strided mismatch at size %dx%d", size.m, size.k)
+				for i := range got {
+					if got[i] != want[i] {
+						t.Errorf("first difference at index %d: got %v, want %v", i, got[i], want[i])
+						break
+					}
+				}
+			}
+
+			// Test with row strips (simulating parallel transpose)
+			got2 := make([]float32, size.k*size.m)
+			stripSize := 64
+			for rowStart := 0; rowStart < size.m; rowStart += stripSize {
+				rowEnd := min(rowStart+stripSize, size.m)
+				Transpose2DStridedFloat32(src, rowStart, rowEnd, size.k, size.m, got2)
+			}
+
+			if !slices.Equal(got2, want) {
+				t.Errorf("stripped strided mismatch at size %dx%d", size.m, size.k)
+				for i := range got2 {
+					if got2[i] != want[i] {
+						t.Errorf("first difference at index %d: got %v, want %v", i, got2[i], want[i])
+						break
+					}
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkParallelTranspose(b *testing.B) {
+	for _, size := range []int{256, 512, 1024, 2048} {
+		src := make([]float32, size*size)
+		dst := make([]float32, size*size)
+		for i := range src {
+			src[i] = float32(i)
+		}
+
+		b.Run(fmt.Sprintf("Serial_%dx%d", size, size), func(b *testing.B) {
+			b.SetBytes(int64(size * size * 4 * 2))
+			for i := 0; i < b.N; i++ {
+				Transpose2DFloat32(src, size, size, dst)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Parallel_%dx%d", size, size), func(b *testing.B) {
+			b.SetBytes(int64(size * size * 4 * 2))
+			for i := 0; i < b.N; i++ {
+				ParallelTranspose2DFloat32(src, size, size, dst)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Pool_%dx%d", size, size), func(b *testing.B) {
+			pool := workerpool.New(0)
+			defer pool.Close()
+			b.SetBytes(int64(size * size * 4 * 2))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				ParallelTranspose2DWithPoolFloat32(pool, src, size, size, dst)
 			}
 		})
 	}

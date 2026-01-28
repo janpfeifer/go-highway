@@ -4757,8 +4757,17 @@ func cloneStmt(stmt ast.Stmt) ast.Stmt {
 
 // cloneExpr creates a deep copy of an expression.
 func cloneExpr(expr ast.Expr) ast.Expr {
+	return cloneExprWithDepth(expr, 0)
+}
+
+const maxCloneDepth = 1000
+
+func cloneExprWithDepth(expr ast.Expr, depth int) ast.Expr {
 	if expr == nil {
 		return nil
+	}
+	if depth > maxCloneDepth {
+		panic(fmt.Sprintf("cloneExpr: max depth %d exceeded, expression type: %T", maxCloneDepth, expr))
 	}
 
 	switch e := expr.(type) {
@@ -4768,64 +4777,64 @@ func cloneExpr(expr ast.Expr) ast.Expr {
 		return &ast.BasicLit{Kind: e.Kind, Value: e.Value}
 	case *ast.SelectorExpr:
 		return &ast.SelectorExpr{
-			X:   cloneExpr(e.X),
+			X:   cloneExprWithDepth(e.X, depth+1),
 			Sel: ast.NewIdent(e.Sel.Name),
 		}
 	case *ast.CallExpr:
 		args := make([]ast.Expr, len(e.Args))
 		for i, arg := range e.Args {
-			args[i] = cloneExpr(arg)
+			args[i] = cloneExprWithDepth(arg, depth+1)
 		}
 		return &ast.CallExpr{
-			Fun:      cloneExpr(e.Fun),
+			Fun:      cloneExprWithDepth(e.Fun, depth+1),
 			Args:     args,
 			Ellipsis: e.Ellipsis,
 		}
 	case *ast.BinaryExpr:
 		return &ast.BinaryExpr{
-			X:  cloneExpr(e.X),
+			X:  cloneExprWithDepth(e.X, depth+1),
 			Op: e.Op,
-			Y:  cloneExpr(e.Y),
+			Y:  cloneExprWithDepth(e.Y, depth+1),
 		}
 	case *ast.UnaryExpr:
 		return &ast.UnaryExpr{
 			Op: e.Op,
-			X:  cloneExpr(e.X),
+			X:  cloneExprWithDepth(e.X, depth+1),
 		}
 	case *ast.ParenExpr:
-		return &ast.ParenExpr{X: cloneExpr(e.X)}
+		return &ast.ParenExpr{X: cloneExprWithDepth(e.X, depth+1)}
 	case *ast.IndexExpr:
 		return &ast.IndexExpr{
-			X:     cloneExpr(e.X),
-			Index: cloneExpr(e.Index),
+			X:     cloneExprWithDepth(e.X, depth+1),
+			Index: cloneExprWithDepth(e.Index, depth+1),
 		}
 	case *ast.SliceExpr:
 		return &ast.SliceExpr{
-			X:      cloneExpr(e.X),
-			Low:    cloneExpr(e.Low),
-			High:   cloneExpr(e.High),
-			Max:    cloneExpr(e.Max),
+			X:      cloneExprWithDepth(e.X, depth+1),
+			Low:    cloneExprWithDepth(e.Low, depth+1),
+			High:   cloneExprWithDepth(e.High, depth+1),
+			Max:    cloneExprWithDepth(e.Max, depth+1),
 			Slice3: e.Slice3,
 		}
 	case *ast.StarExpr:
-		return &ast.StarExpr{X: cloneExpr(e.X)}
+		return &ast.StarExpr{X: cloneExprWithDepth(e.X, depth+1)}
 	case *ast.TypeAssertExpr:
 		return &ast.TypeAssertExpr{
-			X:    cloneExpr(e.X),
-			Type: cloneExpr(e.Type),
+			X:    cloneExprWithDepth(e.X, depth+1),
+			Type: cloneExprWithDepth(e.Type, depth+1),
 		}
 	case *ast.ArrayType:
 		return &ast.ArrayType{
-			Len: cloneExpr(e.Len),
-			Elt: cloneExpr(e.Elt),
+			Len: cloneExprWithDepth(e.Len, depth+1),
+			Elt: cloneExprWithDepth(e.Elt, depth+1),
 		}
 	case *ast.CompositeLit:
 		elts := make([]ast.Expr, len(e.Elts))
 		for i, elt := range e.Elts {
-			elts[i] = cloneExpr(elt)
+			elts[i] = cloneExprWithDepth(elt, depth+1)
 		}
 		return &ast.CompositeLit{
-			Type: cloneExpr(e.Type),
+			Type: cloneExprWithDepth(e.Type, depth+1),
 			Elts: elts,
 		}
 	default:
@@ -6561,78 +6570,196 @@ func substituteAndRename(block *ast.BlockStmt, paramMap map[string]ast.Expr, loc
 }
 
 // substituteParams replaces parameter identifiers with their argument expressions.
+// It uses a post-order traversal approach to avoid visiting newly-inserted nodes,
+// which could cause infinite expansion if replacement expressions contain identifiers
+// that match parameter names.
 func substituteParams(node ast.Node, paramMap map[string]ast.Expr) {
-	ast.Inspect(node, func(n ast.Node) bool {
-		switch parent := n.(type) {
-		case *ast.CallExpr:
-			for i, arg := range parent.Args {
-				if ident, ok := arg.(*ast.Ident); ok {
-					if replacement, isParam := paramMap[ident.Name]; isParam {
-						parent.Args[i] = cloneExpr(replacement)
-					}
-				}
-			}
-		case *ast.BinaryExpr:
-			if ident, ok := parent.X.(*ast.Ident); ok {
+	substituteParamsPostOrder(node, paramMap)
+}
+
+// substituteParamsPostOrder does a depth-first post-order traversal,
+// processing children before parents to avoid re-visiting modified nodes.
+func substituteParamsPostOrder(node ast.Node, paramMap map[string]ast.Expr) {
+	if node == nil {
+		return
+	}
+
+	// First, recursively process all children
+	switch n := node.(type) {
+	case *ast.BlockStmt:
+		for _, stmt := range n.List {
+			substituteParamsPostOrder(stmt, paramMap)
+		}
+	case *ast.ExprStmt:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.AssignStmt:
+		for _, expr := range n.Lhs {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+		for _, expr := range n.Rhs {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+	case *ast.DeclStmt:
+		substituteParamsPostOrder(n.Decl, paramMap)
+	case *ast.GenDecl:
+		for _, spec := range n.Specs {
+			substituteParamsPostOrder(spec, paramMap)
+		}
+	case *ast.ValueSpec:
+		for _, val := range n.Values {
+			substituteParamsPostOrder(val, paramMap)
+		}
+	case *ast.IfStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Cond, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+		substituteParamsPostOrder(n.Else, paramMap)
+	case *ast.ForStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Cond, paramMap)
+		substituteParamsPostOrder(n.Post, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.RangeStmt:
+		substituteParamsPostOrder(n.Key, paramMap)
+		substituteParamsPostOrder(n.Value, paramMap)
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.ReturnStmt:
+		for _, expr := range n.Results {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+	case *ast.IncDecStmt:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.SwitchStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Tag, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.TypeSwitchStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Assign, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.CaseClause:
+		for _, expr := range n.List {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+		for _, stmt := range n.Body {
+			substituteParamsPostOrder(stmt, paramMap)
+		}
+	case *ast.BranchStmt:
+		// nothing to recurse into
+	case *ast.CallExpr:
+		substituteParamsPostOrder(n.Fun, paramMap)
+		for _, arg := range n.Args {
+			substituteParamsPostOrder(arg, paramMap)
+		}
+	case *ast.BinaryExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Y, paramMap)
+	case *ast.UnaryExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.IndexExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Index, paramMap)
+	case *ast.SliceExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Low, paramMap)
+		substituteParamsPostOrder(n.High, paramMap)
+		substituteParamsPostOrder(n.Max, paramMap)
+	case *ast.SelectorExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.ParenExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.StarExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.CompositeLit:
+		for _, elt := range n.Elts {
+			substituteParamsPostOrder(elt, paramMap)
+		}
+	case *ast.KeyValueExpr:
+		substituteParamsPostOrder(n.Key, paramMap)
+		substituteParamsPostOrder(n.Value, paramMap)
+	case *ast.TypeAssertExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.Ident, *ast.BasicLit:
+		// leaf nodes, nothing to recurse into
+	}
+
+	// Now, perform substitutions at this node level (post-order)
+	switch parent := node.(type) {
+	case *ast.CallExpr:
+		for i, arg := range parent.Args {
+			if ident, ok := arg.(*ast.Ident); ok {
 				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.X = cloneExpr(replacement)
-				}
-			}
-			if ident, ok := parent.Y.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.Y = cloneExpr(replacement)
-				}
-			}
-		case *ast.IndexExpr:
-			if ident, ok := parent.X.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.X = cloneExpr(replacement)
-				}
-			}
-			if ident, ok := parent.Index.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.Index = cloneExpr(replacement)
-				}
-			}
-		case *ast.SliceExpr:
-			if ident, ok := parent.X.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.X = cloneExpr(replacement)
-				}
-			}
-			if ident, ok := parent.Low.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.Low = cloneExpr(replacement)
-				}
-			}
-			if ident, ok := parent.High.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.High = cloneExpr(replacement)
-				}
-			}
-		case *ast.UnaryExpr:
-			if ident, ok := parent.X.(*ast.Ident); ok {
-				if replacement, isParam := paramMap[ident.Name]; isParam {
-					parent.X = cloneExpr(replacement)
-				}
-			}
-		case *ast.AssignStmt:
-			for i, rhs := range parent.Rhs {
-				if ident, ok := rhs.(*ast.Ident); ok {
-					if replacement, isParam := paramMap[ident.Name]; isParam {
-						parent.Rhs[i] = cloneExpr(replacement)
-					}
-				}
-			}
-		case *ast.ReturnStmt:
-			for i, result := range parent.Results {
-				if ident, ok := result.(*ast.Ident); ok {
-					if replacement, isParam := paramMap[ident.Name]; isParam {
-						parent.Results[i] = cloneExpr(replacement)
-					}
+					parent.Args[i] = cloneExpr(replacement)
 				}
 			}
 		}
-		return true
-	})
+	case *ast.BinaryExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.Y.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.Y = cloneExpr(replacement)
+			}
+		}
+	case *ast.IndexExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.Index.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.Index = cloneExpr(replacement)
+			}
+		}
+	case *ast.SliceExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.Low.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.Low = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.High.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.High = cloneExpr(replacement)
+			}
+		}
+	case *ast.UnaryExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+	case *ast.StarExpr:
+		// Handle pointer dereference: *bitPos where bitPos is a pointer parameter
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+	case *ast.AssignStmt:
+		for i, rhs := range parent.Rhs {
+			if ident, ok := rhs.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Rhs[i] = cloneExpr(replacement)
+				}
+			}
+		}
+	case *ast.ReturnStmt:
+		for i, result := range parent.Results {
+			if ident, ok := result.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Results[i] = cloneExpr(replacement)
+				}
+			}
+		}
+	}
 }

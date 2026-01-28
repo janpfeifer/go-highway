@@ -1,4 +1,4 @@
-//go:build !noasm && darwin && arm64
+//go:build !noasm && arm64
 
 // Copyright 2025 go-highway Authors
 //
