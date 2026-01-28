@@ -3437,6 +3437,15 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 		return
 	}
 
+	// For NEON target, detect accumulator patterns and use in-place operations.
+	// Pattern: acc = v.MulAdd(a, acc) -> v.MulAddAcc(a, &acc)
+	// This avoids return value allocation overhead on ARM64.
+	if ctx.target.Name == "NEON" {
+		if transformed := tryTransformToInPlace(stmt, ctx); transformed {
+			return
+		}
+	}
+
 	// Look for v.NumElements(), hwy.Lanes[T](), or similar and replace with constant
 	for i, rhs := range stmt.Rhs {
 		if call, ok := rhs.(*ast.CallExpr); ok {
@@ -3594,6 +3603,81 @@ func findMaxLoadSizeForElemType(body *ast.BlockStmt, elemType string) int {
 		return true
 	})
 	return maxSize
+}
+
+// tryTransformToInPlace detects accumulator patterns and transforms them to in-place operations.
+// Pattern: acc = v.MulAdd(a, acc) -> v.MulAddAcc(a, &acc)
+// This only applies to NEON target where in-place operations avoid allocation overhead.
+// Returns true if the statement was transformed.
+func tryTransformToInPlace(stmt *ast.AssignStmt, ctx *transformContext) bool {
+	// Only handle simple assignments with one LHS and one RHS
+	if len(stmt.Lhs) != 1 || len(stmt.Rhs) != 1 {
+		return false
+	}
+
+	// LHS must be an identifier (the accumulator variable)
+	lhsIdent, ok := stmt.Lhs[0].(*ast.Ident)
+	if !ok {
+		return false
+	}
+	accName := lhsIdent.Name
+
+	// RHS must be a method call
+	call, ok := stmt.Rhs[0].(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	// Get the method name
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	methodName := sel.Sel.Name
+
+	// Check if this operation has an in-place variant
+	var inPlaceOp OpInfo
+	var foundInPlace bool
+	for opName, opInfo := range ctx.target.OpMap {
+		if opInfo.InPlaceOf == methodName {
+			// Check if the last argument is the same as LHS (accumulator pattern)
+			if len(call.Args) > 0 {
+				lastArg := call.Args[len(call.Args)-1]
+				if argIdent, ok := lastArg.(*ast.Ident); ok && argIdent.Name == accName {
+					inPlaceOp = opInfo
+					inPlaceOp.Name = opName // Use the in-place op name
+					foundInPlace = true
+					break
+				}
+			}
+		}
+	}
+
+	if !foundInPlace {
+		return false
+	}
+
+	// Transform: acc = v.MulAdd(a, acc) -> v.MulAddAcc(a, &acc)
+	// The receiver stays the same, we change the method name and wrap the last arg with &
+
+	// Change method name to in-place version
+	sel.Sel.Name = inPlaceOp.Name
+
+	// Wrap the accumulator argument with &
+	lastIdx := len(call.Args) - 1
+	call.Args[lastIdx] = &ast.UnaryExpr{
+		Op: token.AND,
+		X:  call.Args[lastIdx],
+	}
+
+	// Remove the assignment - convert to expression statement
+	// We need to replace the AssignStmt with an ExprStmt in the parent
+	// Since we can't easily do that here, we'll use a workaround:
+	// Set the LHS to a blank identifier and the RHS to the call
+	// This isn't ideal, but Go will optimize away the blank assignment
+	stmt.Lhs[0] = ast.NewIdent("_")
+
+	return true
 }
 
 // tryHoistSetCall checks if an expression is a hwy.Set[T](constant) call
