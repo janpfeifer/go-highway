@@ -353,8 +353,11 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	// Post-process: scalarize fallback functions that only use simple ops.
 	// This converts hwy.Vec operations to pure scalar Go code for better performance
 	// by eliminating the allocation overhead of 1-element Vec wrappers.
+	// NOTE: Don't scalarize Float16/BFloat16 functions - their arithmetic operators
+	// do integer math (since they're uint16 under the hood), which produces wrong results.
+	// The non-scalarized path uses transformHalfPrecisionFallback to fix this.
 	wasScalarized := false
-	if target.Name == "Fallback" {
+	if target.Name == "Fallback" && !isHalfPrecisionType(elemType) {
 		if canScalarizeFallback(funcDecl) {
 			scalarizeFallback(funcDecl, elemType)
 			wasScalarized = true

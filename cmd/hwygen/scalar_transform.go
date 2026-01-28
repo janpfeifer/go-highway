@@ -890,8 +890,28 @@ func scalarizeHwyCall(opName string, args []ast.Expr, elemType string) ast.Expr 
 		return makeTypedZero(elemType)
 	case "Set", "Const":
 		// Set(val) or Const(val) -> T(val)
-		// Wrap with type conversion to ensure correct type inference
+		// For half-precision types, use conversion functions since T(val) won't compile
 		if len(args) >= 1 {
+			if elemType == "hwy.Float16" {
+				// hwy.Float32ToFloat16(float32(val))
+				return &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   ast.NewIdent("hwy"),
+						Sel: ast.NewIdent("Float32ToFloat16"),
+					},
+					Args: []ast.Expr{args[0]},
+				}
+			} else if elemType == "hwy.BFloat16" {
+				// hwy.Float32ToBFloat16(float32(val))
+				return &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   ast.NewIdent("hwy"),
+						Sel: ast.NewIdent("Float32ToBFloat16"),
+					},
+					Args: []ast.Expr{args[0]},
+				}
+			}
+			// For native types, use type conversion
 			return &ast.CallExpr{
 				Fun:  parseTypeExpr(elemType),
 				Args: []ast.Expr{args[0]},
@@ -1075,11 +1095,33 @@ func scalarizeVecType(typeExpr ast.Expr, elemType string) ast.Expr {
 // makeTypedZero creates a zero value for the given element type.
 // Always uses explicit type conversion to ensure correct type inference.
 func makeTypedZero(elemType string) ast.Expr {
-	// Always use explicit type conversion: T(0)
-	// This is necessary because untyped literals would default to
-	// int or float64, causing type mismatches in short variable declarations.
-	return &ast.CallExpr{
-		Fun:  parseTypeExpr(elemType),
-		Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}},
+	// For half-precision types, use conversion functions
+	switch elemType {
+	case "hwy.Float16":
+		// hwy.Float32ToFloat16(0)
+		return &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent("Float32ToFloat16"),
+			},
+			Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}},
+		}
+	case "hwy.BFloat16":
+		// hwy.Float32ToBFloat16(0)
+		return &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent("Float32ToBFloat16"),
+			},
+			Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}},
+		}
+	default:
+		// Always use explicit type conversion: T(0)
+		// This is necessary because untyped literals would default to
+		// int or float64, causing type mismatches in short variable declarations.
+		return &ast.CallExpr{
+			Fun:  parseTypeExpr(elemType),
+			Args: []ast.Expr{&ast.BasicLit{Kind: token.INT, Value: "0"}},
+		}
 	}
 }
