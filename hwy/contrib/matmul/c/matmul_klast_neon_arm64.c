@@ -545,7 +545,8 @@ void matmul_klast_neon_f16(__fp16 *a, __fp16 *b, __fp16 *c,
 // =============================================================================
 // matmul_klast_neon_bf16: Tiled dot-product matmul for bfloat16
 // =============================================================================
-// Uses BFDOT where available, falls back to widening otherwise
+// Uses widening to f32 for computation (like f16 version)
+// BFDOT is designed for matrix multiplication, not K-last dot products
 // Accumulates in f32 for precision
 //
 // func matmul_klast_neon_bf16(a, b, c unsafe.Pointer, m, n, k int64)
@@ -584,86 +585,50 @@ void matmul_klast_neon_bf16(__bf16 *a, __bf16 *b, __bf16 *c,
             float32x4_t acc32 = vdupq_n_f32(0.0f);
             float32x4_t acc33 = vdupq_n_f32(0.0f);
 
-            // Process 4 bf16 elements at a time using BFDOT
-            // BFDOT processes 2 bf16 pairs and accumulates into f32
+            // Process 4 bf16 elements at a time, widening to f32
             long p = 0;
             for (; p + 4 <= k; p += 4) {
-                // Load 4 bf16 as bfloat16x4_t, then widen to 2x bfloat16x4_t for BFDOT
+                // Load bf16 and widen to f32 using vcvt_f32_bf16
                 bfloat16x4_t a0_bf = vld1_bf16(a + (i + 0) * k + p);
                 bfloat16x4_t a1_bf = vld1_bf16(a + (i + 1) * k + p);
                 bfloat16x4_t a2_bf = vld1_bf16(a + (i + 2) * k + p);
                 bfloat16x4_t a3_bf = vld1_bf16(a + (i + 3) * k + p);
+
+                float32x4_t a0 = vcvt_f32_bf16(a0_bf);
+                float32x4_t a1 = vcvt_f32_bf16(a1_bf);
+                float32x4_t a2 = vcvt_f32_bf16(a2_bf);
+                float32x4_t a3 = vcvt_f32_bf16(a3_bf);
 
                 bfloat16x4_t b0_bf = vld1_bf16(b + (j + 0) * k + p);
                 bfloat16x4_t b1_bf = vld1_bf16(b + (j + 1) * k + p);
                 bfloat16x4_t b2_bf = vld1_bf16(b + (j + 2) * k + p);
                 bfloat16x4_t b3_bf = vld1_bf16(b + (j + 3) * k + p);
 
-                // Use BFDOT: accumulates 2 pairs of bf16 into f32
-                // vbfdot_f32(acc, a, b) does: acc[i] += a[2i]*b[2i] + a[2i+1]*b[2i+1]
-                float32x2_t acc00_lo = vbfdot_f32(vget_low_f32(acc00), a0_bf, b0_bf);
-                float32x2_t acc00_hi = vbfdot_f32(vget_high_f32(acc00), a0_bf, b0_bf);
-                acc00 = vcombine_f32(acc00_lo, acc00_hi);
+                float32x4_t b0 = vcvt_f32_bf16(b0_bf);
+                float32x4_t b1 = vcvt_f32_bf16(b1_bf);
+                float32x4_t b2 = vcvt_f32_bf16(b2_bf);
+                float32x4_t b3 = vcvt_f32_bf16(b3_bf);
 
-                float32x2_t acc01_lo = vbfdot_f32(vget_low_f32(acc01), a0_bf, b1_bf);
-                float32x2_t acc01_hi = vbfdot_f32(vget_high_f32(acc01), a0_bf, b1_bf);
-                acc01 = vcombine_f32(acc01_lo, acc01_hi);
+                // 16 FMAs in f32
+                acc00 = vfmaq_f32(acc00, a0, b0);
+                acc01 = vfmaq_f32(acc01, a0, b1);
+                acc02 = vfmaq_f32(acc02, a0, b2);
+                acc03 = vfmaq_f32(acc03, a0, b3);
 
-                float32x2_t acc02_lo = vbfdot_f32(vget_low_f32(acc02), a0_bf, b2_bf);
-                float32x2_t acc02_hi = vbfdot_f32(vget_high_f32(acc02), a0_bf, b2_bf);
-                acc02 = vcombine_f32(acc02_lo, acc02_hi);
+                acc10 = vfmaq_f32(acc10, a1, b0);
+                acc11 = vfmaq_f32(acc11, a1, b1);
+                acc12 = vfmaq_f32(acc12, a1, b2);
+                acc13 = vfmaq_f32(acc13, a1, b3);
 
-                float32x2_t acc03_lo = vbfdot_f32(vget_low_f32(acc03), a0_bf, b3_bf);
-                float32x2_t acc03_hi = vbfdot_f32(vget_high_f32(acc03), a0_bf, b3_bf);
-                acc03 = vcombine_f32(acc03_lo, acc03_hi);
+                acc20 = vfmaq_f32(acc20, a2, b0);
+                acc21 = vfmaq_f32(acc21, a2, b1);
+                acc22 = vfmaq_f32(acc22, a2, b2);
+                acc23 = vfmaq_f32(acc23, a2, b3);
 
-                float32x2_t acc10_lo = vbfdot_f32(vget_low_f32(acc10), a1_bf, b0_bf);
-                float32x2_t acc10_hi = vbfdot_f32(vget_high_f32(acc10), a1_bf, b0_bf);
-                acc10 = vcombine_f32(acc10_lo, acc10_hi);
-
-                float32x2_t acc11_lo = vbfdot_f32(vget_low_f32(acc11), a1_bf, b1_bf);
-                float32x2_t acc11_hi = vbfdot_f32(vget_high_f32(acc11), a1_bf, b1_bf);
-                acc11 = vcombine_f32(acc11_lo, acc11_hi);
-
-                float32x2_t acc12_lo = vbfdot_f32(vget_low_f32(acc12), a1_bf, b2_bf);
-                float32x2_t acc12_hi = vbfdot_f32(vget_high_f32(acc12), a1_bf, b2_bf);
-                acc12 = vcombine_f32(acc12_lo, acc12_hi);
-
-                float32x2_t acc13_lo = vbfdot_f32(vget_low_f32(acc13), a1_bf, b3_bf);
-                float32x2_t acc13_hi = vbfdot_f32(vget_high_f32(acc13), a1_bf, b3_bf);
-                acc13 = vcombine_f32(acc13_lo, acc13_hi);
-
-                float32x2_t acc20_lo = vbfdot_f32(vget_low_f32(acc20), a2_bf, b0_bf);
-                float32x2_t acc20_hi = vbfdot_f32(vget_high_f32(acc20), a2_bf, b0_bf);
-                acc20 = vcombine_f32(acc20_lo, acc20_hi);
-
-                float32x2_t acc21_lo = vbfdot_f32(vget_low_f32(acc21), a2_bf, b1_bf);
-                float32x2_t acc21_hi = vbfdot_f32(vget_high_f32(acc21), a2_bf, b1_bf);
-                acc21 = vcombine_f32(acc21_lo, acc21_hi);
-
-                float32x2_t acc22_lo = vbfdot_f32(vget_low_f32(acc22), a2_bf, b2_bf);
-                float32x2_t acc22_hi = vbfdot_f32(vget_high_f32(acc22), a2_bf, b2_bf);
-                acc22 = vcombine_f32(acc22_lo, acc22_hi);
-
-                float32x2_t acc23_lo = vbfdot_f32(vget_low_f32(acc23), a2_bf, b3_bf);
-                float32x2_t acc23_hi = vbfdot_f32(vget_high_f32(acc23), a2_bf, b3_bf);
-                acc23 = vcombine_f32(acc23_lo, acc23_hi);
-
-                float32x2_t acc30_lo = vbfdot_f32(vget_low_f32(acc30), a3_bf, b0_bf);
-                float32x2_t acc30_hi = vbfdot_f32(vget_high_f32(acc30), a3_bf, b0_bf);
-                acc30 = vcombine_f32(acc30_lo, acc30_hi);
-
-                float32x2_t acc31_lo = vbfdot_f32(vget_low_f32(acc31), a3_bf, b1_bf);
-                float32x2_t acc31_hi = vbfdot_f32(vget_high_f32(acc31), a3_bf, b1_bf);
-                acc31 = vcombine_f32(acc31_lo, acc31_hi);
-
-                float32x2_t acc32_lo = vbfdot_f32(vget_low_f32(acc32), a3_bf, b2_bf);
-                float32x2_t acc32_hi = vbfdot_f32(vget_high_f32(acc32), a3_bf, b2_bf);
-                acc32 = vcombine_f32(acc32_lo, acc32_hi);
-
-                float32x2_t acc33_lo = vbfdot_f32(vget_low_f32(acc33), a3_bf, b3_bf);
-                float32x2_t acc33_hi = vbfdot_f32(vget_high_f32(acc33), a3_bf, b3_bf);
-                acc33 = vcombine_f32(acc33_lo, acc33_hi);
+                acc30 = vfmaq_f32(acc30, a3, b0);
+                acc31 = vfmaq_f32(acc31, a3, b1);
+                acc32 = vfmaq_f32(acc32, a3, b2);
+                acc33 = vfmaq_f32(acc33, a3, b3);
             }
 
             // Horizontal sums
@@ -686,7 +651,7 @@ void matmul_klast_neon_bf16(__bf16 *a, __bf16 *b, __bf16 *c,
 
             // Scalar tail
             for (; p < k; p++) {
-                // bf16 to f32 conversion via bit manipulation
+                // bf16 to f32 conversion
                 float a0s = vcvtah_f32_bf16(a[(i + 0) * k + p]);
                 float a1s = vcvtah_f32_bf16(a[(i + 1) * k + p]);
                 float a2s = vcvtah_f32_bf16(a[(i + 2) * k + p]);
