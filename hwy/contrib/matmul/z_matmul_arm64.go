@@ -502,7 +502,12 @@ func blockedMatMulNEON(a, b, c []float32, m, n, k int) {
 	// Above this, blocked NEON's cache efficiency helps
 	const blockedThreshold = 128 * 128 * 128 // 2M ops
 
-	if totalOps < blockedThreshold {
+	// The blocked NEON assembly crashes on some ARM64 CPUs (e.g., Ampere Altra)
+	// when M is small (< BlockSize). Use streaming NEON for small M regardless
+	// of total ops - blocking overhead isn't beneficial anyway for small M.
+	const minMForBlocked = 48 // BlockSize
+
+	if totalOps < blockedThreshold || m < minMForBlocked {
 		asm.MatMulNEONF32(a, b, c, m, n, k)
 	} else {
 		asm.BlockedMatMulNEONF32(a, b, c, m, n, k)
@@ -513,8 +518,9 @@ func blockedMatMulNEON(a, b, c []float32, m, n, k int) {
 func blockedMatMulNEON64(a, b, c []float64, m, n, k int) {
 	totalOps := m * n * k
 	const blockedThreshold = 128 * 128 * 128 // 2M ops
+	const minMForBlocked = 48                // BlockSize
 
-	if totalOps < blockedThreshold {
+	if totalOps < blockedThreshold || m < minMForBlocked {
 		asm.MatMulNEONF64(a, b, c, m, n, k)
 	} else {
 		asm.BlockedMatMulNEONF64(a, b, c, m, n, k)
@@ -523,12 +529,28 @@ func blockedMatMulNEON64(a, b, c []float64, m, n, k int) {
 
 // blockedMatMulNEONF16 uses NEON for blocked float16 matmul.
 func blockedMatMulNEONF16(a, b, c []hwy.Float16, m, n, k int) {
-	asm.MatMulNEONF16(a, b, c, m, n, k)
+	totalOps := m * n * k
+	const blockedThreshold = 128 * 128 * 128 // 2M ops
+	const minMForBlocked = 48                // BlockSize
+
+	if totalOps < blockedThreshold || m < minMForBlocked {
+		asm.MatMulNEONF16(a, b, c, m, n, k)
+	} else {
+		asm.BlockedMatMulNEONF16(a, b, c, m, n, k)
+	}
 }
 
 // blockedMatMulNEONBF16 uses NEON for blocked bfloat16 matmul.
 func blockedMatMulNEONBF16(a, b, c []hwy.BFloat16, m, n, k int) {
-	asm.MatMulNEONBF16(a, b, c, m, n, k)
+	totalOps := m * n * k
+	const blockedThreshold = 128 * 128 * 128 // 2M ops
+	const minMForBlocked = 48                // BlockSize
+
+	if totalOps < blockedThreshold || m < minMForBlocked {
+		asm.MatMulNEONBF16(a, b, c, m, n, k)
+	} else {
+		asm.BlockedMatMulNEONBF16(a, b, c, m, n, k)
+	}
 }
 
 // blockedMatMulFMOPAF16 uses SME FMOPA for blocked float16 matmul.
