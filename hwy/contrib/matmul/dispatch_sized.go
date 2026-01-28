@@ -94,3 +94,53 @@ func MatMulAutoFloat32(a, b, c []float32, m, n, k int) {
 func MatMulAutoFloat64(a, b, c []float64, m, n, k int) {
 	MatMulAuto(a, b, c, m, n, k)
 }
+
+// MatMulKLastAuto automatically selects the best algorithm for K-last layout.
+//
+// K-last layout: A is [M,K], B is [N,K] (both with K as last dimension).
+// Computes C = A @ B^T where C is [M,N].
+//
+// Algorithm selection based on matrix size (total ops = M * N * K):
+//   - Small (<64^3): Streaming MatMulKLast - lowest overhead
+//   - Larger: MatMulKLastBlocked - cache tiling for better locality
+//
+// On ARM64 with SME, the dispatch already uses FMOPA with transpose
+// for sizes >= 32 (when 16-aligned), which is 2-4x faster than NEON.
+func MatMulKLastAuto[T hwy.Floats](a, b, c []T, m, n, k int) {
+	totalOps := m * n * k
+
+	// For very small M, streaming is more efficient than blocked.
+	const SmallMThreshold = 16
+	if m < SmallMThreshold && n >= 16 && k >= 16 {
+		MatMulKLast(a, b, c, m, n, k)
+		return
+	}
+
+	if totalOps < SmallMatrixThreshold {
+		// Small matrices: streaming is faster (no blocking overhead)
+		MatMulKLast(a, b, c, m, n, k)
+	} else {
+		// Larger matrices: use blocked version for better cache locality
+		MatMulKLastBlocked(a, b, c, m, n, k)
+	}
+}
+
+// MatMulKLastAutoFloat32 is the non-generic version for float32.
+func MatMulKLastAutoFloat32(a, b, c []float32, m, n, k int) {
+	MatMulKLastAuto(a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoFloat64 is the non-generic version for float64.
+func MatMulKLastAutoFloat64(a, b, c []float64, m, n, k int) {
+	MatMulKLastAuto(a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoFloat16 is the non-generic version for Float16.
+func MatMulKLastAutoFloat16(a, b, c []hwy.Float16, m, n, k int) {
+	MatMulKLastAuto(a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoBFloat16 is the non-generic version for BFloat16.
+func MatMulKLastAutoBFloat16(a, b, c []hwy.BFloat16, m, n, k int) {
+	MatMulKLastAuto(a, b, c, m, n, k)
+}
