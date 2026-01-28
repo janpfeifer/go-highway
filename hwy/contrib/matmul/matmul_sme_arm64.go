@@ -57,13 +57,9 @@ var transposePoolBF16 = sync.Pool{
 
 // transposeMatrix transposes M×K matrix A into K×M matrix AT (row-major to column-major)
 // AT[k,i] = A[i,k]
-// Uses generics to support all float types.
+// Dispatches to SIMD implementation (NEON or SME depending on size).
 func transposeMatrix[T hwy.Floats](a []T, m, k int, at []T) {
-	for i := range m {
-		for j := range k {
-			at[j*m+i] = a[i*k+j]
-		}
-	}
+	Transpose2D(a, m, k, at)
 }
 
 // matmulFMOPA uses ARM SME FMOPA instruction for matrix multiplication.
