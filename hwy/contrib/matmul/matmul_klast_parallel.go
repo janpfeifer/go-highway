@@ -5,8 +5,10 @@ package matmul
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/workerpool"
 )
 
 // ParallelMatMulKLast computes C = A * B^T using parallel execution.
@@ -26,34 +28,31 @@ func ParallelMatMulKLast[T hwy.Floats](a, b, c []T, m, n, k int) {
 	}
 
 	numWorkers := runtime.GOMAXPROCS(0)
-
-	// Calculate number of row strips
 	numStrips := (m + RowsPerStrip - 1) / RowsPerStrip
-
-	// Work queue of row strips
-	work := make(chan int, numStrips)
-	for strip := range numStrips {
-		work <- strip
+	if numWorkers > numStrips {
+		numWorkers = numStrips
 	}
-	close(work)
 
-	// Workers grab strips from queue and use MatMulKLastBlocked for each
+	var nextStrip atomic.Int32
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Go(func() {
-			for strip := range work {
+			for {
+				strip := int(nextStrip.Add(1)) - 1
+				if strip >= numStrips {
+					return
+				}
+
 				rowStart := strip * RowsPerStrip
 				rowEnd := min(rowStart+RowsPerStrip, m)
 				stripM := rowEnd - rowStart
 
-				// Get slices for this strip
 				// A: rows [rowStart:rowEnd] with K columns each
 				aStrip := a[rowStart*k : rowEnd*k]
 				// C: rows [rowStart:rowEnd] with N columns each
 				cStrip := c[rowStart*n : rowEnd*n]
 
 				// B is shared across all strips (N x K)
-				// Use optimized blocked K-last matmul for this strip
 				MatMulKLastBlocked(aStrip, b, cStrip, stripM, n, k)
 			}
 		})
@@ -69,21 +68,17 @@ func ParallelMatMulKLastFineGrained[T hwy.Floats](a, b, c []T, m, n, k int) {
 		return
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
-	if numWorkers > m {
-		numWorkers = m
-	}
+	numWorkers := min(runtime.GOMAXPROCS(0), m)
 
-	work := make(chan int, m)
-	for row := range m {
-		work <- row
-	}
-	close(work)
-
+	var nextRow atomic.Int32
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Go(func() {
-			for row := range work {
+			for {
+				row := int(nextRow.Add(1)) - 1
+				if row >= m {
+					return
+				}
 				aRow := a[row*k : (row+1)*k]
 				cRow := c[row*n : (row+1)*n]
 				MatMulKLastBlocked(aRow, b, cRow, 1, n, k)
@@ -91,6 +86,50 @@ func ParallelMatMulKLastFineGrained[T hwy.Floats](a, b, c []T, m, n, k int) {
 		})
 	}
 	wg.Wait()
+}
+
+// ParallelMatMulKLastWithPool computes C = A * B^T using a persistent worker pool.
+// This avoids per-call goroutine spawn overhead, critical for transformer
+// inference with ~50+ matmul ops per forward pass.
+//
+//   - A is M x K (row-major, K last)
+//   - B is N x K (row-major, K last - PyTorch weight format)
+//   - C is M x N (row-major)
+func ParallelMatMulKLastWithPool[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
+	if m*n*k < MinParallelOps || pool == nil {
+		MatMulKLastBlocked(a, b, c, m, n, k)
+		return
+	}
+
+	numStrips := (m + RowsPerStrip - 1) / RowsPerStrip
+
+	pool.ParallelFor(numStrips, func(start, end int) {
+		for strip := start; strip < end; strip++ {
+			rowStart := strip * RowsPerStrip
+			rowEnd := min(rowStart+RowsPerStrip, m)
+			stripM := rowEnd - rowStart
+
+			aStrip := a[rowStart*k : rowEnd*k]
+			cStrip := c[rowStart*n : rowEnd*n]
+
+			MatMulKLastBlocked(aStrip, b, cStrip, stripM, n, k)
+		}
+	})
+}
+
+// ParallelMatMulKLastFineGrainedWithPool computes C = A * B^T using fine-grained
+// parallelism with a persistent worker pool. Uses atomic work stealing for load balancing.
+func ParallelMatMulKLastFineGrainedWithPool[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
+	if m*n*k < MinParallelOps || pool == nil {
+		MatMulKLastBlocked(a, b, c, m, n, k)
+		return
+	}
+
+	pool.ParallelForAtomic(m, func(row int) {
+		aRow := a[row*k : (row+1)*k]
+		cRow := c[row*n : (row+1)*n]
+		MatMulKLastBlocked(aRow, b, cRow, 1, n, k)
+	})
 }
 
 // ParallelMatMulKLastFineGrainedFloat32 is the non-generic version for float32.
@@ -121,4 +160,44 @@ func ParallelMatMulKLastFloat16(a, b, c []hwy.Float16, m, n, k int) {
 // ParallelMatMulKLastBFloat16 is the non-generic version for BFloat16.
 func ParallelMatMulKLastBFloat16(a, b, c []hwy.BFloat16, m, n, k int) {
 	ParallelMatMulKLast(a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastWithPoolFloat32 is the non-generic version for float32.
+func ParallelMatMulKLastWithPoolFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
+	ParallelMatMulKLastWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastWithPoolFloat64 is the non-generic version for float64.
+func ParallelMatMulKLastWithPoolFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
+	ParallelMatMulKLastWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastWithPoolFloat16 is the non-generic version for Float16.
+func ParallelMatMulKLastWithPoolFloat16(pool *workerpool.Pool, a, b, c []hwy.Float16, m, n, k int) {
+	ParallelMatMulKLastWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastWithPoolBFloat16 is the non-generic version for BFloat16.
+func ParallelMatMulKLastWithPoolBFloat16(pool *workerpool.Pool, a, b, c []hwy.BFloat16, m, n, k int) {
+	ParallelMatMulKLastWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastFineGrainedWithPoolFloat32 is the non-generic version for float32.
+func ParallelMatMulKLastFineGrainedWithPoolFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
+	ParallelMatMulKLastFineGrainedWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastFineGrainedWithPoolFloat64 is the non-generic version for float64.
+func ParallelMatMulKLastFineGrainedWithPoolFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
+	ParallelMatMulKLastFineGrainedWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastFineGrainedWithPoolFloat16 is the non-generic version for Float16.
+func ParallelMatMulKLastFineGrainedWithPoolFloat16(pool *workerpool.Pool, a, b, c []hwy.Float16, m, n, k int) {
+	ParallelMatMulKLastFineGrainedWithPool(pool, a, b, c, m, n, k)
+}
+
+// ParallelMatMulKLastFineGrainedWithPoolBFloat16 is the non-generic version for BFloat16.
+func ParallelMatMulKLastFineGrainedWithPoolBFloat16(pool *workerpool.Pool, a, b, c []hwy.BFloat16, m, n, k int) {
+	ParallelMatMulKLastFineGrainedWithPool(pool, a, b, c, m, n, k)
 }

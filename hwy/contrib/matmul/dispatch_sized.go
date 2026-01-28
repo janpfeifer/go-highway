@@ -18,6 +18,7 @@ import (
 	"runtime"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/workerpool"
 )
 
 // Size-based dispatch thresholds.
@@ -98,6 +99,56 @@ func MatMulAutoFloat64(a, b, c []float64, m, n, k int) {
 	MatMulAuto(a, b, c, m, n, k)
 }
 
+// MatMulAutoWithPool is like MatMulAuto but uses a persistent worker pool.
+// This avoids per-call goroutine spawn overhead, critical for transformer
+// inference with ~50+ matmul ops per forward pass.
+//
+// Usage:
+//
+//	pool := workerpool.New(runtime.GOMAXPROCS(0))
+//	defer pool.Close()
+//
+//	for _, layer := range layers {
+//	    matmul.MatMulAutoWithPool(pool, a, b, c, m, n, k)
+//	}
+func MatMulAutoWithPool[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
+	if pool == nil {
+		MatMulAuto(a, b, c, m, n, k)
+		return
+	}
+
+	totalOps := m * n * k
+
+	const SmallMThreshold = 64
+	if m < SmallMThreshold && totalOps >= SmallMatrixThreshold {
+		ParallelMatMulFineGrainedWithPool(pool, a, b, c, m, n, k)
+		return
+	}
+
+	if totalOps < SmallMatrixThreshold {
+		MatMul(a, b, c, m, n, k)
+	} else if totalOps < LargeMatrixThreshold {
+		ParallelMatMulWithPool(pool, a, b, c, m, n, k)
+	} else {
+		if runtime.GOARCH == "arm64" {
+			ParallelMatMulWithPool(pool, a, b, c, m, n, k)
+		} else {
+			// V2 has its own parallelism, fall back to non-pool version
+			ParallelPackedMatMulV2(a, b, c, m, n, k)
+		}
+	}
+}
+
+// MatMulAutoWithPoolFloat32 is the non-generic version for float32.
+func MatMulAutoWithPoolFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
+	MatMulAutoWithPool(pool, a, b, c, m, n, k)
+}
+
+// MatMulAutoWithPoolFloat64 is the non-generic version for float64.
+func MatMulAutoWithPoolFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
+	MatMulAutoWithPool(pool, a, b, c, m, n, k)
+}
+
 // MatMulKLastAuto automatically selects the best algorithm for K-last layout.
 //
 // K-last layout: A is [M,K], B is [N,K] (both with K as last dimension).
@@ -151,4 +202,51 @@ func MatMulKLastAutoFloat16(a, b, c []hwy.Float16, m, n, k int) {
 // MatMulKLastAutoBFloat16 is the non-generic version for BFloat16.
 func MatMulKLastAutoBFloat16(a, b, c []hwy.BFloat16, m, n, k int) {
 	MatMulKLastAuto(a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoWithPool is like MatMulKLastAuto but uses a persistent worker pool.
+// This avoids per-call goroutine spawn overhead, critical for transformer
+// inference with ~50+ matmul ops per forward pass.
+//
+// K-last layout: A is [M,K], B is [N,K] (both with K as last dimension).
+// Computes C = A @ B^T where C is [M,N].
+func MatMulKLastAutoWithPool[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
+	if pool == nil {
+		MatMulKLastAuto(a, b, c, m, n, k)
+		return
+	}
+
+	totalOps := m * n * k
+
+	const SmallMThreshold = 64
+	if m < SmallMThreshold && totalOps >= SmallMatrixThreshold {
+		ParallelMatMulKLastFineGrainedWithPool(pool, a, b, c, m, n, k)
+		return
+	}
+
+	if totalOps < SmallMatrixThreshold {
+		MatMulKLast(a, b, c, m, n, k)
+	} else {
+		ParallelMatMulKLastWithPool(pool, a, b, c, m, n, k)
+	}
+}
+
+// MatMulKLastAutoWithPoolFloat32 is the non-generic version for float32.
+func MatMulKLastAutoWithPoolFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
+	MatMulKLastAutoWithPool(pool, a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoWithPoolFloat64 is the non-generic version for float64.
+func MatMulKLastAutoWithPoolFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
+	MatMulKLastAutoWithPool(pool, a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoWithPoolFloat16 is the non-generic version for Float16.
+func MatMulKLastAutoWithPoolFloat16(pool *workerpool.Pool, a, b, c []hwy.Float16, m, n, k int) {
+	MatMulKLastAutoWithPool(pool, a, b, c, m, n, k)
+}
+
+// MatMulKLastAutoWithPoolBFloat16 is the non-generic version for BFloat16.
+func MatMulKLastAutoWithPoolBFloat16(pool *workerpool.Pool, a, b, c []hwy.BFloat16, m, n, k int) {
+	MatMulKLastAutoWithPool(pool, a, b, c, m, n, k)
 }
