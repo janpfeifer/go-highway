@@ -13,10 +13,42 @@ func BaseTranspose2D_fallback_Float16(src []hwy.Float16, m int, k int, dst []hwy
 	lanes := hwy.MaxLanes[hwy.Float16]()
 	for i := 0; i <= m-lanes; i += lanes {
 		for j := 0; j <= k-lanes; j += lanes {
-			transposeBlockSIMD(src, dst, i, j, m, k, lanes)
+			{
+				rows_1 := make([]hwy.Vec[hwy.Float16], lanes)
+				for r_1 := 0; r_1 < lanes; r_1++ {
+					rows_1[r_1] = hwy.LoadFull(src[(i+r_1)*k+j:])
+				}
+				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
+					stride_1 := 1 << level_1
+					newRows_1 := make([]hwy.Vec[hwy.Float16], lanes)
+					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
+						for j_1 := 0; j_1 < stride_1; j_1++ {
+							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+						}
+					}
+					rows_1 = newRows_1
+				}
+				for c_1 := 0; c_1 < lanes; c_1++ {
+					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+				}
+			}
 		}
 	}
-	transposeEdgesScalar(src, m, k, dst, lanes)
+	{
+		blockM_2 := (m / lanes) * lanes
+		blockK_2 := (k / lanes) * lanes
+		for i_2 := 0; i_2 < m; i_2++ {
+			for j_2 := blockK_2; j_2 < k; j_2++ {
+				dst[j_2*m+i_2] = hwy.Float32ToFloat16(src[i_2*k+j_2].Float32())
+			}
+		}
+		for i_2 := blockM_2; i_2 < m; i_2++ {
+			for j_2 := 0; j_2 < blockK_2; j_2++ {
+				dst[j_2*m+i_2] = hwy.Float32ToFloat16(src[i_2*k+j_2].Float32())
+			}
+		}
+	}
 }
 
 func BaseTranspose2D_fallback_BFloat16(src []hwy.BFloat16, m int, k int, dst []hwy.BFloat16) {
@@ -26,10 +58,42 @@ func BaseTranspose2D_fallback_BFloat16(src []hwy.BFloat16, m int, k int, dst []h
 	lanes := hwy.MaxLanes[hwy.BFloat16]()
 	for i := 0; i <= m-lanes; i += lanes {
 		for j := 0; j <= k-lanes; j += lanes {
-			transposeBlockSIMD(src, dst, i, j, m, k, lanes)
+			{
+				rows_1 := make([]hwy.Vec[hwy.BFloat16], lanes)
+				for r_1 := 0; r_1 < lanes; r_1++ {
+					rows_1[r_1] = hwy.LoadFull(src[(i+r_1)*k+j:])
+				}
+				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
+					stride_1 := 1 << level_1
+					newRows_1 := make([]hwy.Vec[hwy.BFloat16], lanes)
+					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
+						for j_1 := 0; j_1 < stride_1; j_1++ {
+							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+						}
+					}
+					rows_1 = newRows_1
+				}
+				for c_1 := 0; c_1 < lanes; c_1++ {
+					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+				}
+			}
 		}
 	}
-	transposeEdgesScalar(src, m, k, dst, lanes)
+	{
+		blockM_2 := (m / lanes) * lanes
+		blockK_2 := (k / lanes) * lanes
+		for i_2 := 0; i_2 < m; i_2++ {
+			for j_2 := blockK_2; j_2 < k; j_2++ {
+				dst[j_2*m+i_2] = hwy.Float32ToBFloat16(src[i_2*k+j_2].Float32())
+			}
+		}
+		for i_2 := blockM_2; i_2 < m; i_2++ {
+			for j_2 := 0; j_2 < blockK_2; j_2++ {
+				dst[j_2*m+i_2] = hwy.Float32ToBFloat16(src[i_2*k+j_2].Float32())
+			}
+		}
+	}
 }
 
 func BaseTranspose2D_fallback(src []float32, m int, k int, dst []float32) {
@@ -38,10 +102,42 @@ func BaseTranspose2D_fallback(src []float32, m int, k int, dst []float32) {
 	}
 	for i := 0; i <= m-1; i++ {
 		for j := 0; j <= k-1; j++ {
-			transposeBlockSIMD(src, dst, i, j, m, k, 1)
+			{
+				rows_1 := make([]float32, 1)
+				for r_1 := 0; r_1 < 1; r_1++ {
+					rows_1[r_1] = src[(i+r_1)*k+j]
+				}
+				for level_1 := 0; (1 << level_1) < 1; level_1++ {
+					stride_1 := 1 << level_1
+					newRows_1 := make([]float32, 1)
+					for i_1 := 0; i_1 < 1; i_1 += 2 * stride_1 {
+						for j_1 := 0; j_1 < stride_1; j_1++ {
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1]
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1+stride_1]
+						}
+					}
+					rows_1 = newRows_1
+				}
+				for c_1 := 0; c_1 < 1; c_1++ {
+					dst[(j+c_1)*m+i] = rows_1[c_1]
+				}
+			}
 		}
 	}
-	transposeEdgesScalar(src, m, k, dst, 1)
+	{
+		blockM_2 := (m / 1) * 1
+		blockK_2 := (k / 1) * 1
+		for i_2 := 0; i_2 < m; i_2++ {
+			for j_2 := blockK_2; j_2 < k; j_2++ {
+				dst[j_2*m+i_2] = src[i_2*k+j_2]
+			}
+		}
+		for i_2 := blockM_2; i_2 < m; i_2++ {
+			for j_2 := 0; j_2 < blockK_2; j_2++ {
+				dst[j_2*m+i_2] = src[i_2*k+j_2]
+			}
+		}
+	}
 }
 
 func BaseTranspose2D_fallback_Float64(src []float64, m int, k int, dst []float64) {
@@ -50,8 +146,40 @@ func BaseTranspose2D_fallback_Float64(src []float64, m int, k int, dst []float64
 	}
 	for i := 0; i <= m-1; i++ {
 		for j := 0; j <= k-1; j++ {
-			transposeBlockSIMD(src, dst, i, j, m, k, 1)
+			{
+				rows_1 := make([]float64, 1)
+				for r_1 := 0; r_1 < 1; r_1++ {
+					rows_1[r_1] = src[(i+r_1)*k+j]
+				}
+				for level_1 := 0; (1 << level_1) < 1; level_1++ {
+					stride_1 := 1 << level_1
+					newRows_1 := make([]float64, 1)
+					for i_1 := 0; i_1 < 1; i_1 += 2 * stride_1 {
+						for j_1 := 0; j_1 < stride_1; j_1++ {
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1]
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1+stride_1]
+						}
+					}
+					rows_1 = newRows_1
+				}
+				for c_1 := 0; c_1 < 1; c_1++ {
+					dst[(j+c_1)*m+i] = rows_1[c_1]
+				}
+			}
 		}
 	}
-	transposeEdgesScalar(src, m, k, dst, 1)
+	{
+		blockM_2 := (m / 1) * 1
+		blockK_2 := (k / 1) * 1
+		for i_2 := 0; i_2 < m; i_2++ {
+			for j_2 := blockK_2; j_2 < k; j_2++ {
+				dst[j_2*m+i_2] = src[i_2*k+j_2]
+			}
+		}
+		for i_2 := blockM_2; i_2 < m; i_2++ {
+			for j_2 := 0; j_2 < blockK_2; j_2++ {
+				dst[j_2*m+i_2] = src[i_2*k+j_2]
+			}
+		}
+	}
 }

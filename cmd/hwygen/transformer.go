@@ -224,8 +224,9 @@ type HoistedConst struct {
 type TransformOptions struct {
 	TypeSpecificConsts map[string]*TypeSpecificConst
 	ConditionalBlocks  []ConditionalBlock
-	FileSet            *token.FileSet    // For resolving line numbers in conditional blocks
-	Imports            map[string]string // map[local_name]import_path for resolving package references
+	FileSet            *token.FileSet               // For resolving line numbers in conditional blocks
+	Imports            map[string]string            // map[local_name]import_path for resolving package references
+	AllFuncs           map[string]*ParsedFunc       // All functions in file for inlining helpers
 }
 
 // Transform transforms a parsed function for a specific target and element type.
@@ -303,6 +304,7 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 		halfPrecisionScalarVars: make(map[string]bool),
 		varVecLanes:             make(map[string]int),
 		varVecElemType:          make(map[string]string),
+		allFuncs:                opts.AllFuncs,
 	}
 
 	// Add function parameters to localVars to prevent them from being hoisted
@@ -336,6 +338,10 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	if loadSize := findMaxLoadSizeForElemType(funcDecl.Body, elemType); loadSize > 0 {
 		ctx.inferredFuncLanes = loadSize
 	}
+
+	// Inline local helper function calls before main transformation.
+	// This ensures helper bodies get specialized for the target/elemType.
+	inlineHelperCalls(funcDecl.Body, ctx)
 
 	// Resolve type-specific constant references
 	// Pattern 1: expC0 -> expC0_f32 (base name lookup)
@@ -854,6 +860,8 @@ type transformContext struct {
 	varVecLanes             map[string]int                // map[var_name]lanes for detected vector sizes from Load
 	varVecElemType          map[string]string             // map[var_name]elemType for detected element types from Load
 	inferredFuncLanes       int                           // Inferred lane count for function (from first detected Load size)
+	allFuncs                map[string]*ParsedFunc        // All functions in file for inlining helpers
+	inlineCounter           int                           // Counter for unique variable naming during inlining
 }
 
 // vecLoadInfo contains inferred information from an hwy.Load call.
@@ -1110,6 +1118,9 @@ func transformNode(node ast.Node, ctx *transformContext) {
 		case *ast.ForStmt:
 			// Transform for loop for SIMD (stride, condition)
 			transformForStmt(node, ctx)
+		case *ast.CompositeLit:
+			// Transform composite literal types (e.g., [4]hwy.Vec[float32]{} -> [4]asm.Float32x4{})
+			transformCompositeLit(node, ctx)
 		}
 		return true
 	})
@@ -1184,6 +1195,39 @@ func transformForStmt(stmt *ast.ForStmt, ctx *transformContext) {
 	}
 }
 
+// transformCompositeLit transforms composite literal types for SIMD targets.
+// Converts types like [4]hwy.Vec[float32]{} to [4]asm.Float32x4{} for NEON
+// or [8]archsimd.Float32x8{} for AVX2.
+func transformCompositeLit(lit *ast.CompositeLit, ctx *transformContext) {
+	if lit.Type == nil {
+		return
+	}
+
+	// For fallback target, don't transform hwy.Vec types
+	if ctx.target.Name == "Fallback" {
+		return
+	}
+
+	// Check if the type is an array with hwy.Vec element type
+	arrayType, ok := lit.Type.(*ast.ArrayType)
+	if !ok {
+		return
+	}
+
+	// Transform the element type if it's hwy.Vec[T] or similar
+	typeStr := exprToString(arrayType.Elt)
+
+	// First specialize generic type parameters (T -> float32)
+	specialized := specializeType(typeStr, ctx.typeParams, ctx.elemType)
+
+	// Then transform hwy.Vec[float32] -> asm.Float32x4 for SIMD targets
+	specialized = specializeVecType(specialized, ctx.elemType, ctx.target)
+
+	if specialized != typeStr {
+		arrayType.Elt = parseTypeExpr(specialized)
+	}
+}
+
 // transformTypeConversion converts T(1) to float32(1) for generic type parameters.
 func transformTypeConversion(call *ast.CallExpr, ctx *transformContext) {
 	// Check if this is a type conversion T(value) where T is a type parameter
@@ -1249,7 +1293,18 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 				switch sel.Sel.Name {
 				case "Store":
 					// Transform .Store(dst) -> .StoreSlice(dst)
-					sel.Sel.Name = "StoreSlice"
+					// But skip if the argument is a pointer type (from StoreFull transformation)
+					// StoreFull produces v.Store((*[N]T)(unsafe.Pointer(...))) which should stay as Store
+					isPointerArg := false
+					if len(call.Args) == 1 {
+						if _, isCall := call.Args[0].(*ast.CallExpr); isCall {
+							// Argument is a call expression like (*[N]T)(ptr) - likely from StoreFull
+							isPointerArg = true
+						}
+					}
+					if !isPointerArg {
+						sel.Sel.Name = "StoreSlice"
+					}
 				case "Data":
 					transformDataMethod(call, ctx)
 					return
@@ -2785,6 +2840,12 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				Index: ast.NewIdent(ctx.elemType),
 			}
 			return
+		case "InterleaveLower", "InterleaveUpper":
+			// For half-precision types, use generic hwy.InterleaveLower/InterleaveUpper
+			// which work on hwy.Vec[T] types
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = funcName
+			return
 		}
 		// For other operations without F16/BF16 variants, fall through
 	}
@@ -3440,6 +3501,8 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 							// Specialize the element type (T -> float32/float64)
 							elemTypeStr := exprToString(arrayType.Elt)
 							specializedType := specializeType(elemTypeStr, ctx.typeParams, ctx.elemType)
+							// Also specialize hwy.Vec[float32] -> asm.Float32x4 for SIMD targets
+							specializedType = specializeVecType(specializedType, ctx.elemType, ctx.target)
 
 							// Check if second arg is a lanes variable or literal for stack array optimization
 							var lanesCount int
@@ -6252,4 +6315,319 @@ func isHalfPrecisionSliceExpr(indexExpr *ast.IndexExpr, ctx *transformContext) b
 		return ctx.halfPrecisionSlices[ident.Name]
 	}
 	return false
+}
+
+// inlineHelperCalls recursively inlines local helper function calls in a block.
+// Local helpers are non-Base* functions defined in the same file that use hwy operations.
+// This ensures the entire code path gets specialized for each target architecture.
+func inlineHelperCalls(block *ast.BlockStmt, ctx *transformContext) {
+	if block == nil || ctx.allFuncs == nil {
+		return
+	}
+
+	// Process statements in reverse order so we can safely replace them
+	for i := 0; i < len(block.List); i++ {
+		stmt := block.List[i]
+
+		// Check for expression statement that is a helper call
+		exprStmt, ok := stmt.(*ast.ExprStmt)
+		if !ok {
+			// Recursively process nested blocks
+			inlineHelperCallsInStmt(stmt, ctx)
+			continue
+		}
+
+		// Check if this is a call expression
+		callExpr, ok := exprStmt.X.(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+
+		// Get the function name being called
+		var funcName string
+		switch fun := callExpr.Fun.(type) {
+		case *ast.Ident:
+			funcName = fun.Name
+		case *ast.IndexExpr:
+			// Generic call like func[T](...)
+			if ident, ok := fun.X.(*ast.Ident); ok {
+				funcName = ident.Name
+			}
+		}
+
+		if funcName == "" {
+			continue
+		}
+
+		// Skip Base* functions - they're handled separately with target suffix
+		if hasBasePrefix(funcName) {
+			continue
+		}
+
+		// Check if this is a local helper we can inline
+		helper, exists := ctx.allFuncs[funcName]
+		if !exists {
+			continue
+		}
+
+		// Skip if helper has no hwy operations (pure scalar helper)
+		if len(helper.HwyCalls) == 0 && !hasHwyLanesConstraint(helper.TypeParams) {
+			continue
+		}
+
+		// Inline the helper
+		inlinedStmts := inlineHelper(helper, callExpr, ctx)
+		if inlinedStmts == nil {
+			continue
+		}
+
+		// Replace the call statement with the inlined statements
+		// Wrap in a BlockStmt to keep variable scope contained
+		block.List[i] = &ast.BlockStmt{List: inlinedStmts}
+	}
+}
+
+// inlineHelperCallsInStmt recursively processes statements to find nested helper calls.
+func inlineHelperCallsInStmt(stmt ast.Stmt, ctx *transformContext) {
+	if stmt == nil {
+		return
+	}
+
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		inlineHelperCalls(s, ctx)
+	case *ast.ForStmt:
+		inlineHelperCalls(s.Body, ctx)
+	case *ast.IfStmt:
+		inlineHelperCalls(s.Body, ctx)
+		if s.Else != nil {
+			if elseBlock, ok := s.Else.(*ast.BlockStmt); ok {
+				inlineHelperCalls(elseBlock, ctx)
+			} else if elseIf, ok := s.Else.(*ast.IfStmt); ok {
+				inlineHelperCallsInStmt(elseIf, ctx)
+			}
+		}
+	case *ast.RangeStmt:
+		inlineHelperCalls(s.Body, ctx)
+	case *ast.SwitchStmt:
+		inlineHelperCalls(s.Body, ctx)
+	}
+}
+
+// inlineHelper transforms a helper function and returns its body statements with
+// parameters substituted with actual arguments.
+func inlineHelper(helper *ParsedFunc, call *ast.CallExpr, ctx *transformContext) []ast.Stmt {
+	if helper.Body == nil || len(helper.Body.List) == 0 {
+		return nil
+	}
+
+	// Clone the helper's body to avoid modifying the original
+	clonedBody := cloneBlockStmt(helper.Body)
+
+	// Build parameter -> argument mapping
+	paramMap := make(map[string]ast.Expr)
+	for i, param := range helper.Params {
+		if i < len(call.Args) {
+			paramMap[param.Name] = call.Args[i]
+		}
+	}
+
+	// Create a unique suffix for this inline site to avoid variable conflicts
+	ctx.inlineCounter++
+	suffix := fmt.Sprintf("_%d", ctx.inlineCounter)
+
+	// Collect local variables defined in the helper to rename them
+	localVars := make(map[string]bool)
+	collectLocalVariablesFromBlock(clonedBody, localVars)
+
+	// Substitute parameters and rename local variables
+	substituteAndRename(clonedBody, paramMap, localVars, suffix)
+
+	// Now transform the cloned body for the current target/elemType
+	// Create a mini-context for transforming the helper
+	helperCtx := &transformContext{
+		target:                  ctx.target,
+		elemType:                ctx.elemType,
+		typeParams:              helper.TypeParams,
+		loopInfo:                helper.LoopInfo,
+		lanesVars:               make(map[string]bool),
+		localVars:               make(map[string]bool),
+		stackArrayVars:          make(map[string]bool),
+		hoistedConsts:           ctx.hoistedConsts, // Share hoisted consts
+		funcName:                ctx.funcName,
+		typeSpecificConsts:      ctx.typeSpecificConsts,
+		conditionalBlocks:       ctx.conditionalBlocks,
+		fset:                    ctx.fset,
+		imports:                 ctx.imports,
+		varTypes:                make(map[string]string),
+		halfPrecisionSlices:     make(map[string]bool),
+		halfPrecisionScalarVars: make(map[string]bool),
+		varVecLanes:             make(map[string]int),
+		varVecElemType:          make(map[string]string),
+		allFuncs:                ctx.allFuncs,
+		inlineCounter:           ctx.inlineCounter,
+	}
+
+	// Copy relevant tracking from parent context
+	for k, v := range ctx.halfPrecisionSlices {
+		helperCtx.halfPrecisionSlices[k] = v
+	}
+
+	// Transform the helper body - same transformations as the main function
+	transformIdentifiers(clonedBody, helperCtx)
+	transformNode(clonedBody, helperCtx)
+
+	// Recursively inline any nested helper calls
+	inlineHelperCalls(clonedBody, helperCtx)
+
+	// Update parent context's inline counter
+	ctx.inlineCounter = helperCtx.inlineCounter
+
+	return clonedBody.List
+}
+
+// collectLocalVariablesFromBlock collects all variable names defined in a block.
+func collectLocalVariablesFromBlock(block *ast.BlockStmt, vars map[string]bool) {
+	if block == nil {
+		return
+	}
+
+	ast.Inspect(block, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			if node.Tok == token.DEFINE {
+				for _, lhs := range node.Lhs {
+					if ident, ok := lhs.(*ast.Ident); ok {
+						vars[ident.Name] = true
+					}
+				}
+			}
+		case *ast.DeclStmt:
+			if genDecl, ok := node.Decl.(*ast.GenDecl); ok {
+				if genDecl.Tok == token.VAR {
+					for _, spec := range genDecl.Specs {
+						if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+							for _, name := range valueSpec.Names {
+								vars[name.Name] = true
+							}
+						}
+					}
+				}
+			}
+		case *ast.RangeStmt:
+			if ident, ok := node.Key.(*ast.Ident); ok {
+				vars[ident.Name] = true
+			}
+			if ident, ok := node.Value.(*ast.Ident); ok {
+				vars[ident.Name] = true
+			}
+		case *ast.ForStmt:
+			if assignStmt, ok := node.Init.(*ast.AssignStmt); ok {
+				if assignStmt.Tok == token.DEFINE {
+					for _, lhs := range assignStmt.Lhs {
+						if ident, ok := lhs.(*ast.Ident); ok {
+							vars[ident.Name] = true
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+}
+
+// substituteAndRename walks the AST and:
+// 1. Renames local variables with a unique suffix to avoid conflicts
+// 2. Replaces parameter references with actual argument expressions
+func substituteAndRename(block *ast.BlockStmt, paramMap map[string]ast.Expr, localVars map[string]bool, suffix string) {
+	// First pass: rename local variables
+	ast.Inspect(block, func(n ast.Node) bool {
+		if ident, ok := n.(*ast.Ident); ok {
+			// Check if this is a local variable - rename with suffix
+			if localVars[ident.Name] {
+				ident.Name = ident.Name + suffix
+			}
+		}
+		return true
+	})
+
+	// Second pass: perform parameter substitution
+	substituteParams(block, paramMap)
+}
+
+// substituteParams replaces parameter identifiers with their argument expressions.
+func substituteParams(node ast.Node, paramMap map[string]ast.Expr) {
+	ast.Inspect(node, func(n ast.Node) bool {
+		switch parent := n.(type) {
+		case *ast.CallExpr:
+			for i, arg := range parent.Args {
+				if ident, ok := arg.(*ast.Ident); ok {
+					if replacement, isParam := paramMap[ident.Name]; isParam {
+						parent.Args[i] = cloneExpr(replacement)
+					}
+				}
+			}
+		case *ast.BinaryExpr:
+			if ident, ok := parent.X.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.X = cloneExpr(replacement)
+				}
+			}
+			if ident, ok := parent.Y.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Y = cloneExpr(replacement)
+				}
+			}
+		case *ast.IndexExpr:
+			if ident, ok := parent.X.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.X = cloneExpr(replacement)
+				}
+			}
+			if ident, ok := parent.Index.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Index = cloneExpr(replacement)
+				}
+			}
+		case *ast.SliceExpr:
+			if ident, ok := parent.X.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.X = cloneExpr(replacement)
+				}
+			}
+			if ident, ok := parent.Low.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Low = cloneExpr(replacement)
+				}
+			}
+			if ident, ok := parent.High.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.High = cloneExpr(replacement)
+				}
+			}
+		case *ast.UnaryExpr:
+			if ident, ok := parent.X.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.X = cloneExpr(replacement)
+				}
+			}
+		case *ast.AssignStmt:
+			for i, rhs := range parent.Rhs {
+				if ident, ok := rhs.(*ast.Ident); ok {
+					if replacement, isParam := paramMap[ident.Name]; isParam {
+						parent.Rhs[i] = cloneExpr(replacement)
+					}
+				}
+			}
+		case *ast.ReturnStmt:
+			for i, result := range parent.Results {
+				if ident, ok := result.(*ast.Ident); ok {
+					if replacement, isParam := paramMap[ident.Name]; isParam {
+						parent.Results[i] = cloneExpr(replacement)
+					}
+				}
+			}
+		}
+		return true
+	})
 }
