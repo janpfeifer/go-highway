@@ -24,6 +24,7 @@
 package matmul
 
 import (
+	"runtime"
 	"sync"
 	"unsafe"
 
@@ -56,6 +57,9 @@ const minDimForNEONKLast = 16
 // (2.2x faster at 64x64, 3x+ faster at larger sizes).
 // Only use NEON for very small matrices where transpose overhead dominates.
 const minDimForSMEKLast = 32
+
+// MinFusedParallelTiles is the minimum number of N-tiles before parallelizing fused NF4/Int4 matmul
+const MinFusedParallelTiles = 4 // N >= 64
 
 // =============================================================================
 // Transpose buffer pools to avoid allocations
@@ -133,6 +137,21 @@ var klastTransposePoolABF16 = sync.Pool{
 var klastTransposePoolBBF16 = sync.Pool{
 	New: func() any {
 		return make([]hwy.BFloat16, 0, 256*256)
+	},
+}
+
+// Fused NF4/Int4 tile buffer pools to reduce allocations (SME-specific)
+var fusedTilePool = sync.Pool{
+	New: func() any {
+		// Max tile size: K * 16 floats for SME tile width (K up to 4096)
+		return make([]float32, 0, 4096*16)
+	},
+}
+
+// Output tile pool: M * 16 floats for SME tile width (M up to 4096)
+var fusedOutputTilePool = sync.Pool{
+	New: func() any {
+		return make([]float32, 0, 4096*16)
 	},
 }
 
@@ -853,6 +872,424 @@ func packedMicroKernelPartialNEONBF16(packedA []hwy.BFloat16, packedB []hwy.BFlo
 }
 
 // =============================================================================
+// Fused NF4/Int4 SME implementations
+// =============================================================================
+
+// fusedNF4MatMulSME performs fused NF4 dequantization + matrix multiplication using SME.
+// This is optimized for Apple M4 SME, dequantizing tiles on-the-fly.
+//
+// Memory usage: O(K * 16) for tile buffer instead of O(K * N) for full dequant
+func fusedNF4MatMulSME(
+	input []float32,
+	packed []uint8,
+	scales []float32,
+	output []float32,
+	M, K, N, groupSize int,
+) {
+	if !hwy.HasSME() {
+		// Fall back to scalar implementation
+		BaseFusedNF4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	// Check alignment for SME (16x16 tiles)
+	if K%16 != 0 || N%16 != 0 || M < 64 || K < 64 || N < 64 {
+		BaseFusedNF4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	numGroups := (N + groupSize - 1) / groupSize
+
+	// Get tile buffer from pool
+	tileBuf := fusedTilePool.Get().([]float32)
+	tileSize := K * 16
+	if cap(tileBuf) < tileSize {
+		tileBuf = make([]float32, tileSize)
+	} else {
+		tileBuf = tileBuf[:tileSize]
+	}
+	defer fusedTilePool.Put(tileBuf)
+
+	// Transpose buffer for input (needed for FMOPA)
+	inputT := transposePool32.Get().([]float32)
+	inputTSize := M * K
+	if cap(inputT) < inputTSize {
+		inputT = make([]float32, inputTSize)
+	} else {
+		inputT = inputT[:inputTSize]
+	}
+	defer transposePool32.Put(inputT)
+
+	// Transpose input: [M, K] -> [K, M]
+	transposeMatrix(input, M, K, inputT)
+
+	// Output tile buffer from pool
+	outputTileSize := M * 16
+	outputTile := fusedOutputTilePool.Get().([]float32)
+	if cap(outputTile) < outputTileSize {
+		outputTile = make([]float32, outputTileSize)
+	} else {
+		outputTile = outputTile[:outputTileSize]
+	}
+	defer fusedOutputTilePool.Put(outputTile)
+
+	// Process N in 16-column tiles
+	for nTile := 0; nTile < N; nTile += 16 {
+		nEnd := min(nTile+16, N)
+		tileN := nEnd - nTile
+
+		// Dequantize weight tile: [K, 16] from packed [K, N/2]
+		dequantizeNF4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
+
+		// SME matmul: inputT[K, M]^T @ tileBuf[K, tileN] = input[M, K] @ tile[K, tileN]
+		// Use the optimized FMOPA kernel
+		asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
+
+		// Copy output tile to final output (scatter to correct columns)
+		for m := 0; m < M; m++ {
+			for j := 0; j < tileN; j++ {
+				output[m*N+nTile+j] = outputTile[m*tileN+j]
+			}
+		}
+	}
+}
+
+// dequantizeNF4Tile dequantizes a K×tileN tile of NF4 weights.
+// Output is row-major: tile[k*tileN + j] = weight[k, nTile+j]
+func dequantizeNF4Tile(
+	packed []uint8,
+	scales []float32,
+	tile []float32,
+	nTile, K, N, tileN, numGroups, groupSize int,
+) {
+	for k := 0; k < K; k++ {
+		for j := 0; j < tileN; j++ {
+			n := nTile + j
+			weightIdx := k*N + n
+			packedIdx := weightIdx / 2
+
+			var quantIdx int
+			if weightIdx%2 == 0 {
+				quantIdx = int(packed[packedIdx] & 0x0F)
+			} else {
+				quantIdx = int((packed[packedIdx] >> 4) & 0x0F)
+			}
+
+			groupIdx := n / groupSize
+			scale := scales[k*numGroups+groupIdx]
+			tile[k*tileN+j] = nf4LookupTable[quantIdx] * scale
+		}
+	}
+}
+
+// fusedInt4MatMulSME performs fused Int4 dequantization + matrix multiplication using SME.
+// Similar to fusedNF4MatMulSME but for symmetric Int4 quantization.
+func fusedInt4MatMulSME(
+	input []float32,
+	packed []uint8,
+	scales []float32,
+	output []float32,
+	M, K, N, groupSize int,
+) {
+	if !hwy.HasSME() || K%16 != 0 || N%16 != 0 || M < 64 || K < 64 || N < 64 {
+		BaseFusedInt4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	numGroups := (N + groupSize - 1) / groupSize
+
+	tileBuf := fusedTilePool.Get().([]float32)
+	tileSize := K * 16
+	if cap(tileBuf) < tileSize {
+		tileBuf = make([]float32, tileSize)
+	} else {
+		tileBuf = tileBuf[:tileSize]
+	}
+	defer fusedTilePool.Put(tileBuf)
+
+	inputT := transposePool32.Get().([]float32)
+	inputTSize := M * K
+	if cap(inputT) < inputTSize {
+		inputT = make([]float32, inputTSize)
+	} else {
+		inputT = inputT[:inputTSize]
+	}
+	defer transposePool32.Put(inputT)
+
+	transposeMatrix(input, M, K, inputT)
+
+	// Output tile buffer from pool
+	outputTileSize := M * 16
+	outputTile := fusedOutputTilePool.Get().([]float32)
+	if cap(outputTile) < outputTileSize {
+		outputTile = make([]float32, outputTileSize)
+	} else {
+		outputTile = outputTile[:outputTileSize]
+	}
+	defer fusedOutputTilePool.Put(outputTile)
+
+	for nTile := 0; nTile < N; nTile += 16 {
+		nEnd := min(nTile+16, N)
+		tileN := nEnd - nTile
+
+		dequantizeInt4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
+
+		asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
+
+		for m := 0; m < M; m++ {
+			for j := 0; j < tileN; j++ {
+				output[m*N+nTile+j] = outputTile[m*tileN+j]
+			}
+		}
+	}
+}
+
+// dequantizeInt4Tile dequantizes a K×tileN tile of Int4 weights.
+// Int4 uses symmetric quantization: values in [0,15] map to [-8,7].
+func dequantizeInt4Tile(
+	packed []uint8,
+	scales []float32,
+	tile []float32,
+	nTile, K, N, tileN, numGroups, groupSize int,
+) {
+	for k := 0; k < K; k++ {
+		for j := 0; j < tileN; j++ {
+			n := nTile + j
+			weightIdx := k*N + n
+			packedIdx := weightIdx / 2
+
+			var unsignedVal int
+			if weightIdx%2 == 0 {
+				unsignedVal = int(packed[packedIdx] & 0x0F)
+			} else {
+				unsignedVal = int((packed[packedIdx] >> 4) & 0x0F)
+			}
+
+			groupIdx := n / groupSize
+			scale := scales[k*numGroups+groupIdx]
+			tile[k*tileN+j] = float32(unsignedVal-8) * scale
+		}
+	}
+}
+
+// processFusedNF4Tile processes a single N-tile for NF4 matmul.
+// inputT is the transposed input [K, M], packed is NF4 weights, output is [M, N].
+func processFusedNF4Tile(
+	inputT []float32,
+	packed []uint8,
+	scales []float32,
+	output []float32,
+	tileBuf []float32,
+	outputTile []float32,
+	nTile, M, K, N, numGroups, groupSize int,
+) {
+	nEnd := min(nTile+16, N)
+	tileN := nEnd - nTile
+
+	// Dequantize weight tile: [K, tileN] from packed [K, N/2]
+	dequantizeNF4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
+
+	// SME matmul: inputT[K, M]^T @ tileBuf[K, tileN] = input[M, K] @ tile[K, tileN]
+	asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
+
+	// Copy output tile to final output (scatter to correct columns)
+	for m := 0; m < M; m++ {
+		for j := 0; j < tileN; j++ {
+			output[m*N+nTile+j] = outputTile[m*tileN+j]
+		}
+	}
+}
+
+// processFusedInt4Tile processes a single N-tile for Int4 matmul.
+func processFusedInt4Tile(
+	inputT []float32,
+	packed []uint8,
+	scales []float32,
+	output []float32,
+	tileBuf []float32,
+	outputTile []float32,
+	nTile, M, K, N, numGroups, groupSize int,
+) {
+	nEnd := min(nTile+16, N)
+	tileN := nEnd - nTile
+
+	dequantizeInt4Tile(packed, scales, tileBuf, nTile, K, N, tileN, numGroups, groupSize)
+
+	asm.MatMulFMOPAF32(inputT, tileBuf[:K*tileN], outputTile[:M*tileN], M, tileN, K)
+
+	for m := 0; m < M; m++ {
+		for j := 0; j < tileN; j++ {
+			output[m*N+nTile+j] = outputTile[m*tileN+j]
+		}
+	}
+}
+
+// parallelFusedNF4MatMulSME performs fused NF4 matmul with parallel N-tile processing.
+// Shares the transposed input across workers; each worker processes independent tiles.
+func parallelFusedNF4MatMulSME(
+	input []float32,
+	packed []uint8,
+	scales []float32,
+	output []float32,
+	M, K, N, groupSize int,
+) {
+	if !hwy.HasSME() {
+		BaseFusedNF4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	// Check alignment for SME (16x16 tiles)
+	if K%16 != 0 || N%16 != 0 || M < 64 || K < 64 || N < 64 {
+		BaseFusedNF4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	numTiles := (N + 15) / 16
+	numGroups := (N + groupSize - 1) / groupSize
+
+	// Fall back to sequential if too few tiles
+	if numTiles < MinFusedParallelTiles {
+		fusedNF4MatMulSME(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	// Transpose input once (shared across workers, read-only)
+	inputT := transposePool32.Get().([]float32)
+	inputTSize := M * K
+	if cap(inputT) < inputTSize {
+		inputT = make([]float32, inputTSize)
+	} else {
+		inputT = inputT[:inputTSize]
+	}
+	transposeMatrix(input, M, K, inputT)
+	defer transposePool32.Put(inputT)
+
+	// Setup work queue of N-tile indices
+	work := make(chan int, numTiles)
+	for nTile := 0; nTile < N; nTile += 16 {
+		work <- nTile
+	}
+	close(work)
+
+	// Launch workers
+	numWorkers := min(runtime.GOMAXPROCS(0), numTiles)
+	var wg sync.WaitGroup
+	for range numWorkers {
+		wg.Go(func() {
+			// Get thread-local buffers from pool
+			tileBuf := fusedTilePool.Get().([]float32)
+			tileSize := K * 16
+			if cap(tileBuf) < tileSize {
+				tileBuf = make([]float32, tileSize)
+			} else {
+				tileBuf = tileBuf[:tileSize]
+			}
+			// Clear AFTER getting from pool to ensure no stale data
+			// (sync.Pool may return buffers from different threads' caches)
+			clear(tileBuf)
+			defer fusedTilePool.Put(tileBuf)
+
+			outputTile := fusedOutputTilePool.Get().([]float32)
+			outputTileSize := M * 16
+			if cap(outputTile) < outputTileSize {
+				outputTile = make([]float32, outputTileSize)
+			} else {
+				outputTile = outputTile[:outputTileSize]
+			}
+			// Clear AFTER getting from pool to ensure no stale data
+			clear(outputTile)
+			defer fusedOutputTilePool.Put(outputTile)
+
+			for nTile := range work {
+				processFusedNF4Tile(inputT, packed, scales, output, tileBuf, outputTile,
+					nTile, M, K, N, numGroups, groupSize)
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// parallelFusedInt4MatMulSME performs fused Int4 matmul with parallel N-tile processing.
+func parallelFusedInt4MatMulSME(
+	input []float32,
+	packed []uint8,
+	scales []float32,
+	output []float32,
+	M, K, N, groupSize int,
+) {
+	if !hwy.HasSME() {
+		BaseFusedInt4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	if K%16 != 0 || N%16 != 0 || M < 64 || K < 64 || N < 64 {
+		BaseFusedInt4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	numTiles := (N + 15) / 16
+	numGroups := (N + groupSize - 1) / groupSize
+
+	if numTiles < MinFusedParallelTiles {
+		fusedInt4MatMulSME(input, packed, scales, output, M, K, N, groupSize)
+		return
+	}
+
+	// Transpose input once (shared across workers, read-only)
+	inputT := transposePool32.Get().([]float32)
+	inputTSize := M * K
+	if cap(inputT) < inputTSize {
+		inputT = make([]float32, inputTSize)
+	} else {
+		inputT = inputT[:inputTSize]
+	}
+	transposeMatrix(input, M, K, inputT)
+	defer transposePool32.Put(inputT)
+
+	// Setup work queue of N-tile indices
+	work := make(chan int, numTiles)
+	for nTile := 0; nTile < N; nTile += 16 {
+		work <- nTile
+	}
+	close(work)
+
+	numWorkers := min(runtime.GOMAXPROCS(0), numTiles)
+	var wg sync.WaitGroup
+	for range numWorkers {
+		wg.Go(func() {
+			// Get thread-local buffers from pool
+			tileBuf := fusedTilePool.Get().([]float32)
+			tileSize := K * 16
+			if cap(tileBuf) < tileSize {
+				tileBuf = make([]float32, tileSize)
+			} else {
+				tileBuf = tileBuf[:tileSize]
+			}
+			// Clear AFTER getting from pool to ensure no stale data
+			clear(tileBuf)
+			defer fusedTilePool.Put(tileBuf)
+
+			outputTile := fusedOutputTilePool.Get().([]float32)
+			outputTileSize := M * 16
+			if cap(outputTile) < outputTileSize {
+				outputTile = make([]float32, outputTileSize)
+			} else {
+				outputTile = outputTile[:outputTileSize]
+			}
+			// Clear AFTER getting from pool to ensure no stale data
+			clear(outputTile)
+			defer fusedOutputTilePool.Put(outputTile)
+
+			for nTile := range work {
+				processFusedInt4Tile(inputT, packed, scales, output, tileBuf, outputTile,
+					nTile, M, K, N, numGroups, groupSize)
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// =============================================================================
 // init() - Dispatch setup
 // =============================================================================
 
@@ -873,6 +1310,12 @@ func init() {
 		// Use FMOPA implementation which works on Apple M4
 		MatMulFloat32 = matmulFMOPA
 		MatMulFloat64 = matmulFMOPA64
+
+		// Fused NF4/Int4 SME implementations
+		FusedNF4MatMul = fusedNF4MatMulSME
+		FusedInt4MatMul = fusedInt4MatMulSME
+		ParallelFusedNF4MatMul = parallelFusedNF4MatMulSME
+		ParallelFusedInt4MatMul = parallelFusedInt4MatMulSME
 	} else {
 		// Use hand-written NEON implementation on arm64
 		MatMulFloat32 = matmulNEON
