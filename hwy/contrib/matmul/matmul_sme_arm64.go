@@ -25,9 +25,9 @@ import (
 )
 
 // Minimum dimensions to use SME FMOPA MatMul
-// With pre-transposed A, FMOPA uses contiguous loads and is competitive with NEON.
-// Below this threshold, NEON is used (streaming mode has fixed overhead).
-const minDimForSME = 64
+// SME is 3x+ faster than NEON even at small sizes (32x32).
+// Only use NEON for very small matrices where streaming mode overhead dominates.
+const minDimForSME = 32
 
 
 // Transpose buffer pools to avoid allocations

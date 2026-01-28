@@ -28,22 +28,24 @@ import (
 )
 
 // Minimum dimensions to use SME blocked FMOPA.
-// Below this, the streaming mode overhead outweighs the benefits.
-const minDimForBlockedSME = 64
+// SME with transpose is 160x+ faster than hwygen-generated NEON blocked even at 32×32.
+// Benchmarks on Apple M4: 32×32: SME 323 GFLOPS vs NEON 2 GFLOPS.
+const minDimForBlockedSME = 32
 
 // blockedMatMulFMOPA uses ARM SME FMOPA for blocked matrix multiplication (f32).
 // Uses outer product accumulate with ZA tiles and cache-tiled blocking.
 // Pre-transposes A for contiguous column access, enabling fast vector loads.
 func blockedMatMulFMOPA(a, b, c []float32, m, n, k int) {
-	// For non-aligned sizes (16×16 tiles for f32), fall back to NEON
+	// For non-aligned sizes (16×16 tiles for f32), fall back to GOAT NEON streaming
+	// (hwygen-generated blocked NEON is only ~2 GFLOPS, streaming NEON is ~75 GFLOPS)
 	if m%16 != 0 || n%16 != 0 || k%16 != 0 {
-		BaseBlockedMatMul_neon(a, b, c, m, n, k)
+		asm.MatMulNEONF32(a, b, c, m, n, k)
 		return
 	}
 
-	// For small matrices, NEON is faster (streaming mode has overhead)
+	// For small matrices, use streaming NEON (SME streaming mode has overhead)
 	if m < minDimForBlockedSME || n < minDimForBlockedSME || k < minDimForBlockedSME {
-		BaseBlockedMatMul_neon(a, b, c, m, n, k)
+		asm.MatMulNEONF32(a, b, c, m, n, k)
 		return
 	}
 
@@ -76,15 +78,16 @@ func blockedMatMulFMOPA(a, b, c []float32, m, n, k int) {
 // Uses outer product accumulate with ZA tiles (8×8 for f64) and cache-tiled blocking.
 // Pre-transposes A for contiguous column access, enabling fast vector loads.
 func blockedMatMulFMOPA64(a, b, c []float64, m, n, k int) {
-	// For non-aligned sizes (8×8 tiles for f64), fall back to NEON
+	// For non-aligned sizes (8×8 tiles for f64), fall back to GOAT NEON streaming
+	// (hwygen-generated blocked NEON is only ~2 GFLOPS, streaming NEON is ~75 GFLOPS)
 	if m%8 != 0 || n%8 != 0 || k%8 != 0 {
-		BaseBlockedMatMul_neon_Float64(a, b, c, m, n, k)
+		asm.MatMulNEONF64(a, b, c, m, n, k)
 		return
 	}
 
-	// For small matrices, NEON is faster (streaming mode has overhead)
+	// For small matrices, use streaming NEON (SME streaming mode has overhead)
 	if m < minDimForBlockedSME || n < minDimForBlockedSME || k < minDimForBlockedSME {
-		BaseBlockedMatMul_neon_Float64(a, b, c, m, n, k)
+		asm.MatMulNEONF64(a, b, c, m, n, k)
 		return
 	}
 
@@ -113,11 +116,44 @@ func blockedMatMulFMOPA64(a, b, c []float64, m, n, k int) {
 	transposePool64.Put(atBuf)
 }
 
+// blockedMatMulNEON uses GOAT-generated NEON for blocked matrix multiplication (f32).
+// Used on non-SME hardware. For small matrices, streaming NEON is faster.
+// For large matrices, blocked NEON has better cache behavior.
+func blockedMatMulNEON(a, b, c []float32, m, n, k int) {
+	totalOps := m * n * k
+	// Below this threshold, streaming NEON is faster (~75 GFLOPS vs ~25 GFLOPS blocked)
+	// Above this, blocked NEON's cache efficiency helps
+	const blockedThreshold = 128 * 128 * 128 // 2M ops
+
+	if totalOps < blockedThreshold {
+		asm.MatMulNEONF32(a, b, c, m, n, k)
+	} else {
+		asm.BlockedMatMulNEONF32(a, b, c, m, n, k)
+	}
+}
+
+// blockedMatMulNEON64 uses GOAT-generated NEON for blocked matrix multiplication (f64).
+func blockedMatMulNEON64(a, b, c []float64, m, n, k int) {
+	totalOps := m * n * k
+	const blockedThreshold = 128 * 128 * 128 // 2M ops
+
+	if totalOps < blockedThreshold {
+		asm.MatMulNEONF64(a, b, c, m, n, k)
+	} else {
+		asm.BlockedMatMulNEONF64(a, b, c, m, n, k)
+	}
+}
+
 func init() {
 	if hwy.HasSME() {
 		// Use blocked FMOPA implementation which works on Apple M4
 		// This overrides the generated dispatch for large aligned matrices
 		BlockedMatMulFloat32 = blockedMatMulFMOPA
 		BlockedMatMulFloat64 = blockedMatMulFMOPA64
+	} else {
+		// Use GOAT-generated NEON (13x faster than hwygen: 25 GFLOPS vs 2 GFLOPS)
+		// with streaming NEON fallback for small sizes
+		BlockedMatMulFloat32 = blockedMatMulNEON
+		BlockedMatMulFloat64 = blockedMatMulNEON64
 	}
 }
