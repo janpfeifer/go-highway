@@ -6,6 +6,7 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -33,7 +34,7 @@ func BasePackedMatMul_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Flo
 		lanes_1 := 8
 		var idx_1 int
 		for idx_1 = 0; idx_1+lanes_1 <= m*n; idx_1 += lanes_1 {
-			vZero_1.StoreSlice(c[idx_1:])
+			vZero_1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[idx_1:]))), len(c[idx_1:])))
 		}
 		for ; idx_1 < m*n; idx_1++ {
 			c[idx_1] = hwy.Float32ToFloat16(0)
@@ -106,7 +107,7 @@ func BasePackedMatMul_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.
 		lanes_1 := 8
 		var idx_1 int
 		for idx_1 = 0; idx_1+lanes_1 <= m*n; idx_1 += lanes_1 {
-			vZero_1.StoreSlice(c[idx_1:])
+			vZero_1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[idx_1:]))), len(c[idx_1:])))
 		}
 		for ; idx_1 < m*n; idx_1++ {
 			c[idx_1] = hwy.Float32ToBFloat16(0)
@@ -320,7 +321,7 @@ func BasePackedMatMulWithBuffers_avx2_Float16(a []hwy.Float16, b []hwy.Float16, 
 		lanes_1 := 8
 		var idx_1 int
 		for idx_1 = 0; idx_1+lanes_1 <= m*n; idx_1 += lanes_1 {
-			vZero_1.StoreSlice(c[idx_1:])
+			vZero_1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[idx_1:]))), len(c[idx_1:])))
 		}
 		for ; idx_1 < m*n; idx_1++ {
 			c[idx_1] = hwy.Float32ToFloat16(0)
@@ -388,7 +389,7 @@ func BasePackedMatMulWithBuffers_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat1
 		lanes_1 := 8
 		var idx_1 int
 		for idx_1 = 0; idx_1+lanes_1 <= m*n; idx_1 += lanes_1 {
-			vZero_1.StoreSlice(c[idx_1:])
+			vZero_1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[idx_1:]))), len(c[idx_1:])))
 		}
 		for ; idx_1 < m*n; idx_1++ {
 			c[idx_1] = hwy.Float32ToBFloat16(0)
@@ -584,7 +585,7 @@ func BasePackedMatMulStrip_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hw
 		lanes_1 := 8
 		var idx_1 int
 		for idx_1 = 0; idx_1+lanes_1 <= stripM*n; idx_1 += lanes_1 {
-			vZero_1.StoreSlice(c[rowStart*n : rowEnd*n][idx_1:])
+			vZero_1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[rowStart*n : rowEnd*n][idx_1:]))), len(c[rowStart*n : rowEnd*n][idx_1:])))
 		}
 		for ; idx_1 < stripM*n; idx_1++ {
 			c[rowStart*n : rowEnd*n][idx_1] = 0
@@ -644,7 +645,7 @@ func BasePackedMatMulStrip_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c [
 		lanes_1 := 8
 		var idx_1 int
 		for idx_1 = 0; idx_1+lanes_1 <= stripM*n; idx_1 += lanes_1 {
-			vZero_1.StoreSlice(c[rowStart*n : rowEnd*n][idx_1:])
+			vZero_1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[rowStart*n : rowEnd*n][idx_1:]))), len(c[rowStart*n : rowEnd*n][idx_1:])))
 		}
 		for ; idx_1 < stripM*n; idx_1++ {
 			c[rowStart*n : rowEnd*n][idx_1] = 0

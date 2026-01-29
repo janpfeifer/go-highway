@@ -17,20 +17,20 @@ func BaseApply_avx2_Float16(in []hwy.Float16, out []hwy.Float16, fn func(asm.Flo
 	lanes := 8
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		x := hwy.Load(in[i:])
-		fn(x).StoreSlice(out[i:])
-		x1 := hwy.Load(in[i+8:])
-		fn(x1).StoreSlice(out[i+8:])
+		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
+		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i+8:]))), len(in[i+8:])))
+		fn(x1).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i+8:]))), len(out[i+8:])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := hwy.Load(in[i:])
-		fn(x).StoreSlice(out[i:])
+		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]hwy.Float16{}
 		copy(buf[:], in[i:i+remaining])
-		x := asm.LoadFloat16x8AVX2Slice(buf[:])
-		fn(x).StoreSlice(buf[:])
+		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(buf[:]))), len(buf[:])))
+		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(buf[:]))), len(buf[:])))
 		copy(out[i:i+remaining], buf[:remaining])
 	}
 }
@@ -40,20 +40,20 @@ func BaseApply_avx2_BFloat16(in []hwy.BFloat16, out []hwy.BFloat16, fn func(asm.
 	lanes := 8
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		x := hwy.Load(in[i:])
-		fn(x).StoreSlice(out[i:])
-		x1 := hwy.Load(in[i+8:])
-		fn(x1).StoreSlice(out[i+8:])
+		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
+		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i+8:]))), len(in[i+8:])))
+		fn(x1).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i+8:]))), len(out[i+8:])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := hwy.Load(in[i:])
-		fn(x).StoreSlice(out[i:])
+		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]hwy.BFloat16{}
 		copy(buf[:], in[i:i+remaining])
-		x := asm.LoadBFloat16x8AVX2Slice(buf[:])
-		fn(x).StoreSlice(buf[:])
+		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(buf[:]))), len(buf[:])))
+		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(buf[:]))), len(buf[:])))
 		copy(out[i:i+remaining], buf[:remaining])
 	}
 }

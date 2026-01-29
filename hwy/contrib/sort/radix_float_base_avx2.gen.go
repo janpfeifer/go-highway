@@ -6,6 +6,7 @@ package sort
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -19,12 +20,12 @@ func BaseFloatToSortable_avx2_Float16(data []hwy.Float16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadFloat16x8AVX2Slice(data[i:])
+		v := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		isNeg := v.Less(zeroVec)
 		negResult := v.Xor(allOnesVec)
 		posResult := v.Xor(signBitVec)
 		result := negResult.Merge(posResult, isNeg)
-		result.StoreSlice(data[i:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }
@@ -37,12 +38,12 @@ func BaseFloatToSortable_avx2_BFloat16(data []hwy.BFloat16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadBFloat16x8AVX2Slice(data[i:])
+		v := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		isNeg := v.Less(zeroVec)
 		negResult := v.Xor(allOnesVec)
 		posResult := v.Xor(signBitVec)
 		result := negResult.Merge(posResult, isNeg)
-		result.StoreSlice(data[i:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }
@@ -91,13 +92,13 @@ func BaseSortableToFloat_avx2_Float16(data []hwy.Float16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadFloat16x8AVX2Slice(data[i:])
+		v := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		masked := v.And(signBitVec)
 		wasPositive := masked.NotEqual(zeroVec)
 		posResult := v.Xor(signBitVec)
 		negResult := v.Xor(allOnesVec)
 		result := posResult.Merge(negResult, wasPositive)
-		result.StoreSlice(data[i:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }
@@ -110,13 +111,13 @@ func BaseSortableToFloat_avx2_BFloat16(data []hwy.BFloat16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadBFloat16x8AVX2Slice(data[i:])
+		v := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		masked := v.And(signBitVec)
 		wasPositive := masked.NotEqual(zeroVec)
 		posResult := v.Xor(signBitVec)
 		negResult := v.Xor(allOnesVec)
 		result := posResult.Merge(negResult, wasPositive)
-		result.StoreSlice(data[i:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }

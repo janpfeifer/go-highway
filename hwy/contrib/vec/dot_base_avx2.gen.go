@@ -25,16 +25,16 @@ func BaseDot_avx2_Float16(a []hwy.Float16, b []hwy.Float16) hwy.Float16 {
 	var i int
 	stride := lanes * 4
 	for i = 0; i+stride <= n; i += stride {
-		va0, va1, va2, va3 := hwy.Load4_AVX2_Vec(a[i:])
-		vb0, vb1, vb2, vb3 := hwy.Load4_AVX2_Vec(b[i:])
+		va0, va1, va2, va3 := asm.Load4Float16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb0, vb1, vb2, vb3 := asm.Load4Float16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		sum0 = va0.MulAdd(vb0, sum0)
 		sum1 = va1.MulAdd(vb1, sum1)
 		sum2 = va2.MulAdd(vb2, sum2)
 		sum3 = va3.MulAdd(vb3, sum3)
 	}
 	for i+lanes <= n {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		sum0 = va.MulAdd(vb, sum0)
 		i += lanes
 	}
@@ -61,16 +61,16 @@ func BaseDot_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16) hwy.BFloat16 {
 	var i int
 	stride := lanes * 4
 	for i = 0; i+stride <= n; i += stride {
-		va0, va1, va2, va3 := hwy.Load4_AVX2_Vec(a[i:])
-		vb0, vb1, vb2, vb3 := hwy.Load4_AVX2_Vec(b[i:])
+		va0, va1, va2, va3 := asm.Load4BFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb0, vb1, vb2, vb3 := asm.Load4BFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		sum0 = va0.MulAdd(vb0, sum0)
 		sum1 = va1.MulAdd(vb1, sum1)
 		sum2 = va2.MulAdd(vb2, sum2)
 		sum3 = va3.MulAdd(vb3, sum3)
 	}
 	for i+lanes <= n {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		sum0 = va.MulAdd(vb, sum0)
 		i += lanes
 	}

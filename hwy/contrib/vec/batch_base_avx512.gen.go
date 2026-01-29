@@ -33,8 +33,8 @@ func BaseBatchL2SquaredDistance_avx512_Float16(query []hwy.Float16, data []hwy.F
 		sum = asm.ZeroFloat16x16AVX512()
 		var j int
 		for j = 0; j+lanes <= dims; j += lanes {
-			vq := hwy.Load(query[j:])
-			vd := hwy.Load(dataVec[j:])
+			vq := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(query[j:]))), len(query[j:])))
+			vd := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dataVec[j:]))), len(dataVec[j:])))
 			diff := vq.Sub(vd)
 			diffSq := diff.Mul(diff)
 			sum = sum.Add(diffSq)
@@ -69,8 +69,8 @@ func BaseBatchL2SquaredDistance_avx512_BFloat16(query []hwy.BFloat16, data []hwy
 		sum = asm.ZeroBFloat16x16AVX512()
 		var j int
 		for j = 0; j+lanes <= dims; j += lanes {
-			vq := hwy.Load(query[j:])
-			vd := hwy.Load(dataVec[j:])
+			vq := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(query[j:]))), len(query[j:])))
+			vd := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dataVec[j:]))), len(dataVec[j:])))
 			diff := vq.Sub(vd)
 			diffSq := diff.Mul(diff)
 			sum = sum.Add(diffSq)
@@ -177,8 +177,8 @@ func BaseBatchDot_avx512_Float16(query []hwy.Float16, data []hwy.Float16, dots [
 		sum = asm.ZeroFloat16x16AVX512()
 		var j int
 		for j = 0; j+lanes <= dims; j += lanes {
-			vq := hwy.Load(query[j:])
-			vd := hwy.Load(dataVec[j:])
+			vq := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(query[j:]))), len(query[j:])))
+			vd := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dataVec[j:]))), len(dataVec[j:])))
 			prod := vq.Mul(vd)
 			sum = sum.Add(prod)
 		}
@@ -211,8 +211,8 @@ func BaseBatchDot_avx512_BFloat16(query []hwy.BFloat16, data []hwy.BFloat16, dot
 		sum = asm.ZeroBFloat16x16AVX512()
 		var j int
 		for j = 0; j+lanes <= dims; j += lanes {
-			vq := hwy.Load(query[j:])
-			vd := hwy.Load(dataVec[j:])
+			vq := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(query[j:]))), len(query[j:])))
+			vd := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dataVec[j:]))), len(dataVec[j:])))
 			prod := vq.Mul(vd)
 			sum = sum.Add(prod)
 		}

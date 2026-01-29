@@ -6,6 +6,7 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -314,8 +315,8 @@ func BasePackRHSVec_avx2_Float16(b []hwy.Float16, packed []hwy.Float16, k int, n
 			for kk := 0; kk < panelK; kk++ {
 				bRowStart := (rowStart + kk) * n
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadFloat16x8AVX2Slice(b[bRowStart+baseCol+c:])
-					v.StoreSlice(packed[packIdx+c:])
+					v := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+baseCol+c:]))), len(b[bRowStart+baseCol+c:])))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[packIdx+c:]))), len(packed[packIdx+c:])))
 				}
 				packIdx += nr
 			}
@@ -354,8 +355,8 @@ func BasePackRHSVec_avx2_BFloat16(b []hwy.BFloat16, packed []hwy.BFloat16, k int
 			for kk := 0; kk < panelK; kk++ {
 				bRowStart := (rowStart + kk) * n
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadBFloat16x8AVX2Slice(b[bRowStart+baseCol+c:])
-					v.StoreSlice(packed[packIdx+c:])
+					v := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+baseCol+c:]))), len(b[bRowStart+baseCol+c:])))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[packIdx+c:]))), len(packed[packIdx+c:])))
 				}
 				packIdx += nr
 			}

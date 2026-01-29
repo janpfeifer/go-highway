@@ -6,6 +6,7 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -27,7 +28,7 @@ func BaseMatMul_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Float16, 
 		lanes := 8
 		var j int
 		for j = 0; j+lanes <= n; j += lanes {
-			vZero.StoreSlice(cRow[j:])
+			vZero.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(cRow[j:]))), len(cRow[j:])))
 		}
 		for ; j < n; j++ {
 			cRow[j] = hwy.Float32ToFloat16(0)
@@ -37,10 +38,10 @@ func BaseMatMul_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Float16, 
 			vA := asm.BroadcastFloat16x8AVX2(uint16(aip))
 			bRow := b[p*n : (p+1)*n]
 			for j = 0; j+lanes <= n; j += lanes {
-				vB := asm.LoadFloat16x8AVX2Slice(bRow[j:])
-				vC := asm.LoadFloat16x8AVX2Slice(cRow[j:])
+				vB := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(bRow[j:]))), len(bRow[j:])))
+				vC := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(cRow[j:]))), len(cRow[j:])))
 				vC = vA.MulAdd(vB, vC)
-				vC.StoreSlice(cRow[j:])
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(cRow[j:]))), len(cRow[j:])))
 			}
 			for ; j < n; j++ {
 				cRow[j] = hwy.Float32ToFloat16(cRow[j].Float32() + aip.Float32()*bRow[j].Float32())
@@ -65,7 +66,7 @@ func BaseMatMul_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.BFloat
 		lanes := 8
 		var j int
 		for j = 0; j+lanes <= n; j += lanes {
-			vZero.StoreSlice(cRow[j:])
+			vZero.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(cRow[j:]))), len(cRow[j:])))
 		}
 		for ; j < n; j++ {
 			cRow[j] = hwy.Float32ToBFloat16(0)
@@ -75,10 +76,10 @@ func BaseMatMul_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.BFloat
 			vA := asm.BroadcastBFloat16x8AVX2(uint16(aip))
 			bRow := b[p*n : (p+1)*n]
 			for j = 0; j+lanes <= n; j += lanes {
-				vB := asm.LoadBFloat16x8AVX2Slice(bRow[j:])
-				vC := asm.LoadBFloat16x8AVX2Slice(cRow[j:])
+				vB := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(bRow[j:]))), len(bRow[j:])))
+				vC := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(cRow[j:]))), len(cRow[j:])))
 				vC = vA.MulAdd(vB, vC)
-				vC.StoreSlice(cRow[j:])
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(cRow[j:]))), len(cRow[j:])))
 			}
 			for ; j < n; j++ {
 				cRow[j] = hwy.Float32ToBFloat16(cRow[j].Float32() + aip.Float32()*bRow[j].Float32())

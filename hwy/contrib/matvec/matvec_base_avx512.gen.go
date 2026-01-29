@@ -6,6 +6,7 @@ package matvec
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -27,8 +28,8 @@ func BaseMatVec_avx512_Float16(m []hwy.Float16, rows int, cols int, v []hwy.Floa
 		lanes := 16
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := asm.LoadFloat16x16AVX512Slice(row[j:])
-			vb := asm.LoadFloat16x16AVX512Slice(v[j:])
+			va := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(row[j:]))), len(row[j:])))
+			vb := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[j:]))), len(v[j:])))
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}
@@ -56,8 +57,8 @@ func BaseMatVec_avx512_BFloat16(m []hwy.BFloat16, rows int, cols int, v []hwy.BF
 		lanes := 16
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := asm.LoadBFloat16x16AVX512Slice(row[j:])
-			vb := asm.LoadBFloat16x16AVX512Slice(v[j:])
+			va := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(row[j:]))), len(row[j:])))
+			vb := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[j:]))), len(v[j:])))
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}

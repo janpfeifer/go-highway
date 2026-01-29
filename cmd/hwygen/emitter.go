@@ -75,6 +75,7 @@ type ContribPackages struct {
 	HwyPkg  bool // hwy package functions (Pow2, etc.) used in SIMD targets
 	StdMath bool // stdlib math package (math.Inf, math.NaN, etc.)
 	HwyCore bool // hwy core ops (Load, Store, Add, etc.) that need vec package
+	AsmPkg  bool // asm package needed (half-precision promoted types on AVX)
 }
 
 // detectContribPackages analyzes parsed functions to determine which contrib subpackages are used.
@@ -206,6 +207,17 @@ func detectContribPackagesForTarget(funcs []ParsedFunc, target Target) ContribPa
 					} else {
 						// Fallback needs hwy import for Float16/BFloat16 types
 						pkgs.HwyCore = true
+					}
+					// AVX targets need asm package for promoted half-precision types
+					if target.Name == "AVX2" || target.Name == "AVX512" {
+						pkgs.AsmPkg = true
+						// Pow on AVX promoted half-precision emits stdmath.Pow via IIFE
+						for _, c := range pf.HwyCalls {
+							if c.FuncName == "Pow" {
+								pkgs.StdMath = true
+								break
+							}
+						}
 					}
 					break
 				}
@@ -664,6 +676,10 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 			case "asm":
 				imports = append(imports, `"github.com/ajroetker/go-highway/hwy/asm"`)
 			}
+		}
+		// Import asm package for AVX targets that use half-precision promoted types
+		if contribPkgs.AsmPkg && target.VecPackage == "archsimd" {
+			imports = append(imports, `"github.com/ajroetker/go-highway/hwy/asm"`)
 		}
 		// Add sync import for AVX-512 lazy initialization of hoisted constants
 		if target.Name == "AVX512" && len(hoistedConsts) > 0 {

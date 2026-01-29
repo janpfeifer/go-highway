@@ -21,14 +21,14 @@ func BaseAdd_avx2_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Add(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Add(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseAdd_fallback_Float16(dst[i:n], s[i:n])
@@ -44,14 +44,14 @@ func BaseAdd_avx2_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Add(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Add(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseAdd_fallback_BFloat16(dst[i:n], s[i:n])
@@ -113,14 +113,14 @@ func BaseAddTo_avx2_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Add(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Add(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseAddTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -136,14 +136,14 @@ func BaseAddTo_avx2_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Add(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Add(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseAddTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -205,14 +205,14 @@ func BaseSub_avx2_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Sub(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Sub(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseSub_fallback_Float16(dst[i:n], s[i:n])
@@ -228,14 +228,14 @@ func BaseSub_avx2_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Sub(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Sub(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseSub_fallback_BFloat16(dst[i:n], s[i:n])
@@ -297,14 +297,14 @@ func BaseSubTo_avx2_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Sub(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Sub(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseSubTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -320,14 +320,14 @@ func BaseSubTo_avx2_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Sub(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Sub(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseSubTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -389,14 +389,14 @@ func BaseMul_avx2_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Mul(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Mul(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseMul_fallback_Float16(dst[i:n], s[i:n])
@@ -412,14 +412,14 @@ func BaseMul_avx2_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Mul(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Mul(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseMul_fallback_BFloat16(dst[i:n], s[i:n])
@@ -481,14 +481,14 @@ func BaseMulTo_avx2_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Mul(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Mul(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseMulTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -504,14 +504,14 @@ func BaseMulTo_avx2_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Mul(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Mul(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseMulTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -573,14 +573,14 @@ func BaseDiv_avx2_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Div(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Div(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseDiv_fallback_Float16(dst[i:n], s[i:n])
@@ -596,14 +596,14 @@ func BaseDiv_avx2_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vs := hwy.Load(s[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vd.Div(vs)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vs1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vd1.Div(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseDiv_fallback_BFloat16(dst[i:n], s[i:n])
@@ -665,14 +665,14 @@ func BaseDivTo_avx2_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Div(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Div(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseDivTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -688,14 +688,14 @@ func BaseDivTo_avx2_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		va := hwy.Load(a[i:])
-		vb := hwy.Load(b[i:])
+		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i:]))), len(a[i:])))
+		vb := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i:]))), len(b[i:])))
 		result := va.Div(vb)
-		result.StoreSlice(dst[i:])
-		va1 := hwy.Load(a[i+8:])
-		vb1 := hwy.Load(b[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[i+8:]))), len(a[i+8:])))
+		vb1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[i+8:]))), len(b[i+8:])))
 		result1 := va1.Div(vb1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseDivTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -758,12 +758,12 @@ func BaseScale_avx2_Float16(c hwy.Float16, dst []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
 		result := vd.Mul(vc)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 		result1 := vd1.Mul(vc)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseScale_fallback_Float16(c, dst[i:n])
@@ -780,12 +780,12 @@ func BaseScale_avx2_BFloat16(c hwy.BFloat16, dst []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
 		result := vd.Mul(vc)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 		result1 := vd1.Mul(vc)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseScale_fallback_BFloat16(c, dst[i:n])
@@ -846,12 +846,12 @@ func BaseScaleTo_avx2_Float16(dst []hwy.Float16, c hwy.Float16, s []hwy.Float16)
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vs := hwy.Load(s[i:])
+		vs := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vc.Mul(vs)
-		result.StoreSlice(dst[i:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vc.Mul(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseScaleTo_fallback_Float16(dst[i:n], c, s[i:n])
@@ -868,12 +868,12 @@ func BaseScaleTo_avx2_BFloat16(dst []hwy.BFloat16, c hwy.BFloat16, s []hwy.BFloa
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vs := hwy.Load(s[i:])
+		vs := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i:]))), len(s[i:])))
 		result := vc.Mul(vs)
-		result.StoreSlice(dst[i:])
-		vs1 := hwy.Load(s[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vs1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s[i+8:]))), len(s[i+8:])))
 		result1 := vc.Mul(vs1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseScaleTo_fallback_BFloat16(dst[i:n], c, s[i:n])
@@ -934,12 +934,12 @@ func BaseAddConst_avx2_Float16(c hwy.Float16, dst []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
 		result := vd.Add(vc)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 		result1 := vd1.Add(vc)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseAddConst_fallback_Float16(c, dst[i:n])
@@ -956,12 +956,12 @@ func BaseAddConst_avx2_BFloat16(c hwy.BFloat16, dst []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
 		result := vd.Add(vc)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 		result1 := vd1.Add(vc)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseAddConst_fallback_BFloat16(c, dst[i:n])
@@ -1022,14 +1022,14 @@ func BaseMulConstAddTo_avx2_Float16(dst []hwy.Float16, a hwy.Float16, x []hwy.Fl
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vx := hwy.Load(x[i:])
+		vd := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vx := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[i:]))), len(x[i:])))
 		result := va.MulAdd(vx, vd)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vx1 := hwy.Load(x[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vx1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[i+8:]))), len(x[i+8:])))
 		result1 := va.MulAdd(vx1, vd1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseMulConstAddTo_fallback_Float16(dst[i:n], a, x[i:n])
@@ -1046,14 +1046,14 @@ func BaseMulConstAddTo_avx2_BFloat16(dst []hwy.BFloat16, a hwy.BFloat16, x []hwy
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vd := hwy.Load(dst[i:])
-		vx := hwy.Load(x[i:])
+		vd := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vx := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[i:]))), len(x[i:])))
 		result := va.MulAdd(vx, vd)
-		result.StoreSlice(dst[i:])
-		vd1 := hwy.Load(dst[i+8:])
-		vx1 := hwy.Load(x[i+8:])
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vd1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vx1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[i+8:]))), len(x[i+8:])))
 		result1 := va.MulAdd(vx1, vd1)
-		result1.StoreSlice(dst[i+8:])
+		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
 	if i < n {
 		BaseMulConstAddTo_fallback_BFloat16(dst[i:n], a, x[i:n])

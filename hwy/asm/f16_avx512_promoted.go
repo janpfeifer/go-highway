@@ -158,7 +158,7 @@ func (v Float16x16AVX512) GreaterEqual(other Float16x16AVX512) archsimd.Mask32x1
 // ============================================================================
 
 func (v Float16x16AVX512) RoundToEven() Float16x16AVX512 {
-	return Float16x16AVX512{data: v.data.RoundToEven()}
+	return Float16x16AVX512{data: v.data.RoundToEvenScaled(0)}
 }
 
 func (v Float16x16AVX512) ConvertToInt32() archsimd.Int32x16 {
@@ -300,4 +300,17 @@ func (v Float16x16AVX512) InterleaveUpper(other Float16x16AVX512) Float16x16AVX5
 		result[2*i+1] = b[8+i]
 	}
 	return Float16x16AVX512{data: archsimd.LoadFloat32x16Slice(result[:])}
+}
+
+// ============================================================================
+// Load4 (batch load for unrolled loops)
+// ============================================================================
+
+// Load4Float16x16AVX512Slice loads 4 consecutive vectors (64 float16 values) from a uint16 slice.
+func Load4Float16x16AVX512Slice(s []uint16) (Float16x16AVX512, Float16x16AVX512, Float16x16AVX512, Float16x16AVX512) {
+	v0 := LoadFloat16x16AVX512Slice(s[0:16])
+	v1 := LoadFloat16x16AVX512Slice(s[16:32])
+	v2 := LoadFloat16x16AVX512Slice(s[32:48])
+	v3 := LoadFloat16x16AVX512Slice(s[48:64])
+	return v0, v1, v2, v3
 }

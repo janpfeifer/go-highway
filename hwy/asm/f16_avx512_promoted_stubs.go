@@ -59,6 +59,9 @@ func (v Float16x16AVX512) ReduceMin() float32 { panic("AVX512 not available") }
 
 func IotaFloat16x16AVX512() Float16x16AVX512    { panic("AVX512 not available") }
 func SignBitFloat16x16AVX512() Float16x16AVX512 { panic("AVX512 not available") }
+func Load4Float16x16AVX512Slice(_ []uint16) (Float16x16AVX512, Float16x16AVX512, Float16x16AVX512, Float16x16AVX512) {
+	panic("AVX512 not available")
+}
 
 func (v Float16x16AVX512) InterleaveLower(_ Float16x16AVX512) Float16x16AVX512 {
 	panic("AVX512 not available")

@@ -6,6 +6,7 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -40,11 +41,11 @@ func BaseMatMulKLast_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Floa
 			acc3 := asm.ZeroFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vB := asm.LoadFloat16x8AVX2Slice(b[bRow+p:])
-				vA0 := asm.LoadFloat16x8AVX2Slice(a[aRow0+p:])
-				vA1 := asm.LoadFloat16x8AVX2Slice(a[aRow1+p:])
-				vA2 := asm.LoadFloat16x8AVX2Slice(a[aRow2+p:])
-				vA3 := asm.LoadFloat16x8AVX2Slice(a[aRow3+p:])
+				vB := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRow+p:]))), len(b[bRow+p:])))
+				vA0 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow0+p:]))), len(a[aRow0+p:])))
+				vA1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow1+p:]))), len(a[aRow1+p:])))
+				vA2 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow2+p:]))), len(a[aRow2+p:])))
+				vA3 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow3+p:]))), len(a[aRow3+p:])))
 				acc0 = vA0.MulAdd(vB, acc0)
 				acc1 = vA1.MulAdd(vB, acc1)
 				acc2 = vA2.MulAdd(vB, acc2)
@@ -74,8 +75,8 @@ func BaseMatMulKLast_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Floa
 			acc := asm.ZeroFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vA := asm.LoadFloat16x8AVX2Slice(a[aRow+p:])
-				vB := asm.LoadFloat16x8AVX2Slice(b[bRow+p:])
+				vA := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow+p:]))), len(a[aRow+p:])))
+				vB := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRow+p:]))), len(b[bRow+p:])))
 				acc = vA.MulAdd(vB, acc)
 			}
 			sum := acc.ReduceSum()
@@ -116,11 +117,11 @@ func BaseMatMulKLast_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.B
 			acc3 := asm.ZeroBFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vB := asm.LoadBFloat16x8AVX2Slice(b[bRow+p:])
-				vA0 := asm.LoadBFloat16x8AVX2Slice(a[aRow0+p:])
-				vA1 := asm.LoadBFloat16x8AVX2Slice(a[aRow1+p:])
-				vA2 := asm.LoadBFloat16x8AVX2Slice(a[aRow2+p:])
-				vA3 := asm.LoadBFloat16x8AVX2Slice(a[aRow3+p:])
+				vB := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRow+p:]))), len(b[bRow+p:])))
+				vA0 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow0+p:]))), len(a[aRow0+p:])))
+				vA1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow1+p:]))), len(a[aRow1+p:])))
+				vA2 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow2+p:]))), len(a[aRow2+p:])))
+				vA3 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow3+p:]))), len(a[aRow3+p:])))
 				acc0 = vA0.MulAdd(vB, acc0)
 				acc1 = vA1.MulAdd(vB, acc1)
 				acc2 = vA2.MulAdd(vB, acc2)
@@ -150,8 +151,8 @@ func BaseMatMulKLast_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.B
 			acc := asm.ZeroBFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vA := asm.LoadBFloat16x8AVX2Slice(a[aRow+p:])
-				vB := asm.LoadBFloat16x8AVX2Slice(b[bRow+p:])
+				vA := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow+p:]))), len(a[aRow+p:])))
+				vB := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRow+p:]))), len(b[bRow+p:])))
 				acc = vA.MulAdd(vB, acc)
 			}
 			sum := acc.ReduceSum()
@@ -346,8 +347,8 @@ func BaseMatMulKLastBlocked_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []h
 						acc := asm.ZeroFloat16x8AVX2()
 						var p int
 						for p = kk; p+lanes <= kEnd; p += lanes {
-							vA := asm.LoadFloat16x8AVX2Slice(a[aRow+p:])
-							vB := asm.LoadFloat16x8AVX2Slice(b[bRow+p:])
+							vA := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow+p:]))), len(a[aRow+p:])))
+							vB := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRow+p:]))), len(b[bRow+p:])))
 							acc = vA.MulAdd(vB, acc)
 						}
 						sum := acc.ReduceSum()
@@ -393,8 +394,8 @@ func BaseMatMulKLastBlocked_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c 
 						acc := asm.ZeroBFloat16x8AVX2()
 						var p int
 						for p = kk; p+lanes <= kEnd; p += lanes {
-							vA := asm.LoadBFloat16x8AVX2Slice(a[aRow+p:])
-							vB := asm.LoadBFloat16x8AVX2Slice(b[bRow+p:])
+							vA := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(a[aRow+p:]))), len(a[aRow+p:])))
+							vB := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRow+p:]))), len(b[bRow+p:])))
 							acc = vA.MulAdd(vB, acc)
 						}
 						sum := acc.ReduceSum()

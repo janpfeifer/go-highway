@@ -297,6 +297,19 @@ func (v BFloat16x8AVX2) InterleaveUpper(other BFloat16x8AVX2) BFloat16x8AVX2 {
 }
 
 // ============================================================================
+// Load4 (batch load for unrolled loops)
+// ============================================================================
+
+// Load4BFloat16x8AVX2Slice loads 4 consecutive vectors (32 bfloat16 values) from a uint16 slice.
+func Load4BFloat16x8AVX2Slice(s []uint16) (BFloat16x8AVX2, BFloat16x8AVX2, BFloat16x8AVX2, BFloat16x8AVX2) {
+	v0 := LoadBFloat16x8AVX2Slice(s[0:8])
+	v1 := LoadBFloat16x8AVX2Slice(s[8:16])
+	v2 := LoadBFloat16x8AVX2Slice(s[16:24])
+	v3 := LoadBFloat16x8AVX2Slice(s[24:32])
+	return v0, v1, v2, v3
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

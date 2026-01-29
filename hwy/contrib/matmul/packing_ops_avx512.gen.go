@@ -6,6 +6,7 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/asm"
@@ -21,8 +22,8 @@ func BasePackRHSFast_avx512_Float16(b []hwy.Float16, packed []hwy.Float16, n int
 			for kk := 0; kk < panelK; kk++ {
 				srcIdx := (rowStart+kk)*n + baseCol
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadFloat16x16AVX512Slice(b[srcIdx+c:])
-					v.StoreSlice(packed[dstIdx+c:])
+					v := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[srcIdx+c:]))), len(b[srcIdx+c:])))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[dstIdx+c:]))), len(packed[dstIdx+c:])))
 				}
 				dstIdx += nr
 			}
@@ -52,8 +53,8 @@ func BasePackRHSFast_avx512_BFloat16(b []hwy.BFloat16, packed []hwy.BFloat16, n 
 			for kk := 0; kk < panelK; kk++ {
 				srcIdx := (rowStart+kk)*n + baseCol
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadBFloat16x16AVX512Slice(b[srcIdx+c:])
-					v.StoreSlice(packed[dstIdx+c:])
+					v := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[srcIdx+c:]))), len(b[srcIdx+c:])))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[dstIdx+c:]))), len(packed[dstIdx+c:])))
 				}
 				dstIdx += nr
 			}
@@ -144,11 +145,11 @@ func BaseApplyPackedOutput_avx512_Float16(packedOutput []hwy.Float16, output []h
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadFloat16x16AVX512Slice(packedOutput[packedIdx+c:])
-			outputVal := asm.LoadFloat16x16AVX512Slice(output[outputIdx+c:])
+			packedVal := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packedOutput[packedIdx+c:]))), len(packedOutput[packedIdx+c:])))
+			outputVal := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 			scaledOutput := outputVal.Mul(betaVec)
 			newVal := packedVal.MulAdd(alphaVec, scaledOutput)
-			newVal.StoreSlice(output[outputIdx+c:])
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			val := packedOutput[packedIdx+c]
@@ -166,11 +167,11 @@ func BaseApplyPackedOutput_avx512_BFloat16(packedOutput []hwy.BFloat16, output [
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadBFloat16x16AVX512Slice(packedOutput[packedIdx+c:])
-			outputVal := asm.LoadBFloat16x16AVX512Slice(output[outputIdx+c:])
+			packedVal := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packedOutput[packedIdx+c:]))), len(packedOutput[packedIdx+c:])))
+			outputVal := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 			scaledOutput := outputVal.Mul(betaVec)
 			newVal := packedVal.MulAdd(alphaVec, scaledOutput)
-			newVal.StoreSlice(output[outputIdx+c:])
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			val := packedOutput[packedIdx+c]
@@ -230,8 +231,8 @@ func BaseApplyPackedOutputSimple_avx512_Float16(packedOutput []hwy.Float16, outp
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			v := asm.LoadFloat16x16AVX512Slice(packedOutput[packedIdx+c:])
-			v.StoreSlice(output[outputIdx+c:])
+			v := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packedOutput[packedIdx+c:]))), len(packedOutput[packedIdx+c:])))
+			v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToFloat16(packedOutput[packedIdx+c].Float32())
@@ -246,8 +247,8 @@ func BaseApplyPackedOutputSimple_avx512_BFloat16(packedOutput []hwy.BFloat16, ou
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			v := asm.LoadBFloat16x16AVX512Slice(packedOutput[packedIdx+c:])
-			v.StoreSlice(output[outputIdx+c:])
+			v := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packedOutput[packedIdx+c:]))), len(packedOutput[packedIdx+c:])))
+			v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToBFloat16(packedOutput[packedIdx+c].Float32())
@@ -294,10 +295,10 @@ func BaseApplyPackedOutputAccum_avx512_Float16(packedOutput []hwy.Float16, outpu
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadFloat16x16AVX512Slice(packedOutput[packedIdx+c:])
-			outputVal := asm.LoadFloat16x16AVX512Slice(output[outputIdx+c:])
+			packedVal := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packedOutput[packedIdx+c:]))), len(packedOutput[packedIdx+c:])))
+			outputVal := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 			newVal := outputVal.Add(packedVal)
-			newVal.StoreSlice(output[outputIdx+c:])
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToFloat16(output[outputIdx+c].Float32() + packedOutput[packedIdx+c].Float32())
@@ -312,10 +313,10 @@ func BaseApplyPackedOutputAccum_avx512_BFloat16(packedOutput []hwy.BFloat16, out
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadBFloat16x16AVX512Slice(packedOutput[packedIdx+c:])
-			outputVal := asm.LoadBFloat16x16AVX512Slice(output[outputIdx+c:])
+			packedVal := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packedOutput[packedIdx+c:]))), len(packedOutput[packedIdx+c:])))
+			outputVal := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 			newVal := outputVal.Add(packedVal)
-			newVal.StoreSlice(output[outputIdx+c:])
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToBFloat16(output[outputIdx+c].Float32() + packedOutput[packedIdx+c].Float32())
