@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BaseTranspose2DStrided_avx512_Float16(src []hwy.Float16, rowStart int, rowEnd int, k int, dstM int, dst []hwy.Float16) {
@@ -16,72 +17,72 @@ func BaseTranspose2DStrided_avx512_Float16(src []hwy.Float16, rowStart int, rowE
 		return
 	}
 	m := rowEnd - rowStart
-	lanes := 32
+	lanes := 16
 	i := rowStart
 	for ; i <= rowEnd-lanes; i += lanes * 3 {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.Float16]{}
+				rows_1 := [16]asm.Float16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_1 := [16]asm.Float16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*dstM+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*dstM+i:]))), len(dst[(j+c_1)*dstM+i:])))
 				}
 			}
 		}
 		for j1 := 0; j1 <= k-lanes; j1 += lanes {
 			{
-				rows_11 := [32]hwy.Vec[hwy.Float16]{}
+				rows_11 := [16]asm.Float16x16AVX512{}
 				for r_11 := 0; r_11 < lanes; r_11++ {
-					rows_11[r_11] = hwy.Load(src[(i+r_11)*k+j1:])
+					rows_11[r_11] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_11)*k+j1:]))), len(src[(i+r_11)*k+j1:])))
 				}
 				for level_11 := 0; (1 << level_11) < lanes; level_11++ {
 					stride_11 := 1 << level_11
-					newRows_11 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_11 := [16]asm.Float16x16AVX512{}
 					for i_11 := 0; i_11 < lanes; i_11 += 2 * stride_11 {
 						for j_11 := 0; j_11 < stride_11; j_11++ {
-							newRows_11[i_11+j_11] = hwy.InterleaveLower(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
-							newRows_11[i_11+j_11+stride_11] = hwy.InterleaveUpper(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11] = rows_11[i_11+j_11].InterleaveLower(rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11+stride_11] = rows_11[i_11+j_11].InterleaveUpper(rows_11[i_11+j_11+stride_11])
 						}
 					}
 					rows_11 = newRows_11
 				}
 				for c_11 := 0; c_11 < lanes; c_11++ {
-					hwy.StoreFull(rows_11[c_11], dst[(j1+c_11)*dstM+i:])
+					rows_11[c_11].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j1+c_11)*dstM+i:]))), len(dst[(j1+c_11)*dstM+i:])))
 				}
 			}
 		}
 		for j2 := 0; j2 <= k-lanes; j2 += lanes {
 			{
-				rows_12 := [32]hwy.Vec[hwy.Float16]{}
+				rows_12 := [16]asm.Float16x16AVX512{}
 				for r_12 := 0; r_12 < lanes; r_12++ {
-					rows_12[r_12] = hwy.Load(src[(i+r_12)*k+j2:])
+					rows_12[r_12] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_12)*k+j2:]))), len(src[(i+r_12)*k+j2:])))
 				}
 				for level_12 := 0; (1 << level_12) < lanes; level_12++ {
 					stride_12 := 1 << level_12
-					newRows_12 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_12 := [16]asm.Float16x16AVX512{}
 					for i_12 := 0; i_12 < lanes; i_12 += 2 * stride_12 {
 						for j_12 := 0; j_12 < stride_12; j_12++ {
-							newRows_12[i_12+j_12] = hwy.InterleaveLower(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
-							newRows_12[i_12+j_12+stride_12] = hwy.InterleaveUpper(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12] = rows_12[i_12+j_12].InterleaveLower(rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12+stride_12] = rows_12[i_12+j_12].InterleaveUpper(rows_12[i_12+j_12+stride_12])
 						}
 					}
 					rows_12 = newRows_12
 				}
 				for c_12 := 0; c_12 < lanes; c_12++ {
-					hwy.StoreFull(rows_12[c_12], dst[(j2+c_12)*dstM+i:])
+					rows_12[c_12].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j2+c_12)*dstM+i:]))), len(dst[(j2+c_12)*dstM+i:])))
 				}
 			}
 		}
@@ -89,23 +90,23 @@ func BaseTranspose2DStrided_avx512_Float16(src []hwy.Float16, rowStart int, rowE
 	for ; i <= rowEnd-lanes; i += lanes {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.Float16]{}
+				rows_1 := [16]asm.Float16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_1 := [16]asm.Float16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*dstM+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*dstM+i:]))), len(dst[(j+c_1)*dstM+i:])))
 				}
 			}
 		}
@@ -138,72 +139,72 @@ func BaseTranspose2DStrided_avx512_BFloat16(src []hwy.BFloat16, rowStart int, ro
 		return
 	}
 	m := rowEnd - rowStart
-	lanes := 32
+	lanes := 16
 	i := rowStart
 	for ; i <= rowEnd-lanes; i += lanes * 3 {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_1 := [16]asm.BFloat16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_1 := [16]asm.BFloat16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*dstM+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*dstM+i:]))), len(dst[(j+c_1)*dstM+i:])))
 				}
 			}
 		}
 		for j1 := 0; j1 <= k-lanes; j1 += lanes {
 			{
-				rows_11 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_11 := [16]asm.BFloat16x16AVX512{}
 				for r_11 := 0; r_11 < lanes; r_11++ {
-					rows_11[r_11] = hwy.Load(src[(i+r_11)*k+j1:])
+					rows_11[r_11] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_11)*k+j1:]))), len(src[(i+r_11)*k+j1:])))
 				}
 				for level_11 := 0; (1 << level_11) < lanes; level_11++ {
 					stride_11 := 1 << level_11
-					newRows_11 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_11 := [16]asm.BFloat16x16AVX512{}
 					for i_11 := 0; i_11 < lanes; i_11 += 2 * stride_11 {
 						for j_11 := 0; j_11 < stride_11; j_11++ {
-							newRows_11[i_11+j_11] = hwy.InterleaveLower(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
-							newRows_11[i_11+j_11+stride_11] = hwy.InterleaveUpper(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11] = rows_11[i_11+j_11].InterleaveLower(rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11+stride_11] = rows_11[i_11+j_11].InterleaveUpper(rows_11[i_11+j_11+stride_11])
 						}
 					}
 					rows_11 = newRows_11
 				}
 				for c_11 := 0; c_11 < lanes; c_11++ {
-					hwy.StoreFull(rows_11[c_11], dst[(j1+c_11)*dstM+i:])
+					rows_11[c_11].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j1+c_11)*dstM+i:]))), len(dst[(j1+c_11)*dstM+i:])))
 				}
 			}
 		}
 		for j2 := 0; j2 <= k-lanes; j2 += lanes {
 			{
-				rows_12 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_12 := [16]asm.BFloat16x16AVX512{}
 				for r_12 := 0; r_12 < lanes; r_12++ {
-					rows_12[r_12] = hwy.Load(src[(i+r_12)*k+j2:])
+					rows_12[r_12] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_12)*k+j2:]))), len(src[(i+r_12)*k+j2:])))
 				}
 				for level_12 := 0; (1 << level_12) < lanes; level_12++ {
 					stride_12 := 1 << level_12
-					newRows_12 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_12 := [16]asm.BFloat16x16AVX512{}
 					for i_12 := 0; i_12 < lanes; i_12 += 2 * stride_12 {
 						for j_12 := 0; j_12 < stride_12; j_12++ {
-							newRows_12[i_12+j_12] = hwy.InterleaveLower(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
-							newRows_12[i_12+j_12+stride_12] = hwy.InterleaveUpper(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12] = rows_12[i_12+j_12].InterleaveLower(rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12+stride_12] = rows_12[i_12+j_12].InterleaveUpper(rows_12[i_12+j_12+stride_12])
 						}
 					}
 					rows_12 = newRows_12
 				}
 				for c_12 := 0; c_12 < lanes; c_12++ {
-					hwy.StoreFull(rows_12[c_12], dst[(j2+c_12)*dstM+i:])
+					rows_12[c_12].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j2+c_12)*dstM+i:]))), len(dst[(j2+c_12)*dstM+i:])))
 				}
 			}
 		}
@@ -211,23 +212,23 @@ func BaseTranspose2DStrided_avx512_BFloat16(src []hwy.BFloat16, rowStart int, ro
 	for ; i <= rowEnd-lanes; i += lanes {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_1 := [16]asm.BFloat16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_1 := [16]asm.BFloat16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*dstM+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*dstM+i:]))), len(dst[(j+c_1)*dstM+i:])))
 				}
 			}
 		}
@@ -503,72 +504,72 @@ func BaseTranspose2D_avx512_Float16(src []hwy.Float16, m int, k int, dst []hwy.F
 	if len(src) < m*k || len(dst) < k*m {
 		return
 	}
-	lanes := 32
+	lanes := 16
 	i := 0
 	for ; i <= m-lanes; i += lanes * 3 {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.Float16]{}
+				rows_1 := [16]asm.Float16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_1 := [16]asm.Float16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*m+i:]))), len(dst[(j+c_1)*m+i:])))
 				}
 			}
 		}
 		for j1 := 0; j1 <= k-lanes; j1 += lanes {
 			{
-				rows_11 := [32]hwy.Vec[hwy.Float16]{}
+				rows_11 := [16]asm.Float16x16AVX512{}
 				for r_11 := 0; r_11 < lanes; r_11++ {
-					rows_11[r_11] = hwy.Load(src[(i+r_11)*k+j1:])
+					rows_11[r_11] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_11)*k+j1:]))), len(src[(i+r_11)*k+j1:])))
 				}
 				for level_11 := 0; (1 << level_11) < lanes; level_11++ {
 					stride_11 := 1 << level_11
-					newRows_11 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_11 := [16]asm.Float16x16AVX512{}
 					for i_11 := 0; i_11 < lanes; i_11 += 2 * stride_11 {
 						for j_11 := 0; j_11 < stride_11; j_11++ {
-							newRows_11[i_11+j_11] = hwy.InterleaveLower(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
-							newRows_11[i_11+j_11+stride_11] = hwy.InterleaveUpper(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11] = rows_11[i_11+j_11].InterleaveLower(rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11+stride_11] = rows_11[i_11+j_11].InterleaveUpper(rows_11[i_11+j_11+stride_11])
 						}
 					}
 					rows_11 = newRows_11
 				}
 				for c_11 := 0; c_11 < lanes; c_11++ {
-					hwy.StoreFull(rows_11[c_11], dst[(j1+c_11)*m+i:])
+					rows_11[c_11].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j1+c_11)*m+i:]))), len(dst[(j1+c_11)*m+i:])))
 				}
 			}
 		}
 		for j2 := 0; j2 <= k-lanes; j2 += lanes {
 			{
-				rows_12 := [32]hwy.Vec[hwy.Float16]{}
+				rows_12 := [16]asm.Float16x16AVX512{}
 				for r_12 := 0; r_12 < lanes; r_12++ {
-					rows_12[r_12] = hwy.Load(src[(i+r_12)*k+j2:])
+					rows_12[r_12] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_12)*k+j2:]))), len(src[(i+r_12)*k+j2:])))
 				}
 				for level_12 := 0; (1 << level_12) < lanes; level_12++ {
 					stride_12 := 1 << level_12
-					newRows_12 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_12 := [16]asm.Float16x16AVX512{}
 					for i_12 := 0; i_12 < lanes; i_12 += 2 * stride_12 {
 						for j_12 := 0; j_12 < stride_12; j_12++ {
-							newRows_12[i_12+j_12] = hwy.InterleaveLower(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
-							newRows_12[i_12+j_12+stride_12] = hwy.InterleaveUpper(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12] = rows_12[i_12+j_12].InterleaveLower(rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12+stride_12] = rows_12[i_12+j_12].InterleaveUpper(rows_12[i_12+j_12+stride_12])
 						}
 					}
 					rows_12 = newRows_12
 				}
 				for c_12 := 0; c_12 < lanes; c_12++ {
-					hwy.StoreFull(rows_12[c_12], dst[(j2+c_12)*m+i:])
+					rows_12[c_12].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j2+c_12)*m+i:]))), len(dst[(j2+c_12)*m+i:])))
 				}
 			}
 		}
@@ -576,23 +577,23 @@ func BaseTranspose2D_avx512_Float16(src []hwy.Float16, m int, k int, dst []hwy.F
 	for ; i <= m-lanes; i += lanes {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.Float16]{}
+				rows_1 := [16]asm.Float16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.Float16]{}
+					newRows_1 := [16]asm.Float16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*m+i:]))), len(dst[(j+c_1)*m+i:])))
 				}
 			}
 		}
@@ -617,72 +618,72 @@ func BaseTranspose2D_avx512_BFloat16(src []hwy.BFloat16, m int, k int, dst []hwy
 	if len(src) < m*k || len(dst) < k*m {
 		return
 	}
-	lanes := 32
+	lanes := 16
 	i := 0
 	for ; i <= m-lanes; i += lanes * 3 {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_1 := [16]asm.BFloat16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_1 := [16]asm.BFloat16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*m+i:]))), len(dst[(j+c_1)*m+i:])))
 				}
 			}
 		}
 		for j1 := 0; j1 <= k-lanes; j1 += lanes {
 			{
-				rows_11 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_11 := [16]asm.BFloat16x16AVX512{}
 				for r_11 := 0; r_11 < lanes; r_11++ {
-					rows_11[r_11] = hwy.Load(src[(i+r_11)*k+j1:])
+					rows_11[r_11] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_11)*k+j1:]))), len(src[(i+r_11)*k+j1:])))
 				}
 				for level_11 := 0; (1 << level_11) < lanes; level_11++ {
 					stride_11 := 1 << level_11
-					newRows_11 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_11 := [16]asm.BFloat16x16AVX512{}
 					for i_11 := 0; i_11 < lanes; i_11 += 2 * stride_11 {
 						for j_11 := 0; j_11 < stride_11; j_11++ {
-							newRows_11[i_11+j_11] = hwy.InterleaveLower(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
-							newRows_11[i_11+j_11+stride_11] = hwy.InterleaveUpper(rows_11[i_11+j_11], rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11] = rows_11[i_11+j_11].InterleaveLower(rows_11[i_11+j_11+stride_11])
+							newRows_11[i_11+j_11+stride_11] = rows_11[i_11+j_11].InterleaveUpper(rows_11[i_11+j_11+stride_11])
 						}
 					}
 					rows_11 = newRows_11
 				}
 				for c_11 := 0; c_11 < lanes; c_11++ {
-					hwy.StoreFull(rows_11[c_11], dst[(j1+c_11)*m+i:])
+					rows_11[c_11].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j1+c_11)*m+i:]))), len(dst[(j1+c_11)*m+i:])))
 				}
 			}
 		}
 		for j2 := 0; j2 <= k-lanes; j2 += lanes {
 			{
-				rows_12 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_12 := [16]asm.BFloat16x16AVX512{}
 				for r_12 := 0; r_12 < lanes; r_12++ {
-					rows_12[r_12] = hwy.Load(src[(i+r_12)*k+j2:])
+					rows_12[r_12] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_12)*k+j2:]))), len(src[(i+r_12)*k+j2:])))
 				}
 				for level_12 := 0; (1 << level_12) < lanes; level_12++ {
 					stride_12 := 1 << level_12
-					newRows_12 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_12 := [16]asm.BFloat16x16AVX512{}
 					for i_12 := 0; i_12 < lanes; i_12 += 2 * stride_12 {
 						for j_12 := 0; j_12 < stride_12; j_12++ {
-							newRows_12[i_12+j_12] = hwy.InterleaveLower(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
-							newRows_12[i_12+j_12+stride_12] = hwy.InterleaveUpper(rows_12[i_12+j_12], rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12] = rows_12[i_12+j_12].InterleaveLower(rows_12[i_12+j_12+stride_12])
+							newRows_12[i_12+j_12+stride_12] = rows_12[i_12+j_12].InterleaveUpper(rows_12[i_12+j_12+stride_12])
 						}
 					}
 					rows_12 = newRows_12
 				}
 				for c_12 := 0; c_12 < lanes; c_12++ {
-					hwy.StoreFull(rows_12[c_12], dst[(j2+c_12)*m+i:])
+					rows_12[c_12].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j2+c_12)*m+i:]))), len(dst[(j2+c_12)*m+i:])))
 				}
 			}
 		}
@@ -690,23 +691,23 @@ func BaseTranspose2D_avx512_BFloat16(src []hwy.BFloat16, m int, k int, dst []hwy
 	for ; i <= m-lanes; i += lanes {
 		for j := 0; j <= k-lanes; j += lanes {
 			{
-				rows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+				rows_1 := [16]asm.BFloat16x16AVX512{}
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
+					rows_1[r_1] = asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[(i+r_1)*k+j:]))), len(src[(i+r_1)*k+j:])))
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
-					newRows_1 := [32]hwy.Vec[hwy.BFloat16]{}
+					newRows_1 := [16]asm.BFloat16x16AVX512{}
 					for i_1 := 0; i_1 < lanes; i_1 += 2 * stride_1 {
 						for j_1 := 0; j_1 < stride_1; j_1++ {
-							newRows_1[i_1+j_1] = hwy.InterleaveLower(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
-							newRows_1[i_1+j_1+stride_1] = hwy.InterleaveUpper(rows_1[i_1+j_1], rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1] = rows_1[i_1+j_1].InterleaveLower(rows_1[i_1+j_1+stride_1])
+							newRows_1[i_1+j_1+stride_1] = rows_1[i_1+j_1].InterleaveUpper(rows_1[i_1+j_1+stride_1])
 						}
 					}
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+					rows_1[c_1].StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[(j+c_1)*m+i:]))), len(dst[(j+c_1)*m+i:])))
 				}
 			}
 		}

@@ -38,9 +38,59 @@ func isHalfPrecisionType(elemType string) bool {
 	return isFloat16Type(elemType) || isBFloat16Type(elemType)
 }
 
+// isAVXPromotedHalfPrec returns true if the target uses promoted float32 storage
+// for half-precision types (AVX2 with Float16x8AVX2, AVX512 with Float16x16AVX512).
+func isAVXPromotedHalfPrec(target Target, elemType string) bool {
+	return isHalfPrecisionType(elemType) && (target.Name == "AVX2" || target.Name == "AVX512")
+}
+
 // isUnsignedIntType returns true if the element type is an unsigned integer type.
 func isUnsignedIntType(elemType string) bool {
 	return elemType == "uint8" || elemType == "uint16" || elemType == "uint32" || elemType == "uint64"
+}
+
+// halfPrecSliceToUint16 wraps a half-precision slice expression with an unsafe
+// cast to []uint16. Since hwy.Float16 and hwy.BFloat16 are defined as uint16,
+// this is a safe reinterpretation:
+//
+//	unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(s))), len(s))
+func halfPrecSliceToUint16(sliceExpr ast.Expr) ast.Expr {
+	return &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X:   ast.NewIdent("unsafe"),
+			Sel: ast.NewIdent("Slice"),
+		},
+		Args: []ast.Expr{
+			// (*uint16)(unsafe.Pointer(unsafe.SliceData(s)))
+			&ast.CallExpr{
+				Fun: &ast.ParenExpr{
+					X: &ast.StarExpr{X: ast.NewIdent("uint16")},
+				},
+				Args: []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.CallExpr{
+								Fun: &ast.SelectorExpr{
+									X:   ast.NewIdent("unsafe"),
+									Sel: ast.NewIdent("SliceData"),
+								},
+								Args: []ast.Expr{sliceExpr},
+							},
+						},
+					},
+				},
+			},
+			// len(s)
+			&ast.CallExpr{
+				Fun:  ast.NewIdent("len"),
+				Args: []ast.Expr{sliceExpr},
+			},
+		},
+	}
 }
 
 // is64BitIntType returns true if the element type is a 64-bit integer (signed or unsigned).
@@ -1321,6 +1371,10 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 					}
 					if !isPointerArg {
 						sel.Sel.Name = "StoreSlice"
+						// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16 for half-precision
+						if isHalfPrecisionType(ctx.elemType) && len(call.Args) == 1 {
+							call.Args[0] = halfPrecSliceToUint16(call.Args[0])
+						}
 					}
 				case "Data":
 					transformDataMethod(call, ctx)
@@ -1471,7 +1525,39 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 					}
 					return
 				}
-				// For non-NEON or skip: replace type param with concrete type
+				// For AVX promoted types, convert to asm.BroadcastFloat16x8AVX2(...) etc.
+				if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+					typeName := ctx.target.TypeMap[ctx.elemType]
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent("Broadcast" + typeName),
+					}
+					if len(call.Args) > 0 {
+						convFunc := "Float32ToFloat16"
+						if isBFloat16Type(ctx.elemType) {
+							convFunc = "Float32ToBFloat16"
+						}
+						call.Args[0] = &ast.CallExpr{
+							Fun: ast.NewIdent("uint16"),
+							Args: []ast.Expr{
+								&ast.CallExpr{
+									Fun: &ast.SelectorExpr{
+										X:   ast.NewIdent("hwy"),
+										Sel: ast.NewIdent(convFunc),
+									},
+									Args: []ast.Expr{
+										&ast.CallExpr{
+											Fun:  ast.NewIdent("float32"),
+											Args: []ast.Expr{call.Args[0]},
+										},
+									},
+								},
+							},
+						}
+					}
+					return
+				}
+				// For Fallback or skip: replace type param with concrete type
 				for _, tp := range ctx.typeParams {
 					if ident, ok := fun.Index.(*ast.Ident); ok && ident.Name == tp.Name {
 						ident.Name = ctx.elemType
@@ -1487,6 +1573,23 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 				}
 				// Keep the IndexExpr with the concrete type
 			case "ConvertExponentToFloat":
+				if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+					// For AVX promoted: asm.Float16x8AVX2FromFloat32x8(e.ConvertToFloat32())
+					wrapFunc := fmt.Sprintf("%sFromFloat32x%d", ctx.target.TypeMap[ctx.elemType], ctx.target.LanesFor("float32"))
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent(wrapFunc),
+					}
+					call.Args = []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   call.Args[0],
+								Sel: ast.NewIdent("ConvertToFloat32"),
+							},
+						},
+					}
+					return
+				}
 				// Transform to non-generic ConvertToF16/ConvertToBF16
 				if ctx.elemType == "hwy.Float16" {
 					call.Fun = &ast.SelectorExpr{
@@ -1630,8 +1733,8 @@ func transformDataMethod(call *ast.CallExpr, ctx *transformContext) {
 
 	// v.StoreSlice(tmp[:]) or hwy.Store(v, tmp[:]) for half-precision
 	var storeCall *ast.CallExpr
-	if isHalfPrecisionType(ctx.elemType) {
-		// hwy.Store(v, tmp[:]) for half-precision types
+	if isHalfPrecisionType(ctx.elemType) && !isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+		// hwy.Store(v, tmp[:]) for half-precision types on Fallback
 		storeFun := &ast.SelectorExpr{
 			X:   ast.NewIdent("hwy"),
 			Sel: ast.NewIdent("Store"),
@@ -1643,6 +1746,19 @@ func transformDataMethod(call *ast.CallExpr, ctx *transformContext) {
 				&ast.SliceExpr{
 					X: ast.NewIdent("_simd_tmp"),
 				},
+			},
+		}
+	} else if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+		// v.StoreSlice(cast(tmp[:])) for AVX promoted half-precision
+		storeCall = &ast.CallExpr{
+			Fun: &ast.SelectorExpr{
+				X:   cloneExpr(vecExpr),
+				Sel: ast.NewIdent("StoreSlice"),
+			},
+			Args: []ast.Expr{
+				halfPrecSliceToUint16(&ast.SliceExpr{
+					X: ast.NewIdent("_simd_tmp"),
+				}),
 			},
 		}
 	} else {
@@ -1706,11 +1822,12 @@ func transformGetBitMethod(call *ast.CallExpr, ctx *transformContext) {
 	maskExpr := sel.X
 	lanes := ctx.target.LanesFor(ctx.elemType)
 
-	// For half-precision types, use hwy package functions instead of native SIMD
-	if isHalfPrecisionType(ctx.elemType) {
+	// For half-precision types on Fallback/NEON (non-AVX-promoted), keep as hwy.Mask.GetBit
+	if isHalfPrecisionType(ctx.elemType) && !isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 		transformGetBitMethodHalfPrecision(call, maskExpr, indexExpr, lanes, ctx)
 		return
 	}
+	// For AVX promoted half-precision, fall through to use SIMD extraction (same as float32)
 
 	// Use Int32 vector for extraction to match most masks used with GetBit
 	intVecTypeName := getVectorTypeNameForInt("int32", ctx.elemType, ctx.target)
@@ -1908,6 +2025,27 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				return
 			}
 		}
+		// For AVX promoted types, convert Merge/IfThenElse to method calls
+		if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			if funcName == "Merge" && len(call.Args) >= 3 {
+				// hwy.Merge(yes, no, mask) -> yes.Merge(no, mask)
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent("Merge"),
+				}
+				call.Args = []ast.Expr{call.Args[1], call.Args[2]}
+				return
+			}
+			if funcName == "IfThenElse" && len(call.Args) >= 3 {
+				// hwy.IfThenElse(mask, yes, no) -> yes.Merge(no, mask)
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[1],
+					Sel: ast.NewIdent("Merge"),
+				}
+				call.Args = []ast.Expr{call.Args[2], call.Args[0]}
+				return
+			}
+		}
 		// Handle Merge specially - needs argument reordering
 		// hwy.Merge(yes, no, mask) -> hwy.IfThenElseF16(mask, yes, no)
 		if funcName == "Merge" && len(call.Args) >= 3 {
@@ -1944,6 +2082,15 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			// operations that may operate on int32 intermediate values (like octant calculations in trig functions)
 			if len(call.Args) >= 2 {
 				if isInt32Expr(call.Args[0], ctx) && isInt32Expr(call.Args[1], ctx) {
+					if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+						// For AVX promoted, int32 variables are archsimd.Int32x8 - use method calls
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
 					// Keep as generic hwy.Add, hwy.Equal, hwy.And, etc. for int32 operands
 					call.Fun = &ast.SelectorExpr{
 						X:   ast.NewIdent("hwy"),
@@ -1952,8 +2099,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					return
 				}
 			}
-			// For NEON target, use method calls on asm types for arithmetic and comparison operations
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON and AVX promoted targets, use method calls on asm types for arithmetic and comparison operations
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				switch funcName {
 				case "Add", "Sub", "Mul", "Div", "Min", "Max":
 					// hwy.AddF16(a, b) -> a.Add(b)
@@ -2007,20 +2154,33 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					}
 				case "GreaterThan", "Greater", "LessThan", "Less",
 					"GreaterEqual", "GreaterThanOrEqual", "LessEqual", "LessThanOrEqual",
-					"NotEqual":
-					// hwy.GreaterThanF16(a, b) -> a.GreaterThan(b)
+					"Equal", "NotEqual":
 					if len(call.Args) >= 2 {
 						methodName := funcName
-						// Normalize short names
-						switch funcName {
-						case "Greater":
-							methodName = "GreaterThan"
-						case "Less":
-							methodName = "LessThan"
-						case "GreaterEqual":
-							methodName = "GreaterThanOrEqual"
-						case "LessEqual":
-							methodName = "LessThanOrEqual"
+						if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+							// AVX promoted types use archsimd-style short names
+							switch funcName {
+							case "GreaterThan":
+								methodName = "Greater"
+							case "LessThan":
+								methodName = "Less"
+							case "GreaterThanOrEqual":
+								methodName = "GreaterEqual"
+							case "LessThanOrEqual":
+								methodName = "LessEqual"
+							}
+						} else {
+							// NEON uses long names
+							switch funcName {
+							case "Greater":
+								methodName = "GreaterThan"
+							case "Less":
+								methodName = "LessThan"
+							case "GreaterEqual":
+								methodName = "GreaterThanOrEqual"
+							case "LessEqual":
+								methodName = "LessThanOrEqual"
+							}
 						}
 						call.Fun = &ast.SelectorExpr{
 							X:   call.Args[0],
@@ -2031,7 +2191,7 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					}
 				}
 			}
-			// For non-NEON, transform to hwy.AddF16(a, b), hwy.MulF16(a, b), etc.
+			// For Fallback, transform to hwy.AddF16(a, b), hwy.MulF16(a, b), etc.
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent(f16FuncName),
@@ -2044,15 +2204,26 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		// instead of converting to method calls (which don't exist on hwy.Vec[Float16])
 		switch funcName {
 		case "RoundToEven", "ConvertToInt32", "ConvertToFloat32":
-			// Keep as hwy function call - do NOT convert to method
+			// For AVX promoted types, use method calls
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 1 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent(funcName),
+					}
+					call.Args = nil
+					return
+				}
+			}
+			// Keep as hwy function call for Fallback - do NOT convert to method
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent(funcName),
 			}
 			return
 		case "Not":
-			// For NEON target with asm types, convert to method call: hwy.Not(v) -> v.Not()
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON/AVX promoted targets, convert to method call: hwy.Not(v) -> v.Not()
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 1 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -2068,8 +2239,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "Xor":
-			// For NEON target with asm types, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON/AVX promoted targets, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -2085,8 +2256,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "And":
-			// For NEON target with asm types, convert to method call: hwy.And(a, b) -> a.And(b)
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON/AVX promoted targets, convert to method call: hwy.And(a, b) -> a.And(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -2102,21 +2273,59 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "Or", "AndNot":
-			// These don't have method forms on asm types yet
+			// For AVX promoted types, use method calls
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent(funcName),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			// These don't have method forms on NEON asm types yet
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent(funcName),
 			}
 			return
 		case "NotEqual":
-			// hwy.NotEqual on hwy.Vec[Float16/BFloat16] doesn't have a method form,
-			// keep as hwy.NotEqual(a, b)
+			// For AVX promoted types, use method call
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("NotEqual"),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			// For Fallback, keep as hwy.NotEqual(a, b)
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent("NotEqual"),
 			}
 			return
 		case "Pow":
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				// For AVX promoted: inline scalar Pow via float32 buffers
+				// Use AsFloat32xN() instead of Data() to avoid transformer interception
+				lanes := ctx.target.LanesFor("float32")
+				asmType := ctx.target.TypeMap[ctx.elemType]
+				wrapFunc := fmt.Sprintf("%sFromFloat32x%d", asmType, lanes)
+				loadFunc := fmt.Sprintf("LoadFloat32x%dSlice", lanes)
+				asF32Method := fmt.Sprintf("AsFloat32x%d", lanes)
+				vecPkg := getVecPackageName(ctx.target)
+				lanesStr := strconv.Itoa(lanes)
+				baseArg := call.Args[0]
+				expArg := call.Args[1]
+
+				call.Fun = genPowIIFE(asmType, wrapFunc, loadFunc, asF32Method, vecPkg, lanesStr, baseArg, expArg)
+				call.Args = nil
+				return
+			}
 			// hwy.Pow on hwy.Vec[Float16/BFloat16] doesn't have a method form,
 			// keep as hwy.Pow(base, exp)
 			call.Fun = &ast.SelectorExpr{
@@ -2125,6 +2334,16 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "MaskAnd", "MaskOr", "MaskXor", "MaskAndNot":
+			// For AVX promoted types, masks are archsimd.Mask32x8 - use method calls
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				methodName := strings.TrimPrefix(funcName, "Mask") // MaskAnd -> And
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent(methodName),
+				}
+				call.Args = call.Args[1:]
+				return
+			}
 			// Mask operations on hwy.Mask[Float16/BFloat16] don't have method forms,
 			// so keep them as hwy.MaskAnd, hwy.MaskOr, etc.
 			call.Fun = &ast.SelectorExpr{
@@ -2161,10 +2380,40 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				}
 				return
 			}
-			// For non-NEON, keep hwy.Store(v, dst) as-is
+			// For AVX promoted types, convert to method call: v.StoreSlice(dst)
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent("StoreSlice"),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+				return
+			}
+			// For Fallback, keep hwy.Store(v, dst) as-is
 			return
 		case "Pow2":
-			// Pow2 needs a type parameter: hwy.Pow2[hwy.Float16](kInt)
+			// For AVX promoted types: Pow2 operates on float32 internally
+			// asm.Float16x8AVX2FromFloat32x8(hwy.Pow2_AVX2_F32x8(kInt))
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
+				pow2Func := fmt.Sprintf("Pow2_%s_F32x%d", ctx.target.Name, ctx.target.LanesFor("float32"))
+				wrapFunc := ctx.target.TypeMap[ctx.elemType] + "FromFloat32x" + fmt.Sprintf("%d", ctx.target.LanesFor("float32"))
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(wrapFunc),
+				}
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("hwy"),
+							Sel: ast.NewIdent(pow2Func),
+						},
+						Args: call.Args,
+					},
+				}
+				return
+			}
+			// Fallback/NEON: Pow2 needs a type parameter: hwy.Pow2[hwy.Float16](kInt)
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -2187,7 +2436,17 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				call.Args = nil
 				return
 			}
-			// For non-NEON or generic path, SignBit needs a type parameter: hwy.SignBit[hwy.Float16]()
+			// For AVX promoted types, use asm.SignBitFloat16x8AVX2() etc.
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				signBitFuncName := "SignBit" + ctx.target.TypeMap[ctx.elemType]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(signBitFuncName),
+				}
+				call.Args = nil
+				return
+			}
+			// For Fallback, SignBit needs a type parameter: hwy.SignBit[hwy.Float16]()
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -2232,7 +2491,31 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					return
 				}
 			}
-			// For non-NEON targets, keep hwy.Set[T](val), hwy.Zero[T](), and hwy.Const[T](val) as-is
+			// For AVX promoted types, use concrete asm types
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				typeName := ctx.target.TypeMap[ctx.elemType]
+				if funcName == "Zero" {
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent("Zero" + typeName),
+					}
+					return
+				}
+				if funcName == "Set" || funcName == "Const" {
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent("Broadcast" + typeName),
+					}
+					if len(call.Args) > 0 {
+						call.Args[0] = &ast.CallExpr{
+							Fun:  ast.NewIdent("uint16"),
+							Args: []ast.Expr{call.Args[0]},
+						}
+					}
+					return
+				}
+			}
+			// For Fallback targets, keep hwy.Set[T](val), hwy.Zero[T](), and hwy.Const[T](val) as-is
 			return
 		case "Load":
 			// For NEON target, use concrete asm load functions
@@ -2245,9 +2528,22 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					X:   ast.NewIdent("asm"),
 					Sel: ast.NewIdent(loadFuncName),
 				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args[0] = halfPrecSliceToUint16(call.Args[0])
 				return
 			}
-			// For non-NEON, keep hwy.Load as-is
+			// For AVX promoted types, use concrete asm load functions
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
+				loadFuncName := "Load" + ctx.target.TypeMap[ctx.elemType] + "Slice"
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args[0] = halfPrecSliceToUint16(call.Args[0])
+				return
+			}
+			// For Fallback, keep hwy.Load as-is
 			return
 		}
 
@@ -2359,7 +2655,19 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		}
-		// Keep hwy.StoreFull(v, dst) as-is for non-NEON half-precision types
+		// For AVX promoted half-precision: hwy.StoreFull(v, dst) -> v.StoreSlice(cast(dst))
+		if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			if len(call.Args) >= 2 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent("StoreSlice"),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+			}
+			return
+		}
+		// Keep hwy.StoreFull(v, dst) as-is for Fallback half-precision types
 		if isHalfPrecisionType(ctx.elemType) {
 			return
 		}
@@ -2453,8 +2761,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		}
 
 	case "GetExponent":
-		// For Float16/BFloat16, use hwy.GetExponent which has proper handling
-		if isHalfPrecisionType(ctx.elemType) {
+		// For Float16/BFloat16 on Fallback, use hwy.GetExponent which has proper handling
+		if isHalfPrecisionType(ctx.elemType) && !isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent("GetExponent"),
@@ -2463,9 +2771,14 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		}
 		if len(call.Args) >= 1 {
 			x := call.Args[0]
-			intVecTypeName := getVectorTypeNameForInt("int32", ctx.elemType, ctx.target)
-			if ctx.elemType == "float64" {
-				intVecTypeName = getVectorTypeNameForInt("int64", ctx.elemType, ctx.target)
+			// For AVX promoted half-precision, the underlying data is float32
+			effectiveElem := ctx.elemType
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				effectiveElem = "float32"
+			}
+			intVecTypeName := getVectorTypeNameForInt("int32", effectiveElem, ctx.target)
+			if effectiveElem == "float64" {
+				intVecTypeName = getVectorTypeNameForInt("int64", effectiveElem, ctx.target)
 			}
 			pkgName := getVecPackageName(ctx.target)
 
@@ -2475,7 +2788,7 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			var mask string
 			var bias string
 
-			if ctx.elemType == "float32" {
+			if effectiveElem == "float32" {
 				asIntMethod = "AsInt32x8"
 				// Check targets.go OpMap["AsInt32"].Name
 				if op, ok := ctx.target.OpMap["AsInt32"]; ok {
@@ -2550,8 +2863,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		}
 
 	case "GetMantissa":
-		// For Float16/BFloat16, use hwy.GetMantissa which has proper handling
-		if isHalfPrecisionType(ctx.elemType) {
+		// For non-AVX-promoted half-precision, use hwy.GetMantissa which has proper handling
+		if isHalfPrecisionType(ctx.elemType) && !isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent("GetMantissa"),
@@ -2560,9 +2873,14 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		}
 		if len(call.Args) >= 1 {
 			x := call.Args[0]
-			intVecTypeName := getVectorTypeNameForInt("int32", ctx.elemType, ctx.target)
-			if ctx.elemType == "float64" {
-				intVecTypeName = getVectorTypeNameForInt("int64", ctx.elemType, ctx.target)
+			// For AVX promoted half-precision, the underlying data is float32
+			effectiveElem := ctx.elemType
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				effectiveElem = "float32"
+			}
+			intVecTypeName := getVectorTypeNameForInt("int32", effectiveElem, ctx.target)
+			if effectiveElem == "float64" {
+				intVecTypeName = getVectorTypeNameForInt("int64", effectiveElem, ctx.target)
 			}
 			pkgName := getVecPackageName(ctx.target)
 
@@ -2571,7 +2889,7 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			var one string
 			var asFloatMethod string
 
-			if ctx.elemType == "float32" {
+			if effectiveElem == "float32" {
 				asIntMethod = "AsInt32x8"
 				if op, ok := ctx.target.OpMap["AsInt32"]; ok {
 					asIntMethod = op.Name
@@ -2641,6 +2959,18 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					X:   expr,
 					Sel: ast.NewIdent(asFloatMethod),
 				},
+			}
+
+			// For AVX promoted half-precision, wrap the Float32x8 result back in the asm type
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				wrapFunc := fmt.Sprintf("%sFromFloat32x%d", ctx.target.TypeMap[ctx.elemType], ctx.target.LanesFor("float32"))
+				expr = &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent(wrapFunc),
+					},
+					Args: []ast.Expr{expr},
+				}
 			}
 
 			*call = *expr
@@ -2928,12 +3258,23 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 		} else if isHalfPrecisionType(ctx.elemType) {
 			// For half-precision contexts, integer operations (like octant masking in sin/cos)
-			// use hwy.Vec[int32] which doesn't have And method. Keep as generic hwy function.
-			call.Fun = &ast.SelectorExpr{
-				X:   ast.NewIdent("hwy"),
-				Sel: ast.NewIdent(opInfo.Name),
+			// may use hwy.Vec[int32] (Fallback/NEON) or archsimd.Int32x8 (AVX promoted).
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 &&
+				isInt32Expr(call.Args[0], ctx) && isInt32Expr(call.Args[1], ctx) {
+				// AVX promoted: int32 variables are archsimd.Int32x8 which has And/Xor methods
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent(opInfo.Name),
+				}
+				call.Args = call.Args[1:]
+			} else {
+				// Non-AVX promoted: keep as generic hwy function
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("hwy"),
+					Sel: ast.NewIdent(opInfo.Name),
+				}
 			}
-			// Keep args as [a, b]
+			// Keep args as [a, b] (for non-AVX case)
 		} else {
 			// Integer types or non-archsimd: use method call a.And(b)
 			if len(call.Args) >= 2 {
@@ -3067,6 +3408,27 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				return
 			}
 		}
+		// For AVX promoted types, convert Merge/IfThenElse to method calls
+		if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			if funcName == "Merge" && len(call.Args) >= 3 {
+				// hwy.Merge(yes, no, mask) -> yes.Merge(no, mask)
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent("Merge"),
+				}
+				call.Args = []ast.Expr{call.Args[1], call.Args[2]}
+				return
+			}
+			if funcName == "IfThenElse" && len(call.Args) >= 3 {
+				// hwy.IfThenElse(mask, yes, no) -> yes.Merge(no, mask)
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[1],
+					Sel: ast.NewIdent("Merge"),
+				}
+				call.Args = []ast.Expr{call.Args[2], call.Args[0]}
+				return
+			}
+		}
 		// Handle Merge specially - needs argument reordering
 		// hwy.Merge(yes, no, mask) -> hwy.IfThenElseF16(mask, yes, no)
 		if funcName == "Merge" && len(call.Args) >= 3 {
@@ -3097,14 +3459,23 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			// For comparison operations, check if operands are int32 - if so, keep generic hwy function
 			if isComparisonOp(funcName) && len(call.Args) >= 2 {
 				if isInt32Expr(call.Args[0], ctx) && isInt32Expr(call.Args[1], ctx) {
+					if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+						// For AVX promoted, int32 variables are archsimd.Int32x8 - use method calls
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
 					// Keep as generic hwy.Equal, hwy.Greater, etc. for int32 operands
 					selExpr.X = ast.NewIdent("hwy")
 					selExpr.Sel.Name = funcName
 					return
 				}
 			}
-			// For NEON target, use method calls on asm types for arithmetic and comparison operations
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON and AVX promoted targets, use method calls on asm types for arithmetic and comparison operations
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				switch funcName {
 				case "Add", "Sub", "Mul", "Div", "Min", "Max":
 					// hwy.AddF16(a, b) -> a.Add(b)
@@ -3158,19 +3529,33 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 					}
 				case "GreaterThan", "Greater", "LessThan", "Less",
 					"GreaterEqual", "GreaterThanOrEqual", "LessEqual", "LessThanOrEqual",
-					"NotEqual":
-					// hwy.GreaterThanF16(a, b) -> a.GreaterThan(b)
+					"Equal", "NotEqual":
 					if len(call.Args) >= 2 {
 						methodName := funcName
-						switch funcName {
-						case "Greater":
-							methodName = "GreaterThan"
-						case "Less":
-							methodName = "LessThan"
-						case "GreaterEqual":
-							methodName = "GreaterThanOrEqual"
-						case "LessEqual":
-							methodName = "LessThanOrEqual"
+						if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+							// AVX promoted types use archsimd-style short names
+							switch funcName {
+							case "GreaterThan":
+								methodName = "Greater"
+							case "LessThan":
+								methodName = "Less"
+							case "GreaterThanOrEqual":
+								methodName = "GreaterEqual"
+							case "LessThanOrEqual":
+								methodName = "LessEqual"
+							}
+						} else {
+							// NEON uses long names
+							switch funcName {
+							case "Greater":
+								methodName = "GreaterThan"
+							case "Less":
+								methodName = "LessThan"
+							case "GreaterEqual":
+								methodName = "GreaterThanOrEqual"
+							case "LessEqual":
+								methodName = "LessThanOrEqual"
+							}
 						}
 						call.Fun = &ast.SelectorExpr{
 							X:   call.Args[0],
@@ -3221,6 +3606,17 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
+			// For AVX promoted types, use concrete asm load functions
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
+				loadFuncName := "Load" + ctx.target.TypeMap[ctx.elemType] + "Slice"
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args[0] = halfPrecSliceToUint16(call.Args[0])
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Load"
 			return
@@ -3254,6 +3650,16 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
+			// For AVX promoted types, convert to method call: v.StoreSlice(dst)
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent("StoreSlice"),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Store"
 			return
@@ -3269,6 +3675,21 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 					Sel: ast.NewIdent(broadcastFuncName),
 				}
 				// Convert arg to uint16 - hwy.Float16/BFloat16 are uint16 aliases
+				if len(call.Args) > 0 {
+					call.Args[0] = &ast.CallExpr{
+						Fun:  ast.NewIdent("uint16"),
+						Args: []ast.Expr{call.Args[0]},
+					}
+				}
+				return
+			}
+			// For AVX promoted types, use concrete asm broadcast functions
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				typeName := ctx.target.TypeMap[ctx.elemType]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent("Broadcast" + typeName),
+				}
 				if len(call.Args) > 0 {
 					call.Args[0] = &ast.CallExpr{
 						Fun:  ast.NewIdent("uint16"),
@@ -3297,16 +3718,44 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				call.Args = nil
 				return
 			}
+			// For AVX promoted types, use concrete asm zero functions
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				typeName := ctx.target.TypeMap[ctx.elemType]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent("Zero" + typeName),
+				}
+				call.Args = nil
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Zero"
 			return
 		case "RoundToEven":
-			// hwy.RoundToEven doesn't have an F16/BF16 variant, use generic
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 1 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("RoundToEven"),
+					}
+					call.Args = nil
+					return
+				}
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "RoundToEven"
 			return
 		case "ConvertToInt32":
-			// hwy.ConvertToInt32 doesn't have an F16/BF16 variant, use generic
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 1 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("ConvertToInt32"),
+					}
+					call.Args = nil
+					return
+				}
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "ConvertToInt32"
 			return
@@ -3329,7 +3778,26 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			}
 			return
 		case "Pow2":
-			// Pow2 needs a type parameter: hwy.Pow2[hwy.Float16](kInt)
+			// For AVX promoted types: Pow2 operates on float32 internally
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
+				pow2Func := fmt.Sprintf("Pow2_%s_F32x%d", ctx.target.Name, ctx.target.LanesFor("float32"))
+				wrapFunc := ctx.target.TypeMap[ctx.elemType] + "FromFloat32x" + fmt.Sprintf("%d", ctx.target.LanesFor("float32"))
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(wrapFunc),
+				}
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("hwy"),
+							Sel: ast.NewIdent(pow2Func),
+						},
+						Args: call.Args,
+					},
+				}
+				return
+			}
+			// Fallback/NEON: Pow2 needs a type parameter: hwy.Pow2[hwy.Float16](kInt)
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -3376,11 +3844,43 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
-			// Keep hwy.Const[T] with type parameter for non-NEON / skip targets
+			// For AVX promoted types, convert to asm.BroadcastFloat16x8AVX2(...) etc.
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				typeName := ctx.target.TypeMap[ctx.elemType]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent("Broadcast" + typeName),
+				}
+				if len(call.Args) > 0 {
+					convFunc := "Float32ToFloat16"
+					if isBFloat16Type(ctx.elemType) {
+						convFunc = "Float32ToBFloat16"
+					}
+					call.Args[0] = &ast.CallExpr{
+						Fun: ast.NewIdent("uint16"),
+						Args: []ast.Expr{
+							&ast.CallExpr{
+								Fun: &ast.SelectorExpr{
+									X:   ast.NewIdent("hwy"),
+									Sel: ast.NewIdent(convFunc),
+								},
+								Args: []ast.Expr{
+									&ast.CallExpr{
+										Fun:  ast.NewIdent("float32"),
+										Args: []ast.Expr{call.Args[0]},
+									},
+								},
+							},
+						},
+					}
+				}
+				return
+			}
+			// Keep hwy.Const[T] with type parameter for Fallback / skip targets
 			return
 		case "Not":
-			// For NEON target with asm types, convert to method call: hwy.Not(v) -> v.Not()
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON/AVX promoted targets, convert to method call: hwy.Not(v) -> v.Not()
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 1 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -3394,8 +3894,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.Sel.Name = funcName
 			return
 		case "Xor":
-			// For NEON target with asm types, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON/AVX promoted targets, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -3409,8 +3909,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.Sel.Name = funcName
 			return
 		case "And":
-			// For NEON target with asm types, convert to method call: hwy.And(a, b) -> a.And(b)
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			// For NEON/AVX promoted targets, convert to method call: hwy.And(a, b) -> a.And(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -3424,16 +3924,48 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.Sel.Name = funcName
 			return
 		case "Or", "AndNot":
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent(funcName),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = funcName
 			return
 		case "NotEqual":
-			// hwy.NotEqual on hwy.Vec[Float16/BFloat16] doesn't have a method form,
-			// keep as hwy.NotEqual(a, b)
+			// For AVX promoted types, use method call
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("NotEqual"),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			// For Fallback, keep as hwy.NotEqual(a, b)
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "NotEqual"
 			return
 		case "Pow":
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				lanes := ctx.target.LanesFor("float32")
+				asmType := ctx.target.TypeMap[ctx.elemType]
+				wrapFunc := fmt.Sprintf("%sFromFloat32x%d", asmType, lanes)
+				loadFunc := fmt.Sprintf("LoadFloat32x%dSlice", lanes)
+				asF32Method := fmt.Sprintf("AsFloat32x%d", lanes)
+				vecPkg := getVecPackageName(ctx.target)
+				lanesStr := strconv.Itoa(lanes)
+				call.Fun = genPowIIFE(asmType, wrapFunc, loadFunc, asF32Method, vecPkg, lanesStr, call.Args[0], call.Args[1])
+				call.Args = nil
+				return
+			}
 			// hwy.Pow on hwy.Vec[Float16/BFloat16] doesn't have a method form,
 			// keep as hwy.Pow(base, exp)
 			selExpr.X = ast.NewIdent("hwy")
@@ -3453,7 +3985,17 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				call.Args = nil
 				return
 			}
-			// For non-NEON or generic path, SignBit needs a type parameter
+			// For AVX promoted types, use asm.SignBitFloat16x8AVX2() etc.
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				signBitFuncName := "SignBit" + ctx.target.TypeMap[ctx.elemType]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(signBitFuncName),
+				}
+				call.Args = nil
+				return
+			}
+			// For Fallback, SignBit needs a type parameter
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -3463,16 +4005,87 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			}
 			return
 		case "InterleaveLower", "InterleaveUpper":
-			// For NEON: hwy.InterleaveLower(a, b) -> a.InterleaveLower(b)
-			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
+			// For NEON or AVX promoted: hwy.InterleaveLower(a, b) -> a.InterleaveLower(b)
+			if len(call.Args) >= 2 {
+				if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent(funcName),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			// For Fallback, use generic hwy.InterleaveLower/InterleaveUpper
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = funcName
+			return
+		case "Load4":
+			// For NEON target, use asm.Load4Float16x8/Load4BFloat16x8
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
+				load4Func := "Load4Float16x8"
+				if isBFloat16Type(ctx.elemType) {
+					load4Func = "Load4BFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(load4Func),
+				}
+				sliceArg := call.Args[0]
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
+			// For AVX promoted types, use asm.Load4Float16x8AVX2Slice etc.
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
+				asmType := ctx.target.TypeMap[ctx.elemType]
+				load4Func := fmt.Sprintf("Load4%sSlice", asmType)
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(load4Func),
+				}
+				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[0])}
+				return
+			}
+			// Fallback: use generic hwy.Load4 with type param
+			call.Fun = &ast.IndexExpr{
+				X: &ast.SelectorExpr{
+					X:   ast.NewIdent("hwy"),
+					Sel: ast.NewIdent("Load4"),
+				},
+				Index: ast.NewIdent(ctx.elemType),
+			}
+			return
+		case "MaskAnd", "MaskOr":
+			// For AVX promoted types, convert to method call: a.And(b)
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				methodName := "And"
+				if funcName == "MaskOr" {
+					methodName = "Or"
+				}
 				call.Fun = &ast.SelectorExpr{
 					X:   call.Args[0],
-					Sel: ast.NewIdent(funcName),
+					Sel: ast.NewIdent(methodName),
 				}
 				call.Args = call.Args[1:]
 				return
 			}
-			// For non-NEON, use generic hwy.InterleaveLower/InterleaveUpper
+			// For other targets, keep as hwy.MaskAnd/MaskOr
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = funcName
 			return
@@ -3585,7 +4198,18 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
-			// Non-NEON: fallback to hwy.Load()
+			// AVX2/AVX512: use asm load functions
+			if isAVXPromotedHalfPrec(ctx.target, effectiveElemType) && len(call.Args) >= 1 {
+				loadFuncName := "Load" + ctx.target.TypeMap[effectiveElemType] + "Slice"
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args[0] = halfPrecSliceToUint16(call.Args[0])
+				return
+			}
+			// Fallback: use hwy.Load()
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Load"
 			return
@@ -3699,6 +4323,20 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 							},
 						},
 					}
+				}
+				return
+			}
+			if isAVXPromotedHalfPrec(ctx.target, effectiveElemType) {
+				// AVX promoted half-precision: use asm.Load4Float16x8AVX2Slice etc.
+				asmType := ctx.target.TypeMap[effectiveElemType]
+				load4Func := fmt.Sprintf("Load4%sSlice", asmType)
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(load4Func),
+				}
+				// Transform arg: []hwy.Float16 -> []uint16
+				if len(call.Args) > 0 {
+					call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[0])}
 				}
 				return
 			}
@@ -3913,7 +4551,17 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				call.Args = nil
 				return
 			}
-			// Non-NEON: use hwy.Iota[T]() generic function
+			// AVX2/AVX512: use asm.IotaFloat16x8AVX2() etc.
+			if isAVXPromotedHalfPrec(ctx.target, effectiveElemType) {
+				iotaFunc := "Iota" + ctx.target.TypeMap[effectiveElemType]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(iotaFunc),
+				}
+				call.Args = nil
+				return
+			}
+			// Fallback: use hwy.Iota[T]() generic function
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -4483,10 +5131,12 @@ func tryHoistSetCall(stmt *ast.AssignStmt, rhsIndex int, rhs ast.Expr, ctx *tran
 	actualElemType := ctx.elemType
 	if typeParam == "int32" {
 		actualElemType = "int32"
-		// For half-precision types, don't hoist int32 constants to native SIMD types
+		// For non-AVX-promoted half-precision types, don't hoist int32 constants to native SIMD types
 		// because hwy.ConvertToInt32 returns hwy.Vec[int32], not native SIMD types.
 		// Keeping them as hwy.Set[int32] ensures type compatibility.
-		if isHalfPrecisionType(ctx.elemType) {
+		// For AVX promoted half-precision, ConvertToInt32 returns archsimd.Int32x8/Int32x16,
+		// so hoisting as archsimd.BroadcastInt32xN is correct.
+		if isHalfPrecisionType(ctx.elemType) && !isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 			return ""
 		}
 	}
@@ -5329,8 +5979,8 @@ func specializeVecType(typeStr string, elemType string, target Target, skipHalfP
 	}
 
 	// For Float16/BFloat16 on NEON, convert to concrete asm types (Float16x8, BFloat16x8).
-	// On other SIMD targets, keep hwy.Vec[hwy.Float16] since archsimd doesn't have
-	// native support for half-precision types.
+	// For Float16/BFloat16 on AVX2/AVX512, convert to promoted asm types that wrap archsimd.Float32x{8,16}.
+	// On Fallback, keep hwy.Vec[hwy.Float16].
 	if isHalfPrecisionType(elemType) {
 		if target.Name == "NEON" && !(len(skipHalfPrec) > 0 && skipHalfPrec[0]) {
 			asmType := "asm.Float16x8"
@@ -5342,6 +5992,17 @@ func specializeVecType(typeStr string, elemType string, target Target, skipHalfP
 			// Also handle Mask types for half-precision on NEON
 			maskPlaceholder := "hwy.Mask[" + elemType + "]"
 			typeStr = strings.ReplaceAll(typeStr, maskPlaceholder, "asm.Uint16x8")
+			return typeStr
+		}
+		if target.Name == "AVX2" || target.Name == "AVX512" {
+			asmType := "asm." + target.TypeMap[elemType]
+			vecPlaceholder := "hwy.Vec[" + elemType + "]"
+			typeStr = strings.ReplaceAll(typeStr, vecPlaceholder, asmType)
+			// Half-precision on AVX uses Mask32x{8,16} since underlying data is float32
+			maskPlaceholder := "hwy.Mask[" + elemType + "]"
+			lanes := target.LanesFor(elemType)
+			maskType := fmt.Sprintf("archsimd.Mask32x%d", lanes)
+			typeStr = strings.ReplaceAll(typeStr, maskPlaceholder, maskType)
 			return typeStr
 		}
 		return typeStr
@@ -5388,6 +6049,10 @@ func getMaskTypeName(elemType string, target Target) string {
 		case "float64", "int64", "uint64":
 			return fmt.Sprintf("Mask64x%d", lanes)
 		default:
+			// Half-precision on AVX uses float32 promoted storage, so Mask32xN
+			if isHalfPrecisionType(elemType) {
+				return fmt.Sprintf("Mask32x%d", lanes)
+			}
 			return ""
 		}
 	}
@@ -5753,6 +6418,84 @@ func cloneStmt(stmt ast.Stmt) ast.Stmt {
 	default:
 		// For other statement types, return as-is
 		return stmt
+	}
+}
+
+// genPowIIFE generates an IIFE that computes element-wise Pow for AVX promoted half-precision types.
+// It generates: func() asm.Type { var _powBase, _powExp [N]float32; base.AsFloat32xN().StoreSlice(_powBase[:]); ...; return asm.TypeFromFloat32xN(archsimd.LoadFloat32xNSlice(_powBase[:])) }
+func genPowIIFE(asmType, wrapFunc, loadFunc, asF32Method, vecPkg, lanesStr string, baseArg, expArg ast.Expr) *ast.FuncLit {
+	// base.AsFloat32xN().StoreSlice(_powBase[:])
+	storeBase := &ast.ExprStmt{X: &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X: &ast.CallExpr{
+				Fun: &ast.SelectorExpr{X: cloneExpr(baseArg), Sel: ast.NewIdent(asF32Method)},
+			},
+			Sel: ast.NewIdent("StoreSlice"),
+		},
+		Args: []ast.Expr{&ast.SliceExpr{X: ast.NewIdent("_powBase")}},
+	}}
+	// exp.AsFloat32xN().StoreSlice(_powExp[:])
+	storeExp := &ast.ExprStmt{X: &ast.CallExpr{
+		Fun: &ast.SelectorExpr{
+			X: &ast.CallExpr{
+				Fun: &ast.SelectorExpr{X: cloneExpr(expArg), Sel: ast.NewIdent(asF32Method)},
+			},
+			Sel: ast.NewIdent("StoreSlice"),
+		},
+		Args: []ast.Expr{&ast.SliceExpr{X: ast.NewIdent("_powExp")}},
+	}}
+
+	stmts := []ast.Stmt{
+		// var _powBase, _powExp [N]float32
+		&ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{
+			&ast.ValueSpec{
+				Names: []*ast.Ident{ast.NewIdent("_powBase"), ast.NewIdent("_powExp")},
+				Type: &ast.ArrayType{
+					Len: &ast.BasicLit{Kind: token.INT, Value: lanesStr},
+					Elt: ast.NewIdent("float32"),
+				},
+			},
+		}}},
+		storeBase,
+		storeExp,
+		// for _powI := range _powBase { _powBase[_powI] = float32(math.Pow(...)) }
+		&ast.RangeStmt{
+			Key: ast.NewIdent("_powI"), Tok: token.DEFINE, X: ast.NewIdent("_powBase"),
+			Body: &ast.BlockStmt{List: []ast.Stmt{
+				&ast.AssignStmt{
+					Lhs: []ast.Expr{&ast.IndexExpr{X: ast.NewIdent("_powBase"), Index: ast.NewIdent("_powI")}},
+					Tok: token.ASSIGN,
+					Rhs: []ast.Expr{&ast.CallExpr{Fun: ast.NewIdent("float32"), Args: []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{X: ast.NewIdent("stdmath"), Sel: ast.NewIdent("Pow")},
+							Args: []ast.Expr{
+								&ast.CallExpr{Fun: ast.NewIdent("float64"), Args: []ast.Expr{&ast.IndexExpr{X: ast.NewIdent("_powBase"), Index: ast.NewIdent("_powI")}}},
+								&ast.CallExpr{Fun: ast.NewIdent("float64"), Args: []ast.Expr{&ast.IndexExpr{X: ast.NewIdent("_powExp"), Index: ast.NewIdent("_powI")}}},
+							},
+						},
+					}}},
+				},
+			}},
+		},
+		// return asm.TypeFromFloat32xN(archsimd.LoadFloat32xNSlice(_powBase[:]))
+		&ast.ReturnStmt{Results: []ast.Expr{
+			&ast.CallExpr{
+				Fun: &ast.SelectorExpr{X: ast.NewIdent("asm"), Sel: ast.NewIdent(wrapFunc)},
+				Args: []ast.Expr{&ast.CallExpr{
+					Fun:  &ast.SelectorExpr{X: ast.NewIdent(vecPkg), Sel: ast.NewIdent(loadFunc)},
+					Args: []ast.Expr{&ast.SliceExpr{X: ast.NewIdent("_powBase")}},
+				}},
+			},
+		}},
+	}
+
+	return &ast.FuncLit{
+		Type: &ast.FuncType{
+			Results: &ast.FieldList{List: []*ast.Field{{
+				Type: &ast.SelectorExpr{X: ast.NewIdent("asm"), Sel: ast.NewIdent(asmType)},
+			}}},
+		},
+		Body: &ast.BlockStmt{List: stmts},
 	}
 }
 

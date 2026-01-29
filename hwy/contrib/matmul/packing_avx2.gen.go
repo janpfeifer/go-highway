@@ -6,8 +6,10 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
 func BasePackLHS_avx2_Float16(a []hwy.Float16, packed []hwy.Float16, m int, k int, rowStart int, colStart int, panelRows int, panelK int, mr int) int {
@@ -299,7 +301,7 @@ func BasePackLHSVec_avx2_Float64(a []float64, packed []float64, m int, k int, ro
 }
 
 func BasePackRHSVec_avx2_Float16(b []hwy.Float16, packed []hwy.Float16, k int, n int, rowStart int, colStart int, panelK int, panelCols int, nr int) int {
-	lanes := 16
+	lanes := 8
 	if nr >= lanes && nr%lanes == 0 {
 		numMicroPanels := (panelCols + nr - 1) / nr
 		activeColsLast := panelCols - (numMicroPanels-1)*nr
@@ -313,8 +315,8 @@ func BasePackRHSVec_avx2_Float16(b []hwy.Float16, packed []hwy.Float16, k int, n
 			for kk := 0; kk < panelK; kk++ {
 				bRowStart := (rowStart + kk) * n
 				for c := 0; c < nr; c += lanes {
-					v := hwy.Load(b[bRowStart+baseCol+c:])
-					hwy.Store(v, packed[packIdx+c:])
+					v := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+baseCol+c:]))), len(b[bRowStart+baseCol+c:])))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[packIdx+c:]))), len(packed[packIdx+c:])))
 				}
 				packIdx += nr
 			}
@@ -339,7 +341,7 @@ func BasePackRHSVec_avx2_Float16(b []hwy.Float16, packed []hwy.Float16, k int, n
 }
 
 func BasePackRHSVec_avx2_BFloat16(b []hwy.BFloat16, packed []hwy.BFloat16, k int, n int, rowStart int, colStart int, panelK int, panelCols int, nr int) int {
-	lanes := 16
+	lanes := 8
 	if nr >= lanes && nr%lanes == 0 {
 		numMicroPanels := (panelCols + nr - 1) / nr
 		activeColsLast := panelCols - (numMicroPanels-1)*nr
@@ -353,8 +355,8 @@ func BasePackRHSVec_avx2_BFloat16(b []hwy.BFloat16, packed []hwy.BFloat16, k int
 			for kk := 0; kk < panelK; kk++ {
 				bRowStart := (rowStart + kk) * n
 				for c := 0; c < nr; c += lanes {
-					v := hwy.Load(b[bRowStart+baseCol+c:])
-					hwy.Store(v, packed[packIdx+c:])
+					v := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+baseCol+c:]))), len(b[bRowStart+baseCol+c:])))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[packIdx+c:]))), len(packed[packIdx+c:])))
 				}
 				packIdx += nr
 			}
