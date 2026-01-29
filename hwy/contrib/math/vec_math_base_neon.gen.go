@@ -1189,28 +1189,28 @@ func BaseExp2Vec_neon_Float64(x asm.Float64x2) asm.Float64x2 {
 	return BaseExpVec_neon_Float64(xLn2)
 }
 
-func BaseSinhVec_neon_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
-	one := hwy.Set[hwy.Float16](sinhOne_f16)
-	c3 := hwy.Set[hwy.Float16](sinhC3_f16)
-	c5 := hwy.Set[hwy.Float16](sinhC5_f16)
-	c7 := hwy.Set[hwy.Float16](sinhC7_f16)
-	x2 := hwy.MulF16(x, x)
-	poly := hwy.FMAF16(c7, x2, c5)
-	poly = hwy.FMAF16(poly, x2, c3)
-	poly = hwy.FMAF16(poly, x2, one)
-	return hwy.MulF16(x, poly)
+func BaseSinhVec_neon_Float16(x asm.Float16x8) asm.Float16x8 {
+	one := asm.BroadcastFloat16x8(uint16(sinhOne_f16))
+	c3 := asm.BroadcastFloat16x8(uint16(sinhC3_f16))
+	c5 := asm.BroadcastFloat16x8(uint16(sinhC5_f16))
+	c7 := asm.BroadcastFloat16x8(uint16(sinhC7_f16))
+	x2 := x.Mul(x)
+	poly := c7.MulAdd(x2, c5)
+	poly = poly.MulAdd(x2, c3)
+	poly = poly.MulAdd(x2, one)
+	return x.Mul(poly)
 }
 
-func BaseSinhVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
-	one := hwy.Set[hwy.BFloat16](sinhOne_bf16)
-	c3 := hwy.Set[hwy.BFloat16](sinhC3_bf16)
-	c5 := hwy.Set[hwy.BFloat16](sinhC5_bf16)
-	c7 := hwy.Set[hwy.BFloat16](sinhC7_bf16)
-	x2 := hwy.MulBF16(x, x)
-	poly := hwy.FMABF16(c7, x2, c5)
-	poly = hwy.FMABF16(poly, x2, c3)
-	poly = hwy.FMABF16(poly, x2, one)
-	return hwy.MulBF16(x, poly)
+func BaseSinhVec_neon_BFloat16(x asm.BFloat16x8) asm.BFloat16x8 {
+	one := asm.BroadcastBFloat16x8(uint16(sinhOne_bf16))
+	c3 := asm.BroadcastBFloat16x8(uint16(sinhC3_bf16))
+	c5 := asm.BroadcastBFloat16x8(uint16(sinhC5_bf16))
+	c7 := asm.BroadcastBFloat16x8(uint16(sinhC7_bf16))
+	x2 := x.Mul(x)
+	poly := c7.MulAdd(x2, c5)
+	poly = poly.MulAdd(x2, c3)
+	poly = poly.MulAdd(x2, one)
+	return x.Mul(poly)
 }
 
 func BaseSinhVec_neon(x asm.Float32x4) asm.Float32x4 {
@@ -1237,26 +1237,26 @@ func BaseSinhVec_neon_Float64(x asm.Float64x2) asm.Float64x2 {
 	return x.Mul(poly)
 }
 
-func BaseCoshVec_neon_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
-	one := hwy.Const[hwy.Float16](1.0)
-	c2 := hwy.Const[hwy.Float16](0.5)
-	c4 := hwy.Const[hwy.Float16](0.041666666666666664)
-	c6 := hwy.Const[hwy.Float16](0.001388888888888889)
-	x2 := hwy.MulF16(x, x)
-	poly := hwy.FMAF16(c6, x2, c4)
-	poly = hwy.FMAF16(poly, x2, c2)
-	return hwy.FMAF16(poly, x2, one)
+func BaseCoshVec_neon_Float16(x asm.Float16x8) asm.Float16x8 {
+	one := asm.BroadcastFloat16x8(uint16(hwy.Float32ToFloat16(float32(1.0))))
+	c2 := asm.BroadcastFloat16x8(uint16(hwy.Float32ToFloat16(float32(0.5))))
+	c4 := asm.BroadcastFloat16x8(uint16(hwy.Float32ToFloat16(float32(0.041666666666666664))))
+	c6 := asm.BroadcastFloat16x8(uint16(hwy.Float32ToFloat16(float32(0.001388888888888889))))
+	x2 := x.Mul(x)
+	poly := c6.MulAdd(x2, c4)
+	poly = poly.MulAdd(x2, c2)
+	return poly.MulAdd(x2, one)
 }
 
-func BaseCoshVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
-	one := hwy.Const[hwy.BFloat16](1.0)
-	c2 := hwy.Const[hwy.BFloat16](0.5)
-	c4 := hwy.Const[hwy.BFloat16](0.041666666666666664)
-	c6 := hwy.Const[hwy.BFloat16](0.001388888888888889)
-	x2 := hwy.MulBF16(x, x)
-	poly := hwy.FMABF16(c6, x2, c4)
-	poly = hwy.FMABF16(poly, x2, c2)
-	return hwy.FMABF16(poly, x2, one)
+func BaseCoshVec_neon_BFloat16(x asm.BFloat16x8) asm.BFloat16x8 {
+	one := asm.BroadcastBFloat16x8(uint16(hwy.Float32ToBFloat16(float32(1.0))))
+	c2 := asm.BroadcastBFloat16x8(uint16(hwy.Float32ToBFloat16(float32(0.5))))
+	c4 := asm.BroadcastBFloat16x8(uint16(hwy.Float32ToBFloat16(float32(0.041666666666666664))))
+	c6 := asm.BroadcastBFloat16x8(uint16(hwy.Float32ToBFloat16(float32(0.001388888888888889))))
+	x2 := x.Mul(x)
+	poly := c6.MulAdd(x2, c4)
+	poly = poly.MulAdd(x2, c2)
+	return poly.MulAdd(x2, one)
 }
 
 func BaseCoshVec_neon(x asm.Float32x4) asm.Float32x4 {

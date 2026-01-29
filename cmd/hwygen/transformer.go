@@ -184,6 +184,8 @@ func getHalfPrecisionFuncName(opName string, elemType string) string {
 		return "LessThanOrEqual" + suffix
 	case "Equal":
 		return "Equal" + suffix
+	case "NotEqual":
+		return "NotEqual" + suffix
 	case "ReduceSum":
 		return "ReduceSum" + suffix
 	case "ReduceMin":
@@ -224,8 +226,10 @@ type HoistedConst struct {
 type TransformOptions struct {
 	TypeSpecificConsts map[string]*TypeSpecificConst
 	ConditionalBlocks  []ConditionalBlock
-	FileSet            *token.FileSet    // For resolving line numbers in conditional blocks
-	Imports            map[string]string // map[local_name]import_path for resolving package references
+	FileSet            *token.FileSet               // For resolving line numbers in conditional blocks
+	Imports            map[string]string            // map[local_name]import_path for resolving package references
+	AllFuncs           map[string]*ParsedFunc       // All functions in file for inlining helpers
+	SkipHalfPrecNEON   bool                         // Skip NEON asm specialization for this half-precision function
 }
 
 // Transform transforms a parsed function for a specific target and element type.
@@ -254,7 +258,7 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 		Name: ast.NewIdent(pf.Name + target.Suffix()),
 		Type: &ast.FuncType{
 			Params:  &ast.FieldList{},
-			Results: pf.buildResultsWithTarget(elemType, target),
+			Results: pf.buildResultsWithTarget(elemType, target, opts.SkipHalfPrecNEON),
 		},
 		Body: cloneBlockStmt(filteredBody),
 	}
@@ -263,7 +267,7 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	for _, param := range pf.Params {
 		paramType := specializeType(param.Type, pf.TypeParams, elemType)
 		// Also transform hwy.Vec[T] to concrete vector types for SIMD targets
-		paramType = specializeVecType(paramType, elemType, target)
+		paramType = specializeVecType(paramType, elemType, target, opts.SkipHalfPrecNEON)
 		field := &ast.Field{
 			Names: []*ast.Ident{ast.NewIdent(param.Name)},
 			Type:  parseTypeExpr(paramType),
@@ -303,6 +307,8 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 		halfPrecisionScalarVars: make(map[string]bool),
 		varVecLanes:             make(map[string]int),
 		varVecElemType:          make(map[string]string),
+		allFuncs:                opts.AllFuncs,
+		skipHalfPrecNEON:        opts.SkipHalfPrecNEON,
 	}
 
 	// Add function parameters to localVars to prevent them from being hoisted
@@ -337,6 +343,10 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 		ctx.inferredFuncLanes = loadSize
 	}
 
+	// Inline local helper function calls before main transformation.
+	// This ensures helper bodies get specialized for the target/elemType.
+	inlineHelperCalls(funcDecl.Body, ctx)
+
 	// Resolve type-specific constant references
 	// Pattern 1: expC0 -> expC0_f32 (base name lookup)
 	// Pattern 2: expC0_f32 -> expC0_f64 (suffix swapping for compilable base files)
@@ -347,11 +357,22 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	// Post-process: scalarize fallback functions that only use simple ops.
 	// This converts hwy.Vec operations to pure scalar Go code for better performance
 	// by eliminating the allocation overhead of 1-element Vec wrappers.
-	// Skip half-precision types as they have complex conversion requirements.
+	// NOTE: Don't scalarize Float16/BFloat16 functions - their arithmetic operators
+	// do integer math (since they're uint16 under the hood), which produces wrong results.
+	// The non-scalarized path uses transformHalfPrecisionFallback to fix this.
+	wasScalarized := false
 	if target.Name == "Fallback" && !isHalfPrecisionType(elemType) {
 		if canScalarizeFallback(funcDecl) {
 			scalarizeFallback(funcDecl, elemType)
+			wasScalarized = true
 		}
+	}
+
+	// Post-process: convert "_ = expr" assignments to expression statements.
+	// This is needed because tryTransformToInPlace marks in-place ops with _ = voidFunc()
+	// which is invalid Go when the function returns nothing (e.g., MulAddAcc).
+	if target.Name == "NEON" {
+		convertBlankAssignToExprStmt(funcDecl.Body)
 	}
 
 	// Post-process to replace NumLanes() calls and ReduceSum() calls
@@ -370,7 +391,8 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	// This applies to all targets (Fallback, NEON, AVX2, AVX512) since scalar tail
 	// loops exist in all targets.
 	// Skip Vec-returning functions - they use hwy.Vec operations which already work.
-	if isHalfPrecisionType(elemType) && !returnsVecType(pf.Returns) {
+	// Skip scalarized fallback functions - they just copy values, no arithmetic needed.
+	if isHalfPrecisionType(elemType) && !returnsVecType(pf.Returns) && !wasScalarized {
 		transformHalfPrecisionFallback(funcDecl.Body, ctx)
 	}
 
@@ -854,6 +876,9 @@ type transformContext struct {
 	varVecLanes             map[string]int                // map[var_name]lanes for detected vector sizes from Load
 	varVecElemType          map[string]string             // map[var_name]elemType for detected element types from Load
 	inferredFuncLanes       int                           // Inferred lane count for function (from first detected Load size)
+	allFuncs                map[string]*ParsedFunc        // All functions in file for inlining helpers
+	inlineCounter           int                           // Counter for unique variable naming during inlining
+	skipHalfPrecNEON        bool                          // Skip NEON asm specialization for half-precision (use generic hwy.Vec[T] path)
 }
 
 // vecLoadInfo contains inferred information from an hwy.Load call.
@@ -1110,6 +1135,9 @@ func transformNode(node ast.Node, ctx *transformContext) {
 		case *ast.ForStmt:
 			// Transform for loop for SIMD (stride, condition)
 			transformForStmt(node, ctx)
+		case *ast.CompositeLit:
+			// Transform composite literal types (e.g., [4]hwy.Vec[float32]{} -> [4]asm.Float32x4{})
+			transformCompositeLit(node, ctx)
 		}
 		return true
 	})
@@ -1184,6 +1212,39 @@ func transformForStmt(stmt *ast.ForStmt, ctx *transformContext) {
 	}
 }
 
+// transformCompositeLit transforms composite literal types for SIMD targets.
+// Converts types like [4]hwy.Vec[float32]{} to [4]asm.Float32x4{} for NEON
+// or [8]archsimd.Float32x8{} for AVX2.
+func transformCompositeLit(lit *ast.CompositeLit, ctx *transformContext) {
+	if lit.Type == nil {
+		return
+	}
+
+	// For fallback target, don't transform hwy.Vec types
+	if ctx.target.Name == "Fallback" {
+		return
+	}
+
+	// Check if the type is an array with hwy.Vec element type
+	arrayType, ok := lit.Type.(*ast.ArrayType)
+	if !ok {
+		return
+	}
+
+	// Transform the element type if it's hwy.Vec[T] or similar
+	typeStr := exprToString(arrayType.Elt)
+
+	// First specialize generic type parameters (T -> float32)
+	specialized := specializeType(typeStr, ctx.typeParams, ctx.elemType)
+
+	// Then transform hwy.Vec[float32] -> asm.Float32x4 for SIMD targets
+	specialized = specializeVecType(specialized, ctx.elemType, ctx.target, ctx.skipHalfPrecNEON)
+
+	if specialized != typeStr {
+		arrayType.Elt = parseTypeExpr(specialized)
+	}
+}
+
 // transformTypeConversion converts T(1) to float32(1) for generic type parameters.
 func transformTypeConversion(call *ast.CallExpr, ctx *transformContext) {
 	// Check if this is a type conversion T(value) where T is a type parameter
@@ -1249,7 +1310,18 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 				switch sel.Sel.Name {
 				case "Store":
 					// Transform .Store(dst) -> .StoreSlice(dst)
-					sel.Sel.Name = "StoreSlice"
+					// But skip if the argument is a pointer type (from StoreFull transformation)
+					// StoreFull produces v.Store((*[N]T)(unsafe.Pointer(...))) which should stay as Store
+					isPointerArg := false
+					if len(call.Args) == 1 {
+						if _, isCall := call.Args[0].(*ast.CallExpr); isCall {
+							// Argument is a call expression like (*[N]T)(ptr) - likely from StoreFull
+							isPointerArg = true
+						}
+					}
+					if !isPointerArg {
+						sel.Sel.Name = "StoreSlice"
+					}
 				case "Data":
 					transformDataMethod(call, ctx)
 					return
@@ -1363,8 +1435,51 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 			// like Const, Set, Zero that need it for type inference
 			funcName := selExpr.Sel.Name
 			switch funcName {
-			case "Const", "Set", "Zero":
-				// Replace type param with concrete type (e.g., hwy.Const[T] -> hwy.Const[hwy.Float16])
+			case "Const":
+				// For NEON target with asm types, convert to asm.BroadcastFloat16x8/BFloat16x8
+				if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+					broadcastFuncName := "BroadcastFloat16x8"
+					if isBFloat16Type(ctx.elemType) {
+						broadcastFuncName = "BroadcastBFloat16x8"
+					}
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent(broadcastFuncName),
+					}
+					if len(call.Args) > 0 {
+						convFunc := "Float32ToFloat16"
+						if isBFloat16Type(ctx.elemType) {
+							convFunc = "Float32ToBFloat16"
+						}
+						call.Args[0] = &ast.CallExpr{
+							Fun: ast.NewIdent("uint16"),
+							Args: []ast.Expr{
+								&ast.CallExpr{
+									Fun: &ast.SelectorExpr{
+										X:   ast.NewIdent("hwy"),
+										Sel: ast.NewIdent(convFunc),
+									},
+									Args: []ast.Expr{
+										&ast.CallExpr{
+											Fun:  ast.NewIdent("float32"),
+											Args: []ast.Expr{call.Args[0]},
+										},
+									},
+								},
+							},
+						}
+					}
+					return
+				}
+				// For non-NEON or skip: replace type param with concrete type
+				for _, tp := range ctx.typeParams {
+					if ident, ok := fun.Index.(*ast.Ident); ok && ident.Name == tp.Name {
+						ident.Name = ctx.elemType
+					}
+				}
+			case "Set", "Zero":
+				// For NEON without skip, these are handled later in the SelectorExpr path
+				// Replace type param with concrete type (e.g., hwy.Set[T] -> hwy.Set[hwy.Float16])
 				for _, tp := range ctx.typeParams {
 					if ident, ok := fun.Index.(*ast.Ident); ok && ident.Name == tp.Name {
 						ident.Name = ctx.elemType
@@ -1766,6 +1881,33 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 	// For Float16/BFloat16 on SIMD targets, use hwy package functions instead of methods.
 	// archsimd doesn't have native support for half-precision types.
 	if isHalfPrecisionType(ctx.elemType) {
+		// For NEON target, convert Merge/IfThenElse to asm.IfThenElseFloat16/BFloat16
+		if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			if funcName == "Merge" && len(call.Args) >= 3 {
+				asmFunc := "IfThenElseFloat16"
+				if isBFloat16Type(ctx.elemType) {
+					asmFunc = "IfThenElseBFloat16"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(asmFunc),
+				}
+				// Reorder: (yes, no, mask) -> (mask, yes, no)
+				call.Args = []ast.Expr{call.Args[2], call.Args[0], call.Args[1]}
+				return
+			}
+			if funcName == "IfThenElse" && len(call.Args) >= 3 {
+				asmFunc := "IfThenElseFloat16"
+				if isBFloat16Type(ctx.elemType) {
+					asmFunc = "IfThenElseBFloat16"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(asmFunc),
+				}
+				return
+			}
+		}
 		// Handle Merge specially - needs argument reordering
 		// hwy.Merge(yes, no, mask) -> hwy.IfThenElseF16(mask, yes, no)
 		if funcName == "Merge" && len(call.Args) >= 3 {
@@ -1810,7 +1952,86 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 					return
 				}
 			}
-			// Transform to hwy.AddF16(a, b), hwy.MulF16(a, b), etc.
+			// For NEON target, use method calls on asm types for arithmetic and comparison operations
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				switch funcName {
+				case "Add", "Sub", "Mul", "Div", "Min", "Max":
+					// hwy.AddF16(a, b) -> a.Add(b)
+					if len(call.Args) >= 2 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
+				case "FMA", "MulAdd":
+					// hwy.FMAF16(a, b, c) -> a.MulAdd(b, c)
+					if len(call.Args) >= 3 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent("MulAdd"),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
+				case "Neg", "Abs", "Sqrt":
+					// hwy.NegF16(a) -> a.Neg()
+					if len(call.Args) >= 1 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = nil
+						return
+					}
+				case "ReduceSum":
+					// hwy.ReduceSum(v) -> v.ReduceSum()
+					if len(call.Args) >= 1 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent("ReduceSum"),
+						}
+						call.Args = nil
+						return
+					}
+				case "ReduceMax", "ReduceMin":
+					// hwy.ReduceMaxF16(v) -> v.ReduceMax()
+					if len(call.Args) >= 1 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = nil
+						return
+					}
+				case "GreaterThan", "Greater", "LessThan", "Less",
+					"GreaterEqual", "GreaterThanOrEqual", "LessEqual", "LessThanOrEqual",
+					"NotEqual":
+					// hwy.GreaterThanF16(a, b) -> a.GreaterThan(b)
+					if len(call.Args) >= 2 {
+						methodName := funcName
+						// Normalize short names
+						switch funcName {
+						case "Greater":
+							methodName = "GreaterThan"
+						case "Less":
+							methodName = "LessThan"
+						case "GreaterEqual":
+							methodName = "GreaterThanOrEqual"
+						case "LessEqual":
+							methodName = "LessThanOrEqual"
+						}
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(methodName),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
+				}
+			}
+			// For non-NEON, transform to hwy.AddF16(a, b), hwy.MulF16(a, b), etc.
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent(f16FuncName),
@@ -1829,9 +2050,59 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				Sel: ast.NewIdent(funcName),
 			}
 			return
-		case "And", "Or", "Xor", "Not", "AndNot":
-			// Bitwise operations on hwy.Vec[Float16/BFloat16] don't have method forms,
-			// so keep them as hwy.And, hwy.Or, hwy.Xor, hwy.Not, hwy.AndNot
+		case "Not":
+			// For NEON target with asm types, convert to method call: hwy.Not(v) -> v.Not()
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if len(call.Args) >= 1 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("Not"),
+					}
+					call.Args = nil
+					return
+				}
+			}
+			call.Fun = &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent(funcName),
+			}
+			return
+		case "Xor":
+			// For NEON target with asm types, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("Xor"),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			call.Fun = &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent(funcName),
+			}
+			return
+		case "And":
+			// For NEON target with asm types, convert to method call: hwy.And(a, b) -> a.And(b)
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("And"),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			call.Fun = &ast.SelectorExpr{
+				X:   ast.NewIdent("hwy"),
+				Sel: ast.NewIdent(funcName),
+			}
+			return
+		case "Or", "AndNot":
+			// These don't have method forms on asm types yet
 			call.Fun = &ast.SelectorExpr{
 				X:   ast.NewIdent("hwy"),
 				Sel: ast.NewIdent(funcName),
@@ -1862,8 +2133,35 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "Store":
-			// Keep hwy.Store(v, dst) as-is for half-precision types
-			// (hwy.Vec[Float16] has a Store method that handles the conversion)
+			// For NEON target, convert to method call with unsafe.Pointer
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
+				// hwy.Store(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
+				call.Fun = &ast.SelectorExpr{
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
+				}
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
+			// For non-NEON, keep hwy.Store(v, dst) as-is
 			return
 		case "Pow2":
 			// Pow2 needs a type parameter: hwy.Pow2[hwy.Float16](kInt)
@@ -1876,7 +2174,20 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "SignBit":
-			// SignBit needs a type parameter: hwy.SignBit[hwy.Float16]()
+			// For NEON target with asm types, use asm.SignBitFloat16x8()/asm.SignBitBFloat16x8()
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				signBitFuncName := "SignBitFloat16x8"
+				if isBFloat16Type(ctx.elemType) {
+					signBitFuncName = "SignBitBFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(signBitFuncName),
+				}
+				call.Args = nil
+				return
+			}
+			// For non-NEON or generic path, SignBit needs a type parameter: hwy.SignBit[hwy.Float16]()
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -1886,7 +2197,57 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "Set", "Zero", "Const":
-			// Keep hwy.Set[T](val), hwy.Zero[T](), and hwy.Const[T](val) as-is for half-precision
+			// For NEON target, use concrete asm types which have in-place methods
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if funcName == "Zero" {
+					// hwy.Zero[Float16]() -> asm.ZeroFloat16x8()
+					zeroFuncName := "ZeroFloat16x8"
+					if isBFloat16Type(ctx.elemType) {
+						zeroFuncName = "ZeroBFloat16x8"
+					}
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent(zeroFuncName),
+					}
+					return
+				}
+				if funcName == "Set" || funcName == "Const" {
+					// hwy.Set[Float16](val) -> asm.BroadcastFloat16x8(uint16(val))
+					// Note: val is already hwy.Float16 which is uint16 underneath
+					broadcastFuncName := "BroadcastFloat16x8"
+					if isBFloat16Type(ctx.elemType) {
+						broadcastFuncName = "BroadcastBFloat16x8"
+					}
+					call.Fun = &ast.SelectorExpr{
+						X:   ast.NewIdent("asm"),
+						Sel: ast.NewIdent(broadcastFuncName),
+					}
+					// Convert arg to uint16 - hwy.Float16/BFloat16 are uint16 aliases
+					if len(call.Args) > 0 {
+						call.Args[0] = &ast.CallExpr{
+							Fun:  ast.NewIdent("uint16"),
+							Args: []ast.Expr{call.Args[0]},
+						}
+					}
+					return
+				}
+			}
+			// For non-NEON targets, keep hwy.Set[T](val), hwy.Zero[T](), and hwy.Const[T](val) as-is
+			return
+		case "Load":
+			// For NEON target, use concrete asm load functions
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
+				loadFuncName := "LoadFloat16x8Slice"
+				if isBFloat16Type(ctx.elemType) {
+					loadFuncName = "LoadBFloat16x8Slice"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				return
+			}
+			// For non-NEON, keep hwy.Load as-is
 			return
 		}
 
@@ -1969,8 +2330,36 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		}
 
 	case "StoreFull":
-		// Keep hwy.StoreFull(v, dst) as-is for half-precision types
-		// (archsimd doesn't support pointer-based Store for F16/BF16 types yet)
+		// For NEON half-precision: hwy.StoreFull(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
+		if isHalfPrecisionType(ctx.elemType) && ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			if len(call.Args) >= 2 {
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
+				call.Fun = &ast.SelectorExpr{
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
+				}
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+			}
+			return
+		}
+		// Keep hwy.StoreFull(v, dst) as-is for non-NEON half-precision types
 		if isHalfPrecisionType(ctx.elemType) {
 			return
 		}
@@ -2652,6 +3041,32 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 	// For Float16/BFloat16 on SIMD targets, use hwy package functions instead of archsimd calls.
 	// archsimd doesn't have native support for half-precision types.
 	if isHalfPrecisionType(ctx.elemType) {
+		// For NEON target, convert Merge/IfThenElse to asm.IfThenElseFloat16/BFloat16
+		if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+			if funcName == "Merge" && len(call.Args) >= 3 {
+				asmFunc := "IfThenElseFloat16"
+				if isBFloat16Type(ctx.elemType) {
+					asmFunc = "IfThenElseBFloat16"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(asmFunc),
+				}
+				call.Args = []ast.Expr{call.Args[2], call.Args[0], call.Args[1]}
+				return
+			}
+			if funcName == "IfThenElse" && len(call.Args) >= 3 {
+				asmFunc := "IfThenElseFloat16"
+				if isBFloat16Type(ctx.elemType) {
+					asmFunc = "IfThenElseBFloat16"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(asmFunc),
+				}
+				return
+			}
+		}
 		// Handle Merge specially - needs argument reordering
 		// hwy.Merge(yes, no, mask) -> hwy.IfThenElseF16(mask, yes, no)
 		if funcName == "Merge" && len(call.Args) >= 3 {
@@ -2688,28 +3103,200 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 					return
 				}
 			}
-			// Transform to hwy.AddF16(a, b), hwy.MulF16(a, b), etc.
+			// For NEON target, use method calls on asm types for arithmetic and comparison operations
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				switch funcName {
+				case "Add", "Sub", "Mul", "Div", "Min", "Max":
+					// hwy.AddF16(a, b) -> a.Add(b)
+					if len(call.Args) >= 2 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
+				case "FMA", "MulAdd":
+					// hwy.FMAF16(a, b, c) -> a.MulAdd(b, c)
+					if len(call.Args) >= 3 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent("MulAdd"),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
+				case "Neg", "Abs", "Sqrt":
+					// hwy.NegF16(a) -> a.Neg()
+					if len(call.Args) >= 1 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = nil
+						return
+					}
+				case "ReduceSum":
+					// hwy.ReduceSumF16(v) -> v.ReduceSum()
+					if len(call.Args) >= 1 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent("ReduceSum"),
+						}
+						call.Args = nil
+						return
+					}
+				case "ReduceMax", "ReduceMin":
+					// hwy.ReduceMaxF16(v) -> v.ReduceMax()
+					if len(call.Args) >= 1 {
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(funcName),
+						}
+						call.Args = nil
+						return
+					}
+				case "GreaterThan", "Greater", "LessThan", "Less",
+					"GreaterEqual", "GreaterThanOrEqual", "LessEqual", "LessThanOrEqual",
+					"NotEqual":
+					// hwy.GreaterThanF16(a, b) -> a.GreaterThan(b)
+					if len(call.Args) >= 2 {
+						methodName := funcName
+						switch funcName {
+						case "Greater":
+							methodName = "GreaterThan"
+						case "Less":
+							methodName = "LessThan"
+						case "GreaterEqual":
+							methodName = "GreaterThanOrEqual"
+						case "LessEqual":
+							methodName = "LessThanOrEqual"
+						}
+						call.Fun = &ast.SelectorExpr{
+							X:   call.Args[0],
+							Sel: ast.NewIdent(methodName),
+						}
+						call.Args = call.Args[1:]
+						return
+					}
+				}
+			}
+			// For non-NEON targets, transform to hwy.AddF16(a, b), hwy.MulF16(a, b), etc.
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = f16FuncName
 			return
 		}
-		// For Load/Store/Set/Zero on F16/BF16, use generic hwy functions
+		// For Load/Store/Set/Zero on F16/BF16, use asm types for NEON or generic hwy functions
 		switch funcName {
 		case "Load":
+			// For NEON target, use concrete asm load functions for better performance
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
+				loadFuncName := "LoadFloat16x8Ptr"
+				if isBFloat16Type(ctx.elemType) {
+					loadFuncName = "LoadBFloat16x8Ptr"
+				}
+				// Transform: hwy.Load(slice) -> asm.LoadFloat16x8Ptr(unsafe.Pointer(&slice[0]))
+				sliceArg := call.Args[0]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				// Wrap arg with unsafe.Pointer(&slice[0])
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Load"
 			return
 		case "Store":
+			// For NEON target, convert to method call on asm type
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
+				// hwy.Store(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
+				call.Fun = &ast.SelectorExpr{
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
+				}
+				// Wrap dst with unsafe.Pointer(&dst[0])
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Store"
 			return
 		case "Set":
+			// For NEON target, use concrete asm broadcast functions
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				broadcastFuncName := "BroadcastFloat16x8"
+				if isBFloat16Type(ctx.elemType) {
+					broadcastFuncName = "BroadcastBFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(broadcastFuncName),
+				}
+				// Convert arg to uint16 - hwy.Float16/BFloat16 are uint16 aliases
+				if len(call.Args) > 0 {
+					call.Args[0] = &ast.CallExpr{
+						Fun:  ast.NewIdent("uint16"),
+						Args: []ast.Expr{call.Args[0]},
+					}
+				}
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Set"
 			// Note: For half-precision, argument wrapping is handled in
 			// transformHalfPrecisionFallback after scalar variables are tracked.
 			return
 		case "Zero":
+			// For NEON target, use concrete asm zero functions
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				zeroFuncName := "ZeroFloat16x8"
+				if isBFloat16Type(ctx.elemType) {
+					zeroFuncName = "ZeroBFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(zeroFuncName),
+				}
+				// Remove type parameter args if present
+				call.Args = nil
+				return
+			}
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Zero"
 			return
@@ -2752,13 +3339,91 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			}
 			return
 		case "Const":
-			// Keep hwy.Const[T] with type parameter for half-precision types
-			// hwy.Const handles float64-to-T conversion, while hwy.Set expects T
-			// This is handled earlier in the IndexExpr case - just return here
+			// For NEON target with asm types, convert to asm.BroadcastFloat16x8/BFloat16x8
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				broadcastFuncName := "BroadcastFloat16x8"
+				if isBFloat16Type(ctx.elemType) {
+					broadcastFuncName = "BroadcastBFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(broadcastFuncName),
+				}
+				// Convert arg: float64 literal -> uint16(hwy.Float32ToFloat16(float32(val)))
+				// or uint16(hwy.Float32ToBFloat16(float32(val)))
+				if len(call.Args) > 0 {
+					convFunc := "Float32ToFloat16"
+					if isBFloat16Type(ctx.elemType) {
+						convFunc = "Float32ToBFloat16"
+					}
+					call.Args[0] = &ast.CallExpr{
+						Fun: ast.NewIdent("uint16"),
+						Args: []ast.Expr{
+							&ast.CallExpr{
+								Fun: &ast.SelectorExpr{
+									X:   ast.NewIdent("hwy"),
+									Sel: ast.NewIdent(convFunc),
+								},
+								Args: []ast.Expr{
+									&ast.CallExpr{
+										Fun:  ast.NewIdent("float32"),
+										Args: []ast.Expr{call.Args[0]},
+									},
+								},
+							},
+						},
+					}
+				}
+				return
+			}
+			// Keep hwy.Const[T] with type parameter for non-NEON / skip targets
 			return
-		case "And", "Or", "Xor", "Not", "AndNot":
-			// Bitwise operations on hwy.Vec[Float16/BFloat16] don't have method forms,
-			// so keep them as hwy.And, hwy.Or, hwy.Xor, hwy.Not, hwy.AndNot
+		case "Not":
+			// For NEON target with asm types, convert to method call: hwy.Not(v) -> v.Not()
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if len(call.Args) >= 1 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("Not"),
+					}
+					call.Args = nil
+					return
+				}
+			}
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = funcName
+			return
+		case "Xor":
+			// For NEON target with asm types, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("Xor"),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = funcName
+			return
+		case "And":
+			// For NEON target with asm types, convert to method call: hwy.And(a, b) -> a.And(b)
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				if len(call.Args) >= 2 {
+					call.Fun = &ast.SelectorExpr{
+						X:   call.Args[0],
+						Sel: ast.NewIdent("And"),
+					}
+					call.Args = call.Args[1:]
+					return
+				}
+			}
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = funcName
+			return
+		case "Or", "AndNot":
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = funcName
 			return
@@ -2775,8 +3440,20 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.Sel.Name = "Pow"
 			return
 		case "SignBit":
-			// For half-precision types, use hwy.SignBit[T]() which returns hwy.Vec[T]
-			// The generic function handles the sign bit correctly for Float16/BFloat16
+			// For NEON target with asm types, use asm.SignBitFloat16x8()/asm.SignBitBFloat16x8()
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				signBitFuncName := "SignBitFloat16x8"
+				if isBFloat16Type(ctx.elemType) {
+					signBitFuncName = "SignBitBFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(signBitFuncName),
+				}
+				call.Args = nil
+				return
+			}
+			// For non-NEON or generic path, SignBit needs a type parameter
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -2784,6 +3461,20 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				},
 				Index: ast.NewIdent(ctx.elemType),
 			}
+			return
+		case "InterleaveLower", "InterleaveUpper":
+			// For NEON: hwy.InterleaveLower(a, b) -> a.InterleaveLower(b)
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent(funcName),
+				}
+				call.Args = call.Args[1:]
+				return
+			}
+			// For non-NEON, use generic hwy.InterleaveLower/InterleaveUpper
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = funcName
 			return
 		}
 		// For other operations without F16/BF16 variants, fall through
@@ -2862,9 +3553,39 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		fullName = fmt.Sprintf("Load%sSlice", loadVecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
 	case "LoadFull":
-		// For half-precision types on SIMD targets, fallback to hwy.Load()
-		// archsimd doesn't support pointer-based Load for Float16/BFloat16 yet.
+		// For half-precision types on SIMD targets
 		if isHalfPrecisionType(effectiveElemType) {
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
+				// NEON: use asm.LoadFloat16x8Ptr(unsafe.Pointer(&slice[0]))
+				loadFuncName := "LoadFloat16x8Ptr"
+				if isBFloat16Type(effectiveElemType) {
+					loadFuncName = "LoadBFloat16x8Ptr"
+				}
+				sliceArg := call.Args[0]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
+			// Non-NEON: fallback to hwy.Load()
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Load"
 			return
@@ -2946,8 +3667,41 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		selExpr.X = ast.NewIdent("hwy")
 		selExpr.Sel.Name = "StoreFull"
 	case "Load4":
-		// For Vec types (Float16/BFloat16), use hwy wrapper since asm doesn't have Load4VecSlice
+		// For Vec types (Float16/BFloat16), use hwy wrapper or asm function
 		if strings.HasPrefix(vecTypeName, "Vec") || strings.HasPrefix(vecTypeName, "hwy.Vec") {
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(effectiveElemType) {
+				// NEON half-precision: use asm.Load4Float16x8/Load4BFloat16x8
+				load4Func := "Load4Float16x8"
+				if isBFloat16Type(effectiveElemType) {
+					load4Func = "Load4BFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(load4Func),
+				}
+				// Transform arg: slice -> unsafe.Pointer(&slice[0])
+				if len(call.Args) > 0 {
+					sliceArg := call.Args[0]
+					call.Args = []ast.Expr{
+						&ast.CallExpr{
+							Fun: &ast.SelectorExpr{
+								X:   ast.NewIdent("unsafe"),
+								Sel: ast.NewIdent("Pointer"),
+							},
+							Args: []ast.Expr{
+								&ast.UnaryExpr{
+									Op: token.AND,
+									X: &ast.IndexExpr{
+										X:     sliceArg,
+										Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+									},
+								},
+							},
+						},
+					}
+				}
+				return
+			}
 			fullName = fmt.Sprintf("Load4_%s_Vec", ctx.target.Name)
 			selExpr.X = ast.NewIdent("hwy")
 		} else {
@@ -3146,7 +3900,20 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		// AVX2/AVX512: hwy wrapper functions (Iota_AVX2_F32x8, Iota_AVX512_F32x16, etc.)
 		// Float16/BFloat16 on any target: hwy.Iota[T]() generic function
 		if isHalfPrecisionType(effectiveElemType) {
-			// Half-precision types use hwy.Iota[T]() on all targets
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
+				// NEON: use asm.IotaFloat16x8() / asm.IotaBFloat16x8()
+				iotaFunc := "IotaFloat16x8"
+				if isBFloat16Type(effectiveElemType) {
+					iotaFunc = "IotaBFloat16x8"
+				}
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(iotaFunc),
+				}
+				call.Args = nil
+				return
+			}
+			// Non-NEON: use hwy.Iota[T]() generic function
 			call.Fun = &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("hwy"),
@@ -3355,7 +4122,7 @@ func transformGenDecl(decl *ast.GenDecl, ctx *transformContext) {
 			// First specialize generic type parameters (T -> float32)
 			specialized := specializeType(typeStr, ctx.typeParams, ctx.elemType)
 			// Then transform hwy.Vec[float32] -> asm.Float32x4 for SIMD targets
-			specialized = specializeVecType(specialized, ctx.elemType, ctx.target)
+			specialized = specializeVecType(specialized, ctx.elemType, ctx.target, ctx.skipHalfPrecNEON)
 			if specialized != typeStr {
 				valueSpec.Type = parseTypeExpr(specialized)
 			}
@@ -3369,6 +4136,15 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 	// For fallback, don't replace NumLanes with a constant - keep it dynamic
 	if ctx.target.Name == "Fallback" {
 		return
+	}
+
+	// For NEON target, detect accumulator patterns and use in-place operations.
+	// Pattern: acc = v.MulAdd(a, acc) -> v.MulAddAcc(a, &acc)
+	// This avoids return value allocation overhead on ARM64.
+	if ctx.target.Name == "NEON" {
+		if transformed := tryTransformToInPlace(stmt, ctx); transformed {
+			return
+		}
 	}
 
 	// Look for v.NumElements(), hwy.Lanes[T](), or similar and replace with constant
@@ -3440,6 +4216,8 @@ func transformAssignStmt(stmt *ast.AssignStmt, ctx *transformContext) {
 							// Specialize the element type (T -> float32/float64)
 							elemTypeStr := exprToString(arrayType.Elt)
 							specializedType := specializeType(elemTypeStr, ctx.typeParams, ctx.elemType)
+							// Also specialize hwy.Vec[float32] -> asm.Float32x4 for SIMD targets
+							specializedType = specializeVecType(specializedType, ctx.elemType, ctx.target, ctx.skipHalfPrecNEON)
 
 							// Check if second arg is a lanes variable or literal for stack array optimization
 							var lanesCount int
@@ -3526,6 +4304,140 @@ func findMaxLoadSizeForElemType(body *ast.BlockStmt, elemType string) int {
 		return true
 	})
 	return maxSize
+}
+
+// convertBlankAssignToExprStmt walks a block statement and replaces any
+// "_ = expr" assignments with just "expr" as an expression statement.
+// This is needed because tryTransformToInPlace converts assignments like
+// "acc = v.MulAdd(a, acc)" to "_ = v.MulAddAcc(a, &acc)", but MulAddAcc
+// returns void, making "_ = voidFunc()" invalid Go.
+func convertBlankAssignToExprStmt(block *ast.BlockStmt) {
+	if block == nil {
+		return
+	}
+	for i, stmt := range block.List {
+		switch s := stmt.(type) {
+		case *ast.AssignStmt:
+			// Check for _ = expr pattern where expr is a call (void function)
+			if len(s.Lhs) == 1 && len(s.Rhs) == 1 {
+				if ident, ok := s.Lhs[0].(*ast.Ident); ok && ident.Name == "_" {
+					// Only convert if the RHS is a function/method call
+					// (bounds check hints like _ = slice[i] must stay as-is)
+					if _, isCall := s.Rhs[0].(*ast.CallExpr); isCall {
+						block.List[i] = &ast.ExprStmt{X: s.Rhs[0]}
+					}
+				}
+			}
+		case *ast.BlockStmt:
+			convertBlankAssignToExprStmt(s)
+		case *ast.IfStmt:
+			convertBlankAssignToExprStmt(s.Body)
+			if s.Else != nil {
+				if elseBlock, ok := s.Else.(*ast.BlockStmt); ok {
+					convertBlankAssignToExprStmt(elseBlock)
+				}
+			}
+		case *ast.ForStmt:
+			convertBlankAssignToExprStmt(s.Body)
+		case *ast.RangeStmt:
+			convertBlankAssignToExprStmt(s.Body)
+		}
+	}
+}
+
+// tryTransformToInPlace detects accumulator patterns and transforms them to in-place operations.
+// Pattern: acc = v.MulAdd(a, acc) -> v.MulAddAcc(a, &acc)
+// This only applies to NEON target where in-place operations avoid allocation overhead.
+// Returns true if the statement was transformed.
+func tryTransformToInPlace(stmt *ast.AssignStmt, ctx *transformContext) bool {
+	// Only handle simple assignments with one LHS and one RHS
+	if len(stmt.Lhs) != 1 || len(stmt.Rhs) != 1 {
+		return false
+	}
+
+	// LHS must be an identifier (the accumulator variable)
+	lhsIdent, ok := stmt.Lhs[0].(*ast.Ident)
+	if !ok {
+		return false
+	}
+	accName := lhsIdent.Name
+
+	// RHS must be a method call
+	call, ok := stmt.Rhs[0].(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+
+	// Get the method name
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	methodName := sel.Sel.Name
+
+	// Check if this operation has an in-place variant
+	var inPlaceOp OpInfo
+	var foundInPlace bool
+
+	// When the call is a function call like hwy.MulAdd(vA, vB, vC) that will be converted
+	// to a method call vA.MulAdd(vB, vC), the first arg becomes receiver, shifting indices.
+	// Detect this by checking if the call is hwy.* (function) vs receiver.Method() (already method).
+	accArgAdjustment := 0
+	if pkgIdent, ok := sel.X.(*ast.Ident); ok {
+		// hwy.MulAdd(...) is a function call - after transformation, arg[0] becomes receiver
+		if pkgIdent.Name == "hwy" || pkgIdent.Name == "asm" {
+			accArgAdjustment = 1
+		}
+	}
+
+	for opName, opInfo := range ctx.target.OpMap {
+		if opInfo.InPlaceOf == methodName {
+			// Check if the last argument is the same as LHS (accumulator pattern)
+			if len(call.Args) > 0 {
+				lastArg := call.Args[len(call.Args)-1]
+				if argIdent, ok := lastArg.(*ast.Ident); ok && argIdent.Name == accName {
+					// Verify AccArg matches the actual last argument index after transformation.
+					// For half-precision NEON: hwy.MulAdd(vA, vB, vC) -> vA.MulAddAcc(vB, &vC)
+					// Original: 3 args, lastArg at index 2
+					// After transformation: 2 args (vB, &vC), lastArg at index 1
+					// MulAddAcc.AccArg = 1, so check: 1 == (3-1) - 1 = 1 ✓
+					expectedAccArg := len(call.Args) - 1 - accArgAdjustment
+					if opInfo.AccArg == expectedAccArg {
+						inPlaceOp = opInfo
+						inPlaceOp.Name = opName // Use the in-place op name
+						foundInPlace = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if !foundInPlace {
+		return false
+	}
+
+	// Transform: acc = v.MulAdd(a, acc) -> v.MulAddAcc(a, &acc)
+	// The receiver stays the same, we change the method name and wrap the last arg with &
+
+	// Change method name to in-place version
+	sel.Sel.Name = inPlaceOp.Name
+
+	// Wrap the accumulator argument with &
+	lastIdx := len(call.Args) - 1
+	call.Args[lastIdx] = &ast.UnaryExpr{
+		Op: token.AND,
+		X:  call.Args[lastIdx],
+	}
+
+	// Remove the assignment - convert to expression statement
+	// We need to replace the AssignStmt with an ExprStmt in the parent
+	// Since we can't easily do that here, we'll use a workaround:
+	// Set the LHS to a blank identifier and the RHS to the call
+	// This isn't ideal, but Go will optimize away the blank assignment
+	stmt.Lhs[0] = ast.NewIdent("_")
+
+	return true
 }
 
 // tryHoistSetCall checks if an expression is a hwy.Set[T](constant) call
@@ -4261,20 +5173,177 @@ func replaceTypeParam(typeStr, paramName, elemType string) string {
 	return result
 }
 
+// complexHalfPrecOps lists hwy.* operations that cannot be converted to asm.Float16x8/BFloat16x8
+// method calls. Functions using these must stay on the generic hwy.Vec[T] path for half-precision NEON.
+var complexHalfPrecOps = map[string]bool{
+	"RoundToEven":             true,
+	"ConvertToInt32":          true,
+	"ConvertToFloat32":        true,
+	"Pow2":                    true,
+	"GetExponent":             true,
+	"GetMantissa":             true,
+	"ConvertExponentToFloat":  true,
+	"Equal":                   true,
+	"MaskAnd":                 true,
+	"Pow":                     true,
+}
+
+// externalGenericHalfPrecPkgs lists package names whose Base*Vec functions use the
+// generic hwy.Vec[T] path for half-precision NEON (and thus callers must also use it).
+var externalGenericHalfPrecPkgs = map[string]bool{
+	"math": true,
+}
+
+// NeedsGenericHalfPrecisionPath scans a function body for hwy.* calls that cannot be
+// converted to asm types for NEON half-precision, or references to external package
+// functions (like math.BaseExpVec) that use the generic path. Returns true if the
+// function should use the generic hwy.Vec[T] path instead of asm.Float16x8/BFloat16x8.
+func NeedsGenericHalfPrecisionPath(body *ast.BlockStmt) bool {
+	found := false
+	ast.Inspect(body, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		// Check all selector expressions (not just call targets) for function value references
+		// like math.BaseExpVec passed as argument
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok {
+				if ident.Name == "hwy" {
+					if complexHalfPrecOps[sel.Sel.Name] {
+						found = true
+						return false
+					}
+				}
+				// Detect references to external package functions (e.g., math.BaseExpVec)
+				if externalGenericHalfPrecPkgs[ident.Name] && strings.HasPrefix(sel.Sel.Name, "Base") {
+					found = true
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// CollectBaseFuncCalls returns the set of Base* function names called from a function body.
+func CollectBaseFuncCalls(body *ast.BlockStmt) map[string]bool {
+	calls := make(map[string]bool)
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		// Check direct Base* calls: BaseFoo(args)
+		if ident, ok := call.Fun.(*ast.Ident); ok {
+			if strings.HasPrefix(ident.Name, "Base") {
+				calls[ident.Name] = true
+			}
+		}
+		// Check generic Base* calls: BaseFoo[T](args)
+		if indexExpr, ok := call.Fun.(*ast.IndexExpr); ok {
+			if ident, ok := indexExpr.X.(*ast.Ident); ok {
+				if strings.HasPrefix(ident.Name, "Base") {
+					calls[ident.Name] = true
+				}
+			}
+		}
+		return true
+	})
+	return calls
+}
+
+// hasFuncParamWithVecType checks if any function parameter is a function type
+// containing hwy.Vec. Such functions must use the generic half-precision path
+// because callers from other files may pass generic-typed callbacks.
+// For example: func BaseApply[T hwy.Floats](in, out []T, fn func(hwy.Vec[T]) hwy.Vec[T])
+func hasFuncParamWithVecType(params []Param) bool {
+	for _, p := range params {
+		if strings.HasPrefix(p.Type, "func(") && strings.Contains(p.Type, "hwy.Vec[") {
+			return true
+		}
+	}
+	return false
+}
+
+// ComputeGenericHalfPrecFuncs computes the set of function names that need the generic
+// hwy.Vec[T] path for half-precision NEON, including transitive dependencies through
+// Base* function calls.
+func ComputeGenericHalfPrecFuncs(funcs []ParsedFunc) map[string]bool {
+	// Pass 1: identify functions that directly use complex ops or have
+	// function-typed parameters with hwy.Vec (cross-file compatibility)
+	genericFuncs := make(map[string]bool)
+	callGraph := make(map[string]map[string]bool) // caller -> set of Base* callees
+
+	for _, pf := range funcs {
+		if NeedsGenericHalfPrecisionPath(pf.Body) || hasFuncParamWithVecType(pf.Params) {
+			genericFuncs[pf.Name] = true
+		}
+		callGraph[pf.Name] = CollectBaseFuncCalls(pf.Body)
+	}
+
+	// Pass 2: propagate transitively in both directions:
+	// - If a function calls a generic-path function, the caller must also be on the generic path
+	//   (because it will receive hwy.Vec[T] return values)
+	// - If a generic-path function calls a non-generic function, the callee must also be on the
+	//   generic path (because it will receive hwy.Vec[T] arguments from the generic caller)
+	changed := true
+	for changed {
+		changed = false
+		for _, pf := range funcs {
+			if genericFuncs[pf.Name] {
+				// Propagate to callees: generic caller forces callees to be generic
+				for callee := range callGraph[pf.Name] {
+					if !genericFuncs[callee] {
+						genericFuncs[callee] = true
+						changed = true
+					}
+				}
+				continue
+			}
+			// Propagate to callers: if any callee is generic, caller must be too
+			for callee := range callGraph[pf.Name] {
+				if genericFuncs[callee] {
+					genericFuncs[pf.Name] = true
+					changed = true
+					break
+				}
+			}
+		}
+	}
+
+	return genericFuncs
+}
+
 // specializeVecType transforms hwy.Vec[elemType] and hwy.Mask[elemType] to concrete archsimd/asm types.
 // For example: hwy.Vec[float32] -> archsimd.Float32x8 (for AVX2)
 //
 //	hwy.Mask[float32] -> archsimd.Int32x8 (for AVX2)
-func specializeVecType(typeStr string, elemType string, target Target) string {
+//
+// If skipHalfPrec is true, half-precision types on NEON are NOT converted to asm types,
+// keeping them on the generic hwy.Vec[T] path (used for functions with complex ops like RoundToEven).
+func specializeVecType(typeStr string, elemType string, target Target, skipHalfPrec ...bool) string {
 	if target.Name == "Fallback" {
 		// For fallback, keep hwy.Vec[float32], hwy.Mask[float32] etc.
 		return typeStr
 	}
 
-	// For Float16/BFloat16 on SIMD targets, keep hwy.Vec[hwy.Float16] etc.
-	// since archsimd doesn't have native support for half-precision types.
+	// For Float16/BFloat16 on NEON, convert to concrete asm types (Float16x8, BFloat16x8).
+	// On other SIMD targets, keep hwy.Vec[hwy.Float16] since archsimd doesn't have
+	// native support for half-precision types.
 	if isHalfPrecisionType(elemType) {
-		// Keep the hwy generic Vec/Mask types as-is
+		if target.Name == "NEON" && !(len(skipHalfPrec) > 0 && skipHalfPrec[0]) {
+			asmType := "asm.Float16x8"
+			if isBFloat16Type(elemType) {
+				asmType = "asm.BFloat16x8"
+			}
+			vecPlaceholder := "hwy.Vec[" + elemType + "]"
+			typeStr = strings.ReplaceAll(typeStr, vecPlaceholder, asmType)
+			// Also handle Mask types for half-precision on NEON
+			maskPlaceholder := "hwy.Mask[" + elemType + "]"
+			typeStr = strings.ReplaceAll(typeStr, maskPlaceholder, "asm.Uint16x8")
+			return typeStr
+		}
 		return typeStr
 	}
 
@@ -4689,8 +5758,17 @@ func cloneStmt(stmt ast.Stmt) ast.Stmt {
 
 // cloneExpr creates a deep copy of an expression.
 func cloneExpr(expr ast.Expr) ast.Expr {
+	return cloneExprWithDepth(expr, 0)
+}
+
+const maxCloneDepth = 1000
+
+func cloneExprWithDepth(expr ast.Expr, depth int) ast.Expr {
 	if expr == nil {
 		return nil
+	}
+	if depth > maxCloneDepth {
+		panic(fmt.Sprintf("cloneExpr: max depth %d exceeded, expression type: %T", maxCloneDepth, expr))
 	}
 
 	switch e := expr.(type) {
@@ -4700,64 +5778,64 @@ func cloneExpr(expr ast.Expr) ast.Expr {
 		return &ast.BasicLit{Kind: e.Kind, Value: e.Value}
 	case *ast.SelectorExpr:
 		return &ast.SelectorExpr{
-			X:   cloneExpr(e.X),
+			X:   cloneExprWithDepth(e.X, depth+1),
 			Sel: ast.NewIdent(e.Sel.Name),
 		}
 	case *ast.CallExpr:
 		args := make([]ast.Expr, len(e.Args))
 		for i, arg := range e.Args {
-			args[i] = cloneExpr(arg)
+			args[i] = cloneExprWithDepth(arg, depth+1)
 		}
 		return &ast.CallExpr{
-			Fun:      cloneExpr(e.Fun),
+			Fun:      cloneExprWithDepth(e.Fun, depth+1),
 			Args:     args,
 			Ellipsis: e.Ellipsis,
 		}
 	case *ast.BinaryExpr:
 		return &ast.BinaryExpr{
-			X:  cloneExpr(e.X),
+			X:  cloneExprWithDepth(e.X, depth+1),
 			Op: e.Op,
-			Y:  cloneExpr(e.Y),
+			Y:  cloneExprWithDepth(e.Y, depth+1),
 		}
 	case *ast.UnaryExpr:
 		return &ast.UnaryExpr{
 			Op: e.Op,
-			X:  cloneExpr(e.X),
+			X:  cloneExprWithDepth(e.X, depth+1),
 		}
 	case *ast.ParenExpr:
-		return &ast.ParenExpr{X: cloneExpr(e.X)}
+		return &ast.ParenExpr{X: cloneExprWithDepth(e.X, depth+1)}
 	case *ast.IndexExpr:
 		return &ast.IndexExpr{
-			X:     cloneExpr(e.X),
-			Index: cloneExpr(e.Index),
+			X:     cloneExprWithDepth(e.X, depth+1),
+			Index: cloneExprWithDepth(e.Index, depth+1),
 		}
 	case *ast.SliceExpr:
 		return &ast.SliceExpr{
-			X:      cloneExpr(e.X),
-			Low:    cloneExpr(e.Low),
-			High:   cloneExpr(e.High),
-			Max:    cloneExpr(e.Max),
+			X:      cloneExprWithDepth(e.X, depth+1),
+			Low:    cloneExprWithDepth(e.Low, depth+1),
+			High:   cloneExprWithDepth(e.High, depth+1),
+			Max:    cloneExprWithDepth(e.Max, depth+1),
 			Slice3: e.Slice3,
 		}
 	case *ast.StarExpr:
-		return &ast.StarExpr{X: cloneExpr(e.X)}
+		return &ast.StarExpr{X: cloneExprWithDepth(e.X, depth+1)}
 	case *ast.TypeAssertExpr:
 		return &ast.TypeAssertExpr{
-			X:    cloneExpr(e.X),
-			Type: cloneExpr(e.Type),
+			X:    cloneExprWithDepth(e.X, depth+1),
+			Type: cloneExprWithDepth(e.Type, depth+1),
 		}
 	case *ast.ArrayType:
 		return &ast.ArrayType{
-			Len: cloneExpr(e.Len),
-			Elt: cloneExpr(e.Elt),
+			Len: cloneExprWithDepth(e.Len, depth+1),
+			Elt: cloneExprWithDepth(e.Elt, depth+1),
 		}
 	case *ast.CompositeLit:
 		elts := make([]ast.Expr, len(e.Elts))
 		for i, elt := range e.Elts {
-			elts[i] = cloneExpr(elt)
+			elts[i] = cloneExprWithDepth(elt, depth+1)
 		}
 		return &ast.CompositeLit{
-			Type: cloneExpr(e.Type),
+			Type: cloneExprWithDepth(e.Type, depth+1),
 			Elts: elts,
 		}
 	default:
@@ -4888,11 +5966,12 @@ func (pf *ParsedFunc) buildResults(elemType string) *ast.FieldList {
 }
 
 // buildResultsWithTarget builds the return type list with target-specific Vec types.
-func (pf *ParsedFunc) buildResultsWithTarget(elemType string, target Target) *ast.FieldList {
+func (pf *ParsedFunc) buildResultsWithTarget(elemType string, target Target, skipHalfPrec ...bool) *ast.FieldList {
 	if len(pf.Returns) == 0 {
 		return nil
 	}
 
+	skip := len(skipHalfPrec) > 0 && skipHalfPrec[0]
 	fieldList := &ast.FieldList{
 		List: make([]*ast.Field, 0, len(pf.Returns)),
 	}
@@ -4900,7 +5979,7 @@ func (pf *ParsedFunc) buildResultsWithTarget(elemType string, target Target) *as
 	for _, ret := range pf.Returns {
 		retType := specializeType(ret.Type, pf.TypeParams, elemType)
 		// Transform hwy.Vec[T] to concrete vector types for SIMD targets
-		retType = specializeVecType(retType, elemType, target)
+		retType = specializeVecType(retType, elemType, target, skip)
 		field := &ast.Field{
 			Type: parseTypeExpr(retType),
 		}
@@ -5009,7 +6088,8 @@ func isReduceSumCall(call *ast.CallExpr) bool {
 		return false
 	}
 	name := sel.Sel.Name
-	return name == "ReduceSum" || name == "ReduceSumF16" || name == "ReduceSumBF16"
+	return name == "ReduceSum" || name == "ReduceSumF16" || name == "ReduceSumBF16" ||
+		name == "ReduceMin" || name == "ReduceMax"
 }
 
 // createReduceSumExpr creates an expression that stores the vector and sums elements.
@@ -5896,11 +6976,25 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 			for i, rhs := range node.Rhs {
 				if callExpr, ok := rhs.(*ast.CallExpr); ok {
 					if isReduceSumCall(callExpr) {
-						// Check if it's ReduceSumF16/BF16 which already returns float32
+						// Check if the call already returns float32:
+						// - hwy.ReduceSumF16/BF16 return float32
+						// - asm type method .ReduceSum() returns float32 (NEON Float16x8/BFloat16x8)
+						// But generic hwy.ReduceSum returns the element type, so don't skip that.
 						alreadyFloat32 := false
 						if sel, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
 							name := sel.Sel.Name
-							alreadyFloat32 = name == "ReduceSumF16" || name == "ReduceSumBF16"
+							if name == "ReduceSumF16" || name == "ReduceSumBF16" {
+								alreadyFloat32 = true
+							} else if name == "ReduceSum" || name == "ReduceMin" || name == "ReduceMax" {
+								// Method call on asm vector type (not hwy.ReduceSum package function)
+								if _, isIdent := sel.X.(*ast.Ident); isIdent {
+									// v.ReduceSum() — receiver is a variable, so it's a method call
+									// Check it's not hwy.ReduceSum/ReduceMin/ReduceMax
+									if ident, ok := sel.X.(*ast.Ident); ok && ident.Name != "hwy" {
+										alreadyFloat32 = true
+									}
+								}
+							}
 						}
 
 						if !alreadyFloat32 {
@@ -5912,12 +7006,25 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 								},
 							}
 						}
-						// Track as float32 and remove from half-precision tracking,
-						// since the variable is now float32 (either already was or just wrapped).
+						// For := assignments, the variable's type is inferred as float32.
+						// Track it so the return statement wraps it back to element type.
+						// For = assignments (e.g., named return params already typed as element type),
+						// we must convert the float32 result back to element type at the assignment.
 						if len(node.Lhs) > i {
 							if ident, ok := node.Lhs[i].(*ast.Ident); ok {
-								reduceSumVars[ident.Name] = true
-								delete(halfPrecisionScalarVars, ident.Name)
+								if node.Tok == token.DEFINE {
+									// := assignment: result infers float32 type
+									reduceSumVars[ident.Name] = true
+									delete(halfPrecisionScalarVars, ident.Name)
+								} else {
+									// = assignment: variable already has element type (e.g., named return param)
+									// Wrap RHS with fromFloat32Func to convert back
+									node.Rhs[i] = &ast.CallExpr{
+										Fun:  parseTypeExpr(fromFloat32Func),
+										Args: []ast.Expr{node.Rhs[i]},
+									}
+									// Variable stays as element type, no reduceSumVars tracking needed
+								}
 							}
 						}
 						continue
@@ -6126,8 +7233,8 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 
 		if sel != nil {
 			if pkgIdent, ok := sel.X.(*ast.Ident); ok {
+				funcName := sel.Sel.Name
 				if pkgIdent.Name == "hwy" {
-					funcName := sel.Sel.Name
 					// Check for type conversion
 					if funcName == "Float16" || funcName == "BFloat16" {
 						// Transform: hwy.Float16(1.0) → float32(1.0)
@@ -6140,12 +7247,25 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 						return e
 					}
 				}
+				// Also skip wrapping for asm.* vector operations (NEON half-precision types)
+				if pkgIdent.Name == "asm" && isVectorOperation(funcName) {
+					return e
+				}
+				// Skip wrapping inside unsafe.Pointer() calls (used for NEON Load/Store)
+				if pkgIdent.Name == "unsafe" && funcName == "Pointer" {
+					return e
+				}
 			}
 		}
 		// Also check for simple type conversions like hwy.Float16(x)
 		if ident, ok := e.Fun.(*ast.Ident); ok {
 			if ident.Name == ctx.elemType || ident.Name == "hwy.Float16" || ident.Name == "hwy.BFloat16" {
 				e.Fun = ast.NewIdent("float32")
+				return e
+			}
+			// Skip recursion for uint16 type conversions - these preserve the bit pattern
+			// of half-precision values (hwy.Float16/BFloat16 are uint16 aliases)
+			if ident.Name == "uint16" {
 				return e
 			}
 		}
@@ -6188,6 +7308,14 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 var vectorOperations = map[string]bool{
 	// Vector creation and manipulation
 	"Set": true, "Load": true, "Store": true, "Zero": true, "Broadcast": true,
+	// NEON asm half-precision types (need uint16 args, not float32)
+	"BroadcastFloat16x8": true, "BroadcastBFloat16x8": true,
+	"LoadFloat16x8Ptr": true, "LoadBFloat16x8Ptr": true,
+	"ZeroFloat16x8": true, "ZeroBFloat16x8": true,
+	"StorePtr": true, "StoreSlice": true,
+	// In-place operations (NEON)
+	"MulAddAcc": true, "MulAddInto": true, "AddInto": true, "SubInto": true,
+	"MulInto": true, "DivInto": true, "MinInto": true, "MaxInto": true,
 	// Vector arithmetic
 	"Add": true, "Sub": true, "Mul": true, "Div": true, "MulAdd": true, "MulSub": true,
 	"Neg": true, "Abs": true, "Min": true, "Max": true, "Clamp": true,
@@ -6252,4 +7380,437 @@ func isHalfPrecisionSliceExpr(indexExpr *ast.IndexExpr, ctx *transformContext) b
 		return ctx.halfPrecisionSlices[ident.Name]
 	}
 	return false
+}
+
+// inlineHelperCalls recursively inlines local helper function calls in a block.
+// Local helpers are non-Base* functions defined in the same file that use hwy operations.
+// This ensures the entire code path gets specialized for each target architecture.
+func inlineHelperCalls(block *ast.BlockStmt, ctx *transformContext) {
+	if block == nil || ctx.allFuncs == nil {
+		return
+	}
+
+	// Process statements in reverse order so we can safely replace them
+	for i := 0; i < len(block.List); i++ {
+		stmt := block.List[i]
+
+		// Check for expression statement that is a helper call
+		exprStmt, ok := stmt.(*ast.ExprStmt)
+		if !ok {
+			// Recursively process nested blocks
+			inlineHelperCallsInStmt(stmt, ctx)
+			continue
+		}
+
+		// Check if this is a call expression
+		callExpr, ok := exprStmt.X.(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+
+		// Get the function name being called
+		var funcName string
+		switch fun := callExpr.Fun.(type) {
+		case *ast.Ident:
+			funcName = fun.Name
+		case *ast.IndexExpr:
+			// Generic call like func[T](...)
+			if ident, ok := fun.X.(*ast.Ident); ok {
+				funcName = ident.Name
+			}
+		}
+
+		if funcName == "" {
+			continue
+		}
+
+		// Skip Base* functions - they're handled separately with target suffix
+		if hasBasePrefix(funcName) {
+			continue
+		}
+
+		// Check if this is a local helper we can inline
+		helper, exists := ctx.allFuncs[funcName]
+		if !exists {
+			continue
+		}
+
+		// Skip if helper has no hwy operations (pure scalar helper)
+		if len(helper.HwyCalls) == 0 && !hasHwyLanesConstraint(helper.TypeParams) {
+			continue
+		}
+
+		// Inline the helper
+		inlinedStmts := inlineHelper(helper, callExpr, ctx)
+		if inlinedStmts == nil {
+			continue
+		}
+
+		// Replace the call statement with the inlined statements
+		// Wrap in a BlockStmt to keep variable scope contained
+		block.List[i] = &ast.BlockStmt{List: inlinedStmts}
+	}
+}
+
+// inlineHelperCallsInStmt recursively processes statements to find nested helper calls.
+func inlineHelperCallsInStmt(stmt ast.Stmt, ctx *transformContext) {
+	if stmt == nil {
+		return
+	}
+
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		inlineHelperCalls(s, ctx)
+	case *ast.ForStmt:
+		inlineHelperCalls(s.Body, ctx)
+	case *ast.IfStmt:
+		inlineHelperCalls(s.Body, ctx)
+		if s.Else != nil {
+			if elseBlock, ok := s.Else.(*ast.BlockStmt); ok {
+				inlineHelperCalls(elseBlock, ctx)
+			} else if elseIf, ok := s.Else.(*ast.IfStmt); ok {
+				inlineHelperCallsInStmt(elseIf, ctx)
+			}
+		}
+	case *ast.RangeStmt:
+		inlineHelperCalls(s.Body, ctx)
+	case *ast.SwitchStmt:
+		inlineHelperCalls(s.Body, ctx)
+	}
+}
+
+// inlineHelper transforms a helper function and returns its body statements with
+// parameters substituted with actual arguments.
+func inlineHelper(helper *ParsedFunc, call *ast.CallExpr, ctx *transformContext) []ast.Stmt {
+	if helper.Body == nil || len(helper.Body.List) == 0 {
+		return nil
+	}
+
+	// Clone the helper's body to avoid modifying the original
+	clonedBody := cloneBlockStmt(helper.Body)
+
+	// Build parameter -> argument mapping
+	paramMap := make(map[string]ast.Expr)
+	for i, param := range helper.Params {
+		if i < len(call.Args) {
+			paramMap[param.Name] = call.Args[i]
+		}
+	}
+
+	// Create a unique suffix for this inline site to avoid variable conflicts
+	ctx.inlineCounter++
+	suffix := fmt.Sprintf("_%d", ctx.inlineCounter)
+
+	// Collect local variables defined in the helper to rename them
+	localVars := make(map[string]bool)
+	collectLocalVariablesFromBlock(clonedBody, localVars)
+
+	// Substitute parameters and rename local variables
+	substituteAndRename(clonedBody, paramMap, localVars, suffix)
+
+	// Now transform the cloned body for the current target/elemType
+	// Create a mini-context for transforming the helper
+	helperCtx := &transformContext{
+		target:                  ctx.target,
+		elemType:                ctx.elemType,
+		typeParams:              helper.TypeParams,
+		loopInfo:                helper.LoopInfo,
+		lanesVars:               make(map[string]bool),
+		localVars:               make(map[string]bool),
+		stackArrayVars:          make(map[string]bool),
+		hoistedConsts:           ctx.hoistedConsts, // Share hoisted consts
+		funcName:                ctx.funcName,
+		typeSpecificConsts:      ctx.typeSpecificConsts,
+		conditionalBlocks:       ctx.conditionalBlocks,
+		fset:                    ctx.fset,
+		imports:                 ctx.imports,
+		varTypes:                make(map[string]string),
+		halfPrecisionSlices:     make(map[string]bool),
+		halfPrecisionScalarVars: make(map[string]bool),
+		varVecLanes:             make(map[string]int),
+		varVecElemType:          make(map[string]string),
+		allFuncs:                ctx.allFuncs,
+		inlineCounter:           ctx.inlineCounter,
+	}
+
+	// Copy relevant tracking from parent context
+	for k, v := range ctx.halfPrecisionSlices {
+		helperCtx.halfPrecisionSlices[k] = v
+	}
+
+	// Transform the helper body - same transformations as the main function
+	transformIdentifiers(clonedBody, helperCtx)
+	transformNode(clonedBody, helperCtx)
+
+	// Recursively inline any nested helper calls
+	inlineHelperCalls(clonedBody, helperCtx)
+
+	// Update parent context's inline counter
+	ctx.inlineCounter = helperCtx.inlineCounter
+
+	return clonedBody.List
+}
+
+// collectLocalVariablesFromBlock collects all variable names defined in a block.
+func collectLocalVariablesFromBlock(block *ast.BlockStmt, vars map[string]bool) {
+	if block == nil {
+		return
+	}
+
+	ast.Inspect(block, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			if node.Tok == token.DEFINE {
+				for _, lhs := range node.Lhs {
+					if ident, ok := lhs.(*ast.Ident); ok {
+						vars[ident.Name] = true
+					}
+				}
+			}
+		case *ast.DeclStmt:
+			if genDecl, ok := node.Decl.(*ast.GenDecl); ok {
+				if genDecl.Tok == token.VAR {
+					for _, spec := range genDecl.Specs {
+						if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+							for _, name := range valueSpec.Names {
+								vars[name.Name] = true
+							}
+						}
+					}
+				}
+			}
+		case *ast.RangeStmt:
+			if ident, ok := node.Key.(*ast.Ident); ok {
+				vars[ident.Name] = true
+			}
+			if ident, ok := node.Value.(*ast.Ident); ok {
+				vars[ident.Name] = true
+			}
+		case *ast.ForStmt:
+			if assignStmt, ok := node.Init.(*ast.AssignStmt); ok {
+				if assignStmt.Tok == token.DEFINE {
+					for _, lhs := range assignStmt.Lhs {
+						if ident, ok := lhs.(*ast.Ident); ok {
+							vars[ident.Name] = true
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
+}
+
+// substituteAndRename walks the AST and:
+// 1. Renames local variables with a unique suffix to avoid conflicts
+// 2. Replaces parameter references with actual argument expressions
+func substituteAndRename(block *ast.BlockStmt, paramMap map[string]ast.Expr, localVars map[string]bool, suffix string) {
+	// First pass: rename local variables
+	ast.Inspect(block, func(n ast.Node) bool {
+		if ident, ok := n.(*ast.Ident); ok {
+			// Check if this is a local variable - rename with suffix
+			if localVars[ident.Name] {
+				ident.Name = ident.Name + suffix
+			}
+		}
+		return true
+	})
+
+	// Second pass: perform parameter substitution
+	substituteParams(block, paramMap)
+}
+
+// substituteParams replaces parameter identifiers with their argument expressions.
+// It uses a post-order traversal approach to avoid visiting newly-inserted nodes,
+// which could cause infinite expansion if replacement expressions contain identifiers
+// that match parameter names.
+func substituteParams(node ast.Node, paramMap map[string]ast.Expr) {
+	substituteParamsPostOrder(node, paramMap)
+}
+
+// substituteParamsPostOrder does a depth-first post-order traversal,
+// processing children before parents to avoid re-visiting modified nodes.
+func substituteParamsPostOrder(node ast.Node, paramMap map[string]ast.Expr) {
+	if node == nil {
+		return
+	}
+
+	// First, recursively process all children
+	switch n := node.(type) {
+	case *ast.BlockStmt:
+		for _, stmt := range n.List {
+			substituteParamsPostOrder(stmt, paramMap)
+		}
+	case *ast.ExprStmt:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.AssignStmt:
+		for _, expr := range n.Lhs {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+		for _, expr := range n.Rhs {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+	case *ast.DeclStmt:
+		substituteParamsPostOrder(n.Decl, paramMap)
+	case *ast.GenDecl:
+		for _, spec := range n.Specs {
+			substituteParamsPostOrder(spec, paramMap)
+		}
+	case *ast.ValueSpec:
+		for _, val := range n.Values {
+			substituteParamsPostOrder(val, paramMap)
+		}
+	case *ast.IfStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Cond, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+		substituteParamsPostOrder(n.Else, paramMap)
+	case *ast.ForStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Cond, paramMap)
+		substituteParamsPostOrder(n.Post, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.RangeStmt:
+		substituteParamsPostOrder(n.Key, paramMap)
+		substituteParamsPostOrder(n.Value, paramMap)
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.ReturnStmt:
+		for _, expr := range n.Results {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+	case *ast.IncDecStmt:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.SwitchStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Tag, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.TypeSwitchStmt:
+		substituteParamsPostOrder(n.Init, paramMap)
+		substituteParamsPostOrder(n.Assign, paramMap)
+		substituteParamsPostOrder(n.Body, paramMap)
+	case *ast.CaseClause:
+		for _, expr := range n.List {
+			substituteParamsPostOrder(expr, paramMap)
+		}
+		for _, stmt := range n.Body {
+			substituteParamsPostOrder(stmt, paramMap)
+		}
+	case *ast.BranchStmt:
+		// nothing to recurse into
+	case *ast.CallExpr:
+		substituteParamsPostOrder(n.Fun, paramMap)
+		for _, arg := range n.Args {
+			substituteParamsPostOrder(arg, paramMap)
+		}
+	case *ast.BinaryExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Y, paramMap)
+	case *ast.UnaryExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.IndexExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Index, paramMap)
+	case *ast.SliceExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+		substituteParamsPostOrder(n.Low, paramMap)
+		substituteParamsPostOrder(n.High, paramMap)
+		substituteParamsPostOrder(n.Max, paramMap)
+	case *ast.SelectorExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.ParenExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.StarExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.CompositeLit:
+		for _, elt := range n.Elts {
+			substituteParamsPostOrder(elt, paramMap)
+		}
+	case *ast.KeyValueExpr:
+		substituteParamsPostOrder(n.Key, paramMap)
+		substituteParamsPostOrder(n.Value, paramMap)
+	case *ast.TypeAssertExpr:
+		substituteParamsPostOrder(n.X, paramMap)
+	case *ast.Ident, *ast.BasicLit:
+		// leaf nodes, nothing to recurse into
+	}
+
+	// Now, perform substitutions at this node level (post-order)
+	switch parent := node.(type) {
+	case *ast.CallExpr:
+		for i, arg := range parent.Args {
+			if ident, ok := arg.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Args[i] = cloneExpr(replacement)
+				}
+			}
+		}
+	case *ast.BinaryExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.Y.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.Y = cloneExpr(replacement)
+			}
+		}
+	case *ast.IndexExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.Index.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.Index = cloneExpr(replacement)
+			}
+		}
+	case *ast.SliceExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.Low.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.Low = cloneExpr(replacement)
+			}
+		}
+		if ident, ok := parent.High.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.High = cloneExpr(replacement)
+			}
+		}
+	case *ast.UnaryExpr:
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+	case *ast.StarExpr:
+		// Handle pointer dereference: *bitPos where bitPos is a pointer parameter
+		if ident, ok := parent.X.(*ast.Ident); ok {
+			if replacement, isParam := paramMap[ident.Name]; isParam {
+				parent.X = cloneExpr(replacement)
+			}
+		}
+	case *ast.AssignStmt:
+		for i, rhs := range parent.Rhs {
+			if ident, ok := rhs.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Rhs[i] = cloneExpr(replacement)
+				}
+			}
+		}
+	case *ast.ReturnStmt:
+		for i, result := range parent.Results {
+			if ident, ok := result.(*ast.Ident); ok {
+				if replacement, isParam := paramMap[ident.Name]; isParam {
+					parent.Results[i] = cloneExpr(replacement)
+				}
+			}
+		}
+	}
 }
