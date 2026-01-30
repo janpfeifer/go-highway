@@ -4,9 +4,9 @@
 // 	clang   21.1.8
 // 	objdump 2.45.1
 // flags: -march=armv9-a+sme+sme-f64f64 -O3
-// source: ../c/qkvlinear_sme_arm64.c
+// source: ../c/qkvdense_sme_arm64.c
 
-TEXT ·qkvlinear_fmopa_f32(SB), $1264-64
+TEXT ·qkvdense_fmopa_f32(SB), $1264-64
 	MOVD xt+0(FP), R0
 	MOVD wqkv+8(FP), R1
 	MOVD biasq+16(FP), R2
@@ -1041,7 +1041,7 @@ BB0_169:
 BB0_171:
 	WORD $0xd51bd0bf // msr	TPIDR2_EL0, xzr
 
-TEXT ·qkvlinear_fmopa_f64(SB), $1456-64
+TEXT ·qkvdense_fmopa_f64(SB), $1456-64
 	MOVD xt+0(FP), R0
 	MOVD wqkv+8(FP), R1
 	MOVD biasq+16(FP), R2

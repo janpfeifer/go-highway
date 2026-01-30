@@ -21,7 +21,7 @@ import (
 	"github.com/ajroetker/go-highway/hwy/contrib/matmul"
 )
 
-// QKVLinearAuto computes a fused QKV projection using the best available
+// QKVDenseAuto computes a fused QKV projection using the best available
 // matmul implementation, then scatters and adds biases.
 //
 //   - x:      [batchSize, inFeatures] (row-major)
@@ -35,7 +35,7 @@ import (
 //
 // This delegates to MatMulKLastAuto for the fused matmul, then scatters
 // the results into separate Q, K, V buffers and adds biases.
-func QKVLinearAuto[T hwy.Floats](
+func QKVDenseAuto[T hwy.Floats](
 	x, wQKV, biasQ, biasK, biasV, q, k, v []T,
 	batchSize, inFeatures, qDim, kvDim int,
 ) {
@@ -85,8 +85,8 @@ func scatterWithBias[T hwy.Floats](src, dst, bias []T, dim, lanes int) {
 	}
 }
 
-// QKVLinearScalar is a scalar reference implementation for comparison and testing.
-func QKVLinearScalar[T hwy.Floats](
+// QKVDenseScalar is a scalar reference implementation for comparison and testing.
+func QKVDenseScalar[T hwy.Floats](
 	x, wQKV, biasQ, biasK, biasV, q, k, v []T,
 	batchSize, inFeatures, qDim, kvDim int,
 ) {

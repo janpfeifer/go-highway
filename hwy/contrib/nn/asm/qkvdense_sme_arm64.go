@@ -4,14 +4,14 @@
 // 	clang   21.1.8
 // 	objdump 2.45.1
 // flags: -march=armv9-a+sme+sme-f64f64 -O3
-// source: ../c/qkvlinear_sme_arm64.c
+// source: ../c/qkvdense_sme_arm64.c
 
 package asm
 
 import "unsafe"
 
 //go:noescape
-func qkvlinear_fmopa_f32(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
+func qkvdense_fmopa_f32(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
 
 //go:noescape
-func qkvlinear_fmopa_f64(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
+func qkvdense_fmopa_f64(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)

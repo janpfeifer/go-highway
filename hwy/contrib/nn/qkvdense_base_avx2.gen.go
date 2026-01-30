@@ -12,22 +12,22 @@ import (
 	"github.com/ajroetker/go-highway/hwy/asm"
 )
 
-func BaseQKVLinear_avx2_Float16(x []hwy.Float16, wQKV []hwy.Float16, biasQ []hwy.Float16, biasK []hwy.Float16, biasV []hwy.Float16, q []hwy.Float16, k []hwy.Float16, v []hwy.Float16, batchSize int, inFeatures int, qDim int, kvDim int) {
+func BaseQKVDense_avx2_Float16(x []hwy.Float16, wQKV []hwy.Float16, biasQ []hwy.Float16, biasK []hwy.Float16, biasV []hwy.Float16, q []hwy.Float16, k []hwy.Float16, v []hwy.Float16, batchSize int, inFeatures int, qDim int, kvDim int) {
 	totalOut := qDim + 2*kvDim
 	if len(x) < batchSize*inFeatures {
-		panic("qkvlinear: x slice too short")
+		panic("qkvdense: x slice too short")
 	}
 	if len(wQKV) < totalOut*inFeatures {
-		panic("qkvlinear: wQKV slice too short")
+		panic("qkvdense: wQKV slice too short")
 	}
 	if len(q) < batchSize*qDim {
-		panic("qkvlinear: q slice too short")
+		panic("qkvdense: q slice too short")
 	}
 	if len(k) < batchSize*kvDim {
-		panic("qkvlinear: k slice too short")
+		panic("qkvdense: k slice too short")
 	}
 	if len(v) < batchSize*kvDim {
-		panic("qkvlinear: v slice too short")
+		panic("qkvdense: v slice too short")
 	}
 	lanes := 8
 	var i int
@@ -142,22 +142,22 @@ func BaseQKVLinear_avx2_Float16(x []hwy.Float16, wQKV []hwy.Float16, biasQ []hwy
 	}
 }
 
-func BaseQKVLinear_avx2_BFloat16(x []hwy.BFloat16, wQKV []hwy.BFloat16, biasQ []hwy.BFloat16, biasK []hwy.BFloat16, biasV []hwy.BFloat16, q []hwy.BFloat16, k []hwy.BFloat16, v []hwy.BFloat16, batchSize int, inFeatures int, qDim int, kvDim int) {
+func BaseQKVDense_avx2_BFloat16(x []hwy.BFloat16, wQKV []hwy.BFloat16, biasQ []hwy.BFloat16, biasK []hwy.BFloat16, biasV []hwy.BFloat16, q []hwy.BFloat16, k []hwy.BFloat16, v []hwy.BFloat16, batchSize int, inFeatures int, qDim int, kvDim int) {
 	totalOut := qDim + 2*kvDim
 	if len(x) < batchSize*inFeatures {
-		panic("qkvlinear: x slice too short")
+		panic("qkvdense: x slice too short")
 	}
 	if len(wQKV) < totalOut*inFeatures {
-		panic("qkvlinear: wQKV slice too short")
+		panic("qkvdense: wQKV slice too short")
 	}
 	if len(q) < batchSize*qDim {
-		panic("qkvlinear: q slice too short")
+		panic("qkvdense: q slice too short")
 	}
 	if len(k) < batchSize*kvDim {
-		panic("qkvlinear: k slice too short")
+		panic("qkvdense: k slice too short")
 	}
 	if len(v) < batchSize*kvDim {
-		panic("qkvlinear: v slice too short")
+		panic("qkvdense: v slice too short")
 	}
 	lanes := 8
 	var i int
@@ -272,22 +272,22 @@ func BaseQKVLinear_avx2_BFloat16(x []hwy.BFloat16, wQKV []hwy.BFloat16, biasQ []
 	}
 }
 
-func BaseQKVLinear_avx2(x []float32, wQKV []float32, biasQ []float32, biasK []float32, biasV []float32, q []float32, k []float32, v []float32, batchSize int, inFeatures int, qDim int, kvDim int) {
+func BaseQKVDense_avx2(x []float32, wQKV []float32, biasQ []float32, biasK []float32, biasV []float32, q []float32, k []float32, v []float32, batchSize int, inFeatures int, qDim int, kvDim int) {
 	totalOut := qDim + 2*kvDim
 	if len(x) < batchSize*inFeatures {
-		panic("qkvlinear: x slice too short")
+		panic("qkvdense: x slice too short")
 	}
 	if len(wQKV) < totalOut*inFeatures {
-		panic("qkvlinear: wQKV slice too short")
+		panic("qkvdense: wQKV slice too short")
 	}
 	if len(q) < batchSize*qDim {
-		panic("qkvlinear: q slice too short")
+		panic("qkvdense: q slice too short")
 	}
 	if len(k) < batchSize*kvDim {
-		panic("qkvlinear: k slice too short")
+		panic("qkvdense: k slice too short")
 	}
 	if len(v) < batchSize*kvDim {
-		panic("qkvlinear: v slice too short")
+		panic("qkvdense: v slice too short")
 	}
 	lanes := 8
 	var i int
@@ -402,22 +402,22 @@ func BaseQKVLinear_avx2(x []float32, wQKV []float32, biasQ []float32, biasK []fl
 	}
 }
 
-func BaseQKVLinear_avx2_Float64(x []float64, wQKV []float64, biasQ []float64, biasK []float64, biasV []float64, q []float64, k []float64, v []float64, batchSize int, inFeatures int, qDim int, kvDim int) {
+func BaseQKVDense_avx2_Float64(x []float64, wQKV []float64, biasQ []float64, biasK []float64, biasV []float64, q []float64, k []float64, v []float64, batchSize int, inFeatures int, qDim int, kvDim int) {
 	totalOut := qDim + 2*kvDim
 	if len(x) < batchSize*inFeatures {
-		panic("qkvlinear: x slice too short")
+		panic("qkvdense: x slice too short")
 	}
 	if len(wQKV) < totalOut*inFeatures {
-		panic("qkvlinear: wQKV slice too short")
+		panic("qkvdense: wQKV slice too short")
 	}
 	if len(q) < batchSize*qDim {
-		panic("qkvlinear: q slice too short")
+		panic("qkvdense: q slice too short")
 	}
 	if len(k) < batchSize*kvDim {
-		panic("qkvlinear: k slice too short")
+		panic("qkvdense: k slice too short")
 	}
 	if len(v) < batchSize*kvDim {
-		panic("qkvlinear: v slice too short")
+		panic("qkvdense: v slice too short")
 	}
 	lanes := 4
 	var i int

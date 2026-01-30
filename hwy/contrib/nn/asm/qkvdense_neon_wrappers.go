@@ -21,10 +21,10 @@ package asm
 import "unsafe"
 
 // Generate NEON assembly from C source
-//go:generate go tool goat ../c/qkvlinear_neon_arm64.c -O3 --target arm64
+//go:generate go tool goat ../c/qkvdense_neon_arm64.c -O3 --target arm64
 
-// QKVLinearNEONF32 computes fused QKV projection using NEON for float32.
-func QKVLinearNEONF32(x, wqkv, biasq, biask, biasv, q, k, v []float32,
+// QKVDenseNEONF32 computes fused QKV projection using NEON for float32.
+func QKVDenseNEONF32(x, wqkv, biasq, biask, biasv, q, k, v []float32,
 	batchSize, inFeatures, qDim, kvDim int) {
 	if batchSize <= 0 || inFeatures <= 0 {
 		return
@@ -50,7 +50,7 @@ func QKVLinearNEONF32(x, wqkv, biasq, biask, biasv, q, k, v []float32,
 		int64(kvDim),
 	}
 
-	qkvlinear_neon_f32(
+	qkvdense_neon_f32(
 		unsafe.Pointer(&x[0]),
 		unsafe.Pointer(&wqkv[0]),
 		biasqPtr,
@@ -62,8 +62,8 @@ func QKVLinearNEONF32(x, wqkv, biasq, biask, biasv, q, k, v []float32,
 	)
 }
 
-// QKVLinearNEONF64 computes fused QKV projection using NEON for float64.
-func QKVLinearNEONF64(x, wqkv, biasq, biask, biasv, q, k, v []float64,
+// QKVDenseNEONF64 computes fused QKV projection using NEON for float64.
+func QKVDenseNEONF64(x, wqkv, biasq, biask, biasv, q, k, v []float64,
 	batchSize, inFeatures, qDim, kvDim int) {
 	if batchSize <= 0 || inFeatures <= 0 {
 		return
@@ -89,7 +89,7 @@ func QKVLinearNEONF64(x, wqkv, biasq, biask, biasv, q, k, v []float64,
 		int64(kvDim),
 	}
 
-	qkvlinear_neon_f64(
+	qkvdense_neon_f64(
 		unsafe.Pointer(&x[0]),
 		unsafe.Pointer(&wqkv[0]),
 		biasqPtr,

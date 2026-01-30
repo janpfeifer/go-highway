@@ -26,14 +26,14 @@ func smeGuard() func() {
 }
 
 // Generate SME assembly from C source
-//go:generate go tool goat ../c/qkvlinear_sme_arm64.c -O3 --target arm64 --target-os darwin -e="-march=armv9-a+sme+sme-f64f64"
+//go:generate go tool goat ../c/qkvdense_sme_arm64.c -O3 --target arm64 --target-os darwin -e="-march=armv9-a+sme+sme-f64f64"
 
-// QKVLinearFMOPAF32 computes fused QKV projection using SME FMOPA for float32.
+// QKVDenseFMOPAF32 computes fused QKV projection using SME FMOPA for float32.
 //
 // xt is [inFeatures, batchSize] (pre-transposed x for FMOPA column access).
 // wqkv is [inFeatures, totalOut] (pre-transposed wQKV for FMOPA row access).
 // Requires batchSize and totalOut to be multiples of 16.
-func QKVLinearFMOPAF32(xt, wqkv, biasq, biask, biasv, q, k, v []float32,
+func QKVDenseFMOPAF32(xt, wqkv, biasq, biask, biasv, q, k, v []float32,
 	batchSize, inFeatures, qDim, kvDim int) {
 	if batchSize <= 0 || inFeatures <= 0 {
 		return
@@ -60,7 +60,7 @@ func QKVLinearFMOPAF32(xt, wqkv, biasq, biask, biasv, q, k, v []float32,
 		int64(kvDim),
 	}
 
-	qkvlinear_fmopa_f32(
+	qkvdense_fmopa_f32(
 		unsafe.Pointer(&xt[0]),
 		unsafe.Pointer(&wqkv[0]),
 		biasqPtr,
@@ -72,12 +72,12 @@ func QKVLinearFMOPAF32(xt, wqkv, biasq, biask, biasv, q, k, v []float32,
 	)
 }
 
-// QKVLinearFMOPAF64 computes fused QKV projection using SME FMOPA for float64.
+// QKVDenseFMOPAF64 computes fused QKV projection using SME FMOPA for float64.
 //
 // xt is [inFeatures, batchSize] (pre-transposed x for FMOPA column access).
 // wqkv is [inFeatures, totalOut] (pre-transposed wQKV for FMOPA row access).
 // Requires batchSize and totalOut to be multiples of 8.
-func QKVLinearFMOPAF64(xt, wqkv, biasq, biask, biasv, q, k, v []float64,
+func QKVDenseFMOPAF64(xt, wqkv, biasq, biask, biasv, q, k, v []float64,
 	batchSize, inFeatures, qDim, kvDim int) {
 	if batchSize <= 0 || inFeatures <= 0 {
 		return
@@ -104,7 +104,7 @@ func QKVLinearFMOPAF64(xt, wqkv, biasq, biask, biasv, q, k, v []float64,
 		int64(kvDim),
 	}
 
-	qkvlinear_fmopa_f64(
+	qkvdense_fmopa_f64(
 		unsafe.Pointer(&xt[0]),
 		unsafe.Pointer(&wqkv[0]),
 		biasqPtr,

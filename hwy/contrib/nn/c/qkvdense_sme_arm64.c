@@ -28,16 +28,16 @@
 #endif
 
 // =============================================================================
-// qkvlinear_fmopa_f32: SME FMOPA-based fused QKV projection for float32
+// qkvdense_fmopa_f32: SME FMOPA-based fused QKV projection for float32
 // =============================================================================
 //
 // Computes x @ wQKV^T and stores to q, k, v with bias add.
 // x is [batch, in], wQKV is [totalOut, in] (row-major), need transposed access.
 // xt is [in, batch] (pre-transposed x for contiguous column access).
 //
-// func qkvlinear_fmopa_f32(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
+// func qkvdense_fmopa_f32(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
 // params: [0]=v pointer (as long), [1]=batch, [2]=in, [3]=qd, [4]=kvd
-void qkvlinear_fmopa_f32(float *xt, float *wqkv, float *biasq, float *biask, float *biasv,
+void qkvdense_fmopa_f32(float *xt, float *wqkv, float *biasq, float *biask, float *biasv,
                             float *q, float *k, long *params)
     __arm_streaming __arm_out("za") {
     float *v = (float *)params[0];
@@ -119,14 +119,14 @@ void qkvlinear_fmopa_f32(float *xt, float *wqkv, float *biasq, float *biask, flo
 }
 
 // =============================================================================
-// qkvlinear_fmopa_f64: SME FMOPA-based fused QKV projection for float64
+// qkvdense_fmopa_f64: SME FMOPA-based fused QKV projection for float64
 // =============================================================================
 //
 // Same algorithm with 8x8 tiles for float64.
 //
-// func qkvlinear_fmopa_f64(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
+// func qkvdense_fmopa_f64(xt, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
 // params: [0]=v pointer (as long), [1]=batch, [2]=in, [3]=qd, [4]=kvd
-void qkvlinear_fmopa_f64(double *xt, double *wqkv, double *biasq, double *biask, double *biasv,
+void qkvdense_fmopa_f64(double *xt, double *wqkv, double *biasq, double *biask, double *biasv,
                             double *q, double *k, long *params)
     __arm_streaming __arm_out("za") {
     double *v = (double *)params[0];

@@ -16,9 +16,9 @@ package nn
 
 import "github.com/ajroetker/go-highway/hwy"
 
-//go:generate go run ../../../cmd/hwygen -input qkvlinear_base.go -output . -targets avx2,avx512,neon,fallback
+//go:generate go run ../../../cmd/hwygen -input qkvdense_base.go -output . -targets avx2,avx512,neon,fallback
 
-// BaseQKVLinear computes a fused QKV projection: a single matmul against stacked
+// BaseQKVDense computes a fused QKV projection: a single matmul against stacked
 // Q/K/V weights, then splits and adds per-segment biases.
 //
 //   - x:      [batchSize, inFeatures] (row-major)
@@ -33,26 +33,26 @@ import "github.com/ajroetker/go-highway/hwy"
 // This fuses the matmul, scatter, and bias-add into a single pass, avoiding
 // a temporary buffer and separate scatter copy. Each output row is computed
 // via SIMD dot-product accumulation with 4-row unrolling on batchSize.
-func BaseQKVLinear[T hwy.Floats](
+func BaseQKVDense[T hwy.Floats](
 	x, wQKV, biasQ, biasK, biasV, q, k, v []T,
 	batchSize, inFeatures, qDim, kvDim int,
 ) {
 	totalOut := qDim + 2*kvDim
 
 	if len(x) < batchSize*inFeatures {
-		panic("qkvlinear: x slice too short")
+		panic("qkvdense: x slice too short")
 	}
 	if len(wQKV) < totalOut*inFeatures {
-		panic("qkvlinear: wQKV slice too short")
+		panic("qkvdense: wQKV slice too short")
 	}
 	if len(q) < batchSize*qDim {
-		panic("qkvlinear: q slice too short")
+		panic("qkvdense: q slice too short")
 	}
 	if len(k) < batchSize*kvDim {
-		panic("qkvlinear: k slice too short")
+		panic("qkvdense: k slice too short")
 	}
 	if len(v) < batchSize*kvDim {
-		panic("qkvlinear: v slice too short")
+		panic("qkvdense: v slice too short")
 	}
 
 	lanes := hwy.Zero[T]().NumLanes()

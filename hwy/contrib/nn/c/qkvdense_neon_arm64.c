@@ -24,12 +24,12 @@
 #include <arm_neon.h>
 
 // =============================================================================
-// qkvlinear_neon_f32: Fused QKV projection for float32
+// qkvdense_neon_f32: Fused QKV projection for float32
 // =============================================================================
 //
-// func qkvlinear_neon_f32(x, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
+// func qkvdense_neon_f32(x, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
 // params: [0]=v pointer (as long), [1]=batch, [2]=in, [3]=qd, [4]=kvd
-void qkvlinear_neon_f32(float *x, float *wqkv, float *biasq, float *biask, float *biasv,
+void qkvdense_neon_f32(float *x, float *wqkv, float *biasq, float *biask, float *biasv,
                           float *q, float *k, long *params) {
     float *v = (float *)params[0];
     long batch = params[1];
@@ -106,12 +106,12 @@ void qkvlinear_neon_f32(float *x, float *wqkv, float *biasq, float *biask, float
 }
 
 // =============================================================================
-// qkvlinear_neon_f64: Fused QKV projection for float64
+// qkvdense_neon_f64: Fused QKV projection for float64
 // =============================================================================
 //
-// func qkvlinear_neon_f64(x, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
+// func qkvdense_neon_f64(x, wqkv, biasq, biask, biasv, q, k, params unsafe.Pointer)
 // params: [0]=v pointer (as long), [1]=batch, [2]=in, [3]=qd, [4]=kvd
-void qkvlinear_neon_f64(double *x, double *wqkv, double *biasq, double *biask, double *biasv,
+void qkvdense_neon_f64(double *x, double *wqkv, double *biasq, double *biask, double *biasv,
                           double *q, double *k, long *params) {
     double *v = (double *)params[0];
     long batch = params[1];

@@ -4,9 +4,9 @@
 // 	clang   21.1.8
 // 	objdump 2.45.1
 // flags: -O3
-// source: ../c/qkvlinear_neon_arm64.c
+// source: ../c/qkvdense_neon_arm64.c
 
-TEXT ·qkvlinear_neon_f32(SB), $96-64
+TEXT ·qkvdense_neon_f32(SB), $96-64
 	MOVD x+0(FP), R0
 	MOVD wqkv+8(FP), R1
 	MOVD biasq+16(FP), R2
@@ -506,7 +506,7 @@ BB0_71:
 	WORD $0xf9400bf9 // ldr	x25, [sp, #16]                  ; 8-byte Folded Reload
 	RET
 
-TEXT ·qkvlinear_neon_f64(SB), $80-64
+TEXT ·qkvdense_neon_f64(SB), $80-64
 	MOVD x+0(FP), R0
 	MOVD wqkv+8(FP), R1
 	MOVD biasq+16(FP), R2

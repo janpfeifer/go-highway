@@ -28,8 +28,8 @@
 //   - DenseActivationAuto - Dense + fused activation (GELU, ReLU, SiLU, Tanh)
 //
 // Fused projection operations:
-//   - QKVLinear - Fused QKV projection: x @ wQKV^T -> q, k, v with bias
-//   - QKVLinearAuto - Composition-based QKV using MatMulKLastAuto + scatter + bias
+//   - QKVDense - Fused QKV projection: x @ wQKV^T -> q, k, v with bias
+//   - QKVDenseAuto - Composition-based QKV using MatMulKLastAuto + scatter + bias
 //
 // Attention operations:
 //   - SDPA - Scaled Dot-Product Attention: softmax(Q@K^T * scale + mask) @ V

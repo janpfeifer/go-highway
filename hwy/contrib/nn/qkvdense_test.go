@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-func TestQKVLinearAuto(t *testing.T) {
+func TestQKVDenseAuto(t *testing.T) {
 	tests := []struct {
 		name       string
 		batchSize  int
@@ -75,9 +75,9 @@ func TestQKVLinearAuto(t *testing.T) {
 			scalarK := make([]float32, tt.batchSize*tt.kvDim)
 			scalarV := make([]float32, tt.batchSize*tt.kvDim)
 
-			QKVLinearAuto(x, wQKV, biasQ, biasK, biasV, autoQ, autoK, autoV,
+			QKVDenseAuto(x, wQKV, biasQ, biasK, biasV, autoQ, autoK, autoV,
 				tt.batchSize, tt.inFeatures, tt.qDim, tt.kvDim)
-			QKVLinearScalar(x, wQKV, biasQ, biasK, biasV, scalarQ, scalarK, scalarV,
+			QKVDenseScalar(x, wQKV, biasQ, biasK, biasV, scalarQ, scalarK, scalarV,
 				tt.batchSize, tt.inFeatures, tt.qDim, tt.kvDim)
 
 			compareSlices(t, "Q", autoQ, scalarQ)
@@ -87,7 +87,7 @@ func TestQKVLinearAuto(t *testing.T) {
 	}
 }
 
-func TestQKVLinearBase(t *testing.T) {
+func TestQKVDenseBase(t *testing.T) {
 	batchSize, inFeatures, qDim, kvDim := 4, 32, 16, 16
 
 	x := make([]float32, batchSize*inFeatures)
@@ -120,9 +120,9 @@ func TestQKVLinearBase(t *testing.T) {
 	scalarK := make([]float32, batchSize*kvDim)
 	scalarV := make([]float32, batchSize*kvDim)
 
-	QKVLinear(x, wQKV, biasQ, biasK, biasV, baseQ, baseK, baseV,
+	QKVDense(x, wQKV, biasQ, biasK, biasV, baseQ, baseK, baseV,
 		batchSize, inFeatures, qDim, kvDim)
-	QKVLinearScalar(x, wQKV, biasQ, biasK, biasV, scalarQ, scalarK, scalarV,
+	QKVDenseScalar(x, wQKV, biasQ, biasK, biasV, scalarQ, scalarK, scalarV,
 		batchSize, inFeatures, qDim, kvDim)
 
 	compareSlices(t, "Q", baseQ, scalarQ)
@@ -130,7 +130,7 @@ func TestQKVLinearBase(t *testing.T) {
 	compareSlices(t, "V", baseV, scalarV)
 }
 
-func TestQKVLinearEquivalence(t *testing.T) {
+func TestQKVDenseEquivalence(t *testing.T) {
 	// Verify fused QKV == 3 separate DenseAuto calls
 	batchSize, inFeatures, qDim, kvDim := 2, 64, 32, 32
 	totalOut := qDim + 2*kvDim
@@ -161,7 +161,7 @@ func TestQKVLinearEquivalence(t *testing.T) {
 	fusedQ := make([]float32, batchSize*qDim)
 	fusedK := make([]float32, batchSize*kvDim)
 	fusedV := make([]float32, batchSize*kvDim)
-	QKVLinearAuto(x, wQKV, biasQ, biasK, biasV, fusedQ, fusedK, fusedV,
+	QKVDenseAuto(x, wQKV, biasQ, biasK, biasV, fusedQ, fusedK, fusedV,
 		batchSize, inFeatures, qDim, kvDim)
 
 	// 3 separate DenseAuto calls
@@ -182,7 +182,7 @@ func TestQKVLinearEquivalence(t *testing.T) {
 	compareSlices(t, "V", fusedV, sepV)
 }
 
-func TestQKVLinearAuto64(t *testing.T) {
+func TestQKVDenseAuto64(t *testing.T) {
 	batchSize, inFeatures, qDim, kvDim := 2, 16, 8, 8
 
 	x := make([]float64, batchSize*inFeatures)
@@ -215,9 +215,9 @@ func TestQKVLinearAuto64(t *testing.T) {
 	scalarK := make([]float64, batchSize*kvDim)
 	scalarV := make([]float64, batchSize*kvDim)
 
-	QKVLinearAuto(x, wQKV, biasQ, biasK, biasV, autoQ, autoK, autoV,
+	QKVDenseAuto(x, wQKV, biasQ, biasK, biasV, autoQ, autoK, autoV,
 		batchSize, inFeatures, qDim, kvDim)
-	QKVLinearScalar(x, wQKV, biasQ, biasK, biasV, scalarQ, scalarK, scalarV,
+	QKVDenseScalar(x, wQKV, biasQ, biasK, biasV, scalarQ, scalarK, scalarV,
 		batchSize, inFeatures, qDim, kvDim)
 
 	for i := range autoQ {
@@ -237,7 +237,7 @@ func TestQKVLinearAuto64(t *testing.T) {
 	}
 }
 
-func BenchmarkQKVLinear(b *testing.B) {
+func BenchmarkQKVDense(b *testing.B) {
 	configs := []struct {
 		batch, in, qDim, kvDim int
 	}{
@@ -269,14 +269,14 @@ func BenchmarkQKVLinear(b *testing.B) {
 
 		b.Run("Auto/"+label, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				QKVLinearAuto(x, wQKV, biasQ, biasK, biasV, q, k, v,
+				QKVDenseAuto(x, wQKV, biasQ, biasK, biasV, q, k, v,
 					c.batch, c.in, c.qDim, c.kvDim)
 			}
 		})
 
 		b.Run("Base/"+label, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				QKVLinear(x, wQKV, biasQ, biasK, biasV, q, k, v,
+				QKVDense(x, wQKV, biasQ, biasK, biasV, q, k, v,
 					c.batch, c.in, c.qDim, c.kvDim)
 			}
 		})

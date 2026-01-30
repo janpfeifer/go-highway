@@ -140,14 +140,14 @@ func sdpaCausalNEONF64(q, k, v, scores, output []float64, seqLen, kvLen, headDim
 	asm.SDPACausalNeonF64(q, k, v, scores, output, seqLen, kvLen, headDim, scale)
 }
 
-// qkvlinearNEONF32 uses GOAT-generated NEON assembly for f32 QKV projection.
-func qkvlinearNEONF32(x, wQKV, biasQ, biasK, biasV, q, k, v []float32, batchSize, inFeatures, qDim, kvDim int) {
-	asm.QKVLinearNEONF32(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
+// qkvdenseNEONF32 uses GOAT-generated NEON assembly for f32 QKV projection.
+func qkvdenseNEONF32(x, wQKV, biasQ, biasK, biasV, q, k, v []float32, batchSize, inFeatures, qDim, kvDim int) {
+	asm.QKVDenseNEONF32(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
 }
 
-// qkvlinearNEONF64 uses GOAT-generated NEON assembly for f64 QKV projection.
-func qkvlinearNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v []float64, batchSize, inFeatures, qDim, kvDim int) {
-	asm.QKVLinearNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
+// qkvdenseNEONF64 uses GOAT-generated NEON assembly for f64 QKV projection.
+func qkvdenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v []float64, batchSize, inFeatures, qDim, kvDim int) {
+	asm.QKVDenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
 }
 
 func init() {
@@ -169,9 +169,9 @@ func init() {
 	SDPACausalFloat32 = sdpaCausalNEONF32
 	SDPACausalFloat64 = sdpaCausalNEONF64
 
-	// Override QKVLinear dispatch with GOAT NEON implementations
-	QKVLinearFloat32 = qkvlinearNEONF32
-	QKVLinearFloat64 = qkvlinearNEONF64
+	// Override QKVDense dispatch with GOAT NEON implementations
+	QKVDenseFloat32 = qkvdenseNEONF32
+	QKVDenseFloat64 = qkvdenseNEONF64
 
 	// Float16/BFloat16 use the hwygen-generated promoted implementations
 	// (promote to f32, compute, demote) which are already efficient enough
