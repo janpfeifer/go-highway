@@ -24,7 +24,10 @@
 package nn
 
 import (
+	"sync"
+
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/matmul"
 	"github.com/ajroetker/go-highway/hwy/contrib/nn/asm"
 )
 
@@ -150,6 +153,143 @@ func qkvdenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v []float64, batchSize,
 	asm.QKVDenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
 }
 
+// =============================================================================
+// SME SDPA adapter functions
+// =============================================================================
+
+// Transpose buffer pools for SME adapters
+var smeTransposePool32 = sync.Pool{
+	New: func() any { return make([]float32, 0, 256*256) },
+}
+
+var smeTransposePool64 = sync.Pool{
+	New: func() any { return make([]float64, 0, 256*256) },
+}
+
+// sdpaSMEF32 decomposes SDPA into multi-tile FMOPA matmul + Go softmax.
+// Step 1: scores = Q @ K^T (via MatMulKLast, which uses multi-tile FMOPA)
+// Step 2: scale scores, add mask, row-wise softmax (in Go)
+// Step 3: output = scores @ V (via BlockedMatMul, which uses multi-tile FMOPA)
+func sdpaSMEF32(q, k, v, mask, scores, output []float32, seqLen, kvLen, headDim int, scale float32) {
+	if seqLen%16 != 0 || kvLen%16 != 0 || headDim%16 != 0 ||
+		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+		sdpaNEONF32(q, k, v, mask, scores, output, seqLen, kvLen, headDim, scale)
+		return
+	}
+
+	matmul.MatMulKLastFloat32(q, k, scores, seqLen, kvLen, headDim)
+	scaleMaskSoftmax(scores, mask, seqLen, kvLen, scale)
+	matmul.BlockedMatMulFloat32(scores, v, output, seqLen, headDim, kvLen)
+}
+
+// sdpaSMEF64 decomposes SDPA into multi-tile FMOPA matmul + Go softmax (float64).
+func sdpaSMEF64(q, k, v, mask, scores, output []float64, seqLen, kvLen, headDim int, scale float64) {
+	if seqLen%8 != 0 || kvLen%8 != 0 || headDim%8 != 0 ||
+		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+		sdpaNEONF64(q, k, v, mask, scores, output, seqLen, kvLen, headDim, scale)
+		return
+	}
+
+	matmul.MatMulKLastFloat64(q, k, scores, seqLen, kvLen, headDim)
+	scaleMaskSoftmax(scores, mask, seqLen, kvLen, scale)
+	matmul.BlockedMatMulFloat64(scores, v, output, seqLen, headDim, kvLen)
+}
+
+// scaleMaskSoftmax scales scores, adds mask, and applies row-wise softmax in-place.
+func scaleMaskSoftmax[T hwy.Floats](scores, mask []T, seqLen, kvLen int, scale T) {
+	for i := 0; i < seqLen; i++ {
+		row := scores[i*kvLen : (i+1)*kvLen]
+
+		if mask != nil {
+			mRow := mask[i*kvLen : (i+1)*kvLen]
+			for j := range row {
+				row[j] = row[j]*scale + mRow[j]
+			}
+		} else {
+			for j := range row {
+				row[j] *= scale
+			}
+		}
+
+		SoftmaxInPlace(row)
+	}
+}
+
+// =============================================================================
+// SME QKVDense adapter functions
+// =============================================================================
+
+// qkvdenseSMEF32 adapts the dispatch QKVDense signature for SME assembly which
+// expects pre-transposed x and wQKV inputs.
+func qkvdenseSMEF32(x, wQKV, biasQ, biasK, biasV, q, k, v []float32, batchSize, inFeatures, qDim, kvDim int) {
+	totalOut := qDim + 2*kvDim
+	// Check alignment (batchSize and totalOut multiples of 16) and minimum size
+	if batchSize%16 != 0 || totalOut%16 != 0 || inFeatures%16 != 0 ||
+		batchSize < minDimForSDPASME || totalOut < minDimForSDPASME {
+		qkvdenseNEONF32(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
+		return
+	}
+
+	// Transpose x [batchSize, inFeatures] → xt [inFeatures, batchSize]
+	xtSize := inFeatures * batchSize
+	xtBuf := smeTransposePool32.Get().([]float32)
+	if cap(xtBuf) < xtSize {
+		xtBuf = make([]float32, xtSize)
+	} else {
+		xtBuf = xtBuf[:xtSize]
+	}
+	matmul.Transpose2D(x, batchSize, inFeatures, xtBuf)
+
+	// Transpose wQKV [totalOut, inFeatures] → wqkv [inFeatures, totalOut]
+	wSize := inFeatures * totalOut
+	wBuf := smeTransposePool32.Get().([]float32)
+	if cap(wBuf) < wSize {
+		wBuf = make([]float32, wSize)
+	} else {
+		wBuf = wBuf[:wSize]
+	}
+	matmul.Transpose2D(wQKV, totalOut, inFeatures, wBuf)
+
+	asm.QKVDenseFMOPAF32(xtBuf, wBuf, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
+
+	smeTransposePool32.Put(xtBuf)
+	smeTransposePool32.Put(wBuf)
+}
+
+// qkvdenseSMEF64 adapts the dispatch QKVDense signature for float64 SME assembly.
+func qkvdenseSMEF64(x, wQKV, biasQ, biasK, biasV, q, k, v []float64, batchSize, inFeatures, qDim, kvDim int) {
+	totalOut := qDim + 2*kvDim
+	// f64 uses 8-wide tiles
+	if batchSize%8 != 0 || totalOut%8 != 0 || inFeatures%8 != 0 ||
+		batchSize < minDimForSDPASME || totalOut < minDimForSDPASME {
+		qkvdenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
+		return
+	}
+
+	xtSize := inFeatures * batchSize
+	xtBuf := smeTransposePool64.Get().([]float64)
+	if cap(xtBuf) < xtSize {
+		xtBuf = make([]float64, xtSize)
+	} else {
+		xtBuf = xtBuf[:xtSize]
+	}
+	matmul.Transpose2D(x, batchSize, inFeatures, xtBuf)
+
+	wSize := inFeatures * totalOut
+	wBuf := smeTransposePool64.Get().([]float64)
+	if cap(wBuf) < wSize {
+		wBuf = make([]float64, wSize)
+	} else {
+		wBuf = wBuf[:wSize]
+	}
+	matmul.Transpose2D(wQKV, totalOut, inFeatures, wBuf)
+
+	asm.QKVDenseFMOPAF64(xtBuf, wBuf, biasQ, biasK, biasV, q, k, v, batchSize, inFeatures, qDim, kvDim)
+
+	smeTransposePool64.Put(xtBuf)
+	smeTransposePool64.Put(wBuf)
+}
+
 func init() {
 	if hwy.NoSimdEnv() {
 		return
@@ -163,15 +303,24 @@ func init() {
 	SoftmaxFloat32 = softmaxNEONF32
 	SoftmaxFloat64 = softmaxNEONF64
 
-	// Override SDPA dispatch with GOAT NEON implementations
-	SDPAFloat32 = sdpaNEONF32
-	SDPAFloat64 = sdpaNEONF64
+	// Override SDPA and QKVDense dispatch
+	if hwy.HasSME() {
+		// SME FMOPA provides higher throughput for aligned dimensions.
+		// The SME adapters check alignment and fall back to NEON internally.
+		SDPAFloat32 = sdpaSMEF32
+		SDPAFloat64 = sdpaSMEF64
+		QKVDenseFloat32 = qkvdenseSMEF32
+		QKVDenseFloat64 = qkvdenseSMEF64
+	} else {
+		SDPAFloat32 = sdpaNEONF32
+		SDPAFloat64 = sdpaNEONF64
+		QKVDenseFloat32 = qkvdenseNEONF32
+		QKVDenseFloat64 = qkvdenseNEONF64
+	}
+
+	// Causal SDPA stays on NEON (no SME causal kernel exists)
 	SDPACausalFloat32 = sdpaCausalNEONF32
 	SDPACausalFloat64 = sdpaCausalNEONF64
-
-	// Override QKVDense dispatch with GOAT NEON implementations
-	QKVDenseFloat32 = qkvdenseNEONF32
-	QKVDenseFloat64 = qkvdenseNEONF64
 
 	// Float16/BFloat16 use the hwygen-generated promoted implementations
 	// (promote to f32, compute, demote) which are already efficient enough
