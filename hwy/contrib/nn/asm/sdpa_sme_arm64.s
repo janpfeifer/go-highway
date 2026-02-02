@@ -14,15 +14,15 @@ TEXT ·sdpa_fmopa_f32(SB), $11760-56
 	MOVD output+32(FP), R4
 	MOVD pdims+40(FP), R5
 	MOVD pscale+48(FP), R6
-	WORD $0xf90203f9       // str	x25, [sp, #1024]                ; 8-byte Folded Spill
-	WORD $0xf90207f8       // str	x24, [sp, #1032]                ; 8-byte Folded Spill
-	WORD $0xf9020bf7       // str	x23, [sp, #1040]                ; 8-byte Folded Spill
-	WORD $0xf9020ff6       // str	x22, [sp, #1048]                ; 8-byte Folded Spill
-	WORD $0xf90213f5       // str	x21, [sp, #1056]                ; 8-byte Folded Spill
-	WORD $0xf90217f4       // str	x20, [sp, #1064]                ; 8-byte Folded Spill
-	WORD $0xf9021bf3       // str	x19, [sp, #1072]                ; 8-byte Folded Spill
-	WORD $0xf9021ffd       // str	x29, [sp, #1080]                ; 8-byte Folded Spill
-	WORD $0xf90223fe       // str	x30, [sp, #1088]                ; 8-byte Folded Spill
+	WORD $0xf916d3f9       // str	x25, [sp, #1024]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916d7f8       // str	x24, [sp, #1032]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916dbf7       // str	x23, [sp, #1040]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916dff6       // str	x22, [sp, #1048]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916e3f5       // str	x21, [sp, #1056]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916e7f4       // str	x20, [sp, #1064]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916ebf3       // str	x19, [sp, #1072]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916effd       // str	x29, [sp, #1080]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf916f3fe       // str	x30, [sp, #1088]                ; 8-byte Folded Spill [offset adjusted]
 	WORD $0xf9020be4       // str	x4, [sp, #1040]                 ; 8-byte Folded Spill
 	WORD $0xf9020fe3       // str	x3, [sp, #1048]                 ; 8-byte Folded Spill
 	WORD $0xa9058be1       // stp	x1, x2, [sp, #88]               ; 16-byte Folded Spill
@@ -35,15 +35,15 @@ TEXT ·sdpa_fmopa_f32(SB), $11760-56
 	BGE  BB0_2
 
 BB0_1:
-	WORD $0xf94223fe // ldr	x30, [sp, #1088]                ; 8-byte Folded Reload
-	WORD $0xf9421ffd // ldr	x29, [sp, #1080]                ; 8-byte Folded Reload
-	WORD $0xf9421bf3 // ldr	x19, [sp, #1072]                ; 8-byte Folded Reload
-	WORD $0xf94217f4 // ldr	x20, [sp, #1064]                ; 8-byte Folded Reload
-	WORD $0xf94213f5 // ldr	x21, [sp, #1056]                ; 8-byte Folded Reload
-	WORD $0xf9420ff6 // ldr	x22, [sp, #1048]                ; 8-byte Folded Reload
-	WORD $0xf9420bf7 // ldr	x23, [sp, #1040]                ; 8-byte Folded Reload
-	WORD $0xf94207f8 // ldr	x24, [sp, #1032]                ; 8-byte Folded Reload
-	WORD $0xf94203f9 // ldr	x25, [sp, #1024]                ; 8-byte Folded Reload
+	WORD $0xf956f3fe // ldr	x30, [sp, #1088]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956effd // ldr	x29, [sp, #1080]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956ebf3 // ldr	x19, [sp, #1072]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956e7f4 // ldr	x20, [sp, #1064]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956e3f5 // ldr	x21, [sp, #1056]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956dff6 // ldr	x22, [sp, #1048]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956dbf7 // ldr	x23, [sp, #1040]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956d7f8 // ldr	x24, [sp, #1032]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf956d3f9 // ldr	x25, [sp, #1024]                ; 8-byte Folded Reload [offset adjusted]
 	WORD $0xd503467f // smstop	sm
 	RET
 
@@ -1996,15 +1996,15 @@ TEXT ·sdpa_fmopa_f64(SB), $7216-56
 	MOVD output+32(FP), R4
 	MOVD pdims+40(FP), R5
 	MOVD pscale+48(FP), R6
-	WORD $0xf90203f9       // str	x25, [sp, #1024]                ; 8-byte Folded Spill
-	WORD $0xf90207f8       // str	x24, [sp, #1032]                ; 8-byte Folded Spill
-	WORD $0xf9020bf7       // str	x23, [sp, #1040]                ; 8-byte Folded Spill
-	WORD $0xf9020ff6       // str	x22, [sp, #1048]                ; 8-byte Folded Spill
-	WORD $0xf90213f5       // str	x21, [sp, #1056]                ; 8-byte Folded Spill
-	WORD $0xf90217f4       // str	x20, [sp, #1064]                ; 8-byte Folded Spill
-	WORD $0xf9021bf3       // str	x19, [sp, #1072]                ; 8-byte Folded Spill
-	WORD $0xf9021ffd       // str	x29, [sp, #1080]                ; 8-byte Folded Spill
-	WORD $0xf90223fe       // str	x30, [sp, #1088]                ; 8-byte Folded Spill
+	WORD $0xf90df3f9       // str	x25, [sp, #1024]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90df7f8       // str	x24, [sp, #1032]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90dfbf7       // str	x23, [sp, #1040]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90dfff6       // str	x22, [sp, #1048]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90e03f5       // str	x21, [sp, #1056]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90e07f4       // str	x20, [sp, #1064]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90e0bf3       // str	x19, [sp, #1072]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90e0ffd       // str	x29, [sp, #1080]                ; 8-byte Folded Spill [offset adjusted]
+	WORD $0xf90e13fe       // str	x30, [sp, #1088]                ; 8-byte Folded Spill [offset adjusted]
 	WORD $0xf9012fe3       // str	x3, [sp, #600]                  ; 8-byte Folded Spill
 	WORD $0xa9018be1       // stp	x1, x2, [sp, #24]               ; 16-byte Folded Spill
 	WORD $0xf900a7e0       // str	x0, [sp, #328]                  ; 8-byte Folded Spill
@@ -2016,15 +2016,15 @@ TEXT ·sdpa_fmopa_f64(SB), $7216-56
 	BGE  BB1_2
 
 BB1_1:
-	WORD $0xf94223fe // ldr	x30, [sp, #1088]                ; 8-byte Folded Reload
-	WORD $0xf9421ffd // ldr	x29, [sp, #1080]                ; 8-byte Folded Reload
-	WORD $0xf9421bf3 // ldr	x19, [sp, #1072]                ; 8-byte Folded Reload
-	WORD $0xf94217f4 // ldr	x20, [sp, #1064]                ; 8-byte Folded Reload
-	WORD $0xf94213f5 // ldr	x21, [sp, #1056]                ; 8-byte Folded Reload
-	WORD $0xf9420ff6 // ldr	x22, [sp, #1048]                ; 8-byte Folded Reload
-	WORD $0xf9420bf7 // ldr	x23, [sp, #1040]                ; 8-byte Folded Reload
-	WORD $0xf94207f8 // ldr	x24, [sp, #1032]                ; 8-byte Folded Reload
-	WORD $0xf94203f9 // ldr	x25, [sp, #1024]                ; 8-byte Folded Reload
+	WORD $0xf94e13fe // ldr	x30, [sp, #1088]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94e0ffd // ldr	x29, [sp, #1080]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94e0bf3 // ldr	x19, [sp, #1072]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94e07f4 // ldr	x20, [sp, #1064]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94e03f5 // ldr	x21, [sp, #1056]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94dfff6 // ldr	x22, [sp, #1048]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94dfbf7 // ldr	x23, [sp, #1040]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94df7f8 // ldr	x24, [sp, #1032]                ; 8-byte Folded Reload [offset adjusted]
+	WORD $0xf94df3f9 // ldr	x25, [sp, #1024]                ; 8-byte Folded Reload [offset adjusted]
 	WORD $0xd503467f // smstop	sm
 	RET
 

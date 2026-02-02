@@ -155,6 +155,106 @@ func TestMatMulKLast(t *testing.T) {
 	}
 }
 
+// TestMatMulKLastUnalignedSME tests KLast matmul with SME-eligible but non-aligned dims.
+// These dimensions are >= 32 (minDimForSMEKLast) but not multiples of 16 (f32 tile size).
+func TestMatMulKLastUnalignedSME(t *testing.T) {
+	t.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	testCases := []struct {
+		m, n, k int
+	}{
+		{33, 33, 33},
+		{50, 50, 50},
+		{100, 100, 100},
+		{33, 50, 37},
+		{64, 33, 48},     // M aligned, N not
+		{33, 64, 100},    // M not, N aligned, K not
+		{48, 48, 33},     // M,N aligned, K not
+		{1, 100, 200},    // single row, large non-aligned N,K
+		{4, 200, 300},    // small M, large non-aligned N,K
+	}
+
+	for _, tc := range testCases {
+		name := sizeStr(tc.m) + "x" + sizeStr(tc.n) + "x" + sizeStr(tc.k)
+		t.Run(name, func(t *testing.T) {
+			a := make([]float32, tc.m*tc.k)
+			b := make([]float32, tc.n*tc.k)
+			c := make([]float32, tc.m*tc.n)
+			expected := make([]float32, tc.m*tc.n)
+
+			for i := range a {
+				a[i] = rand.Float32()*2 - 1
+			}
+			for i := range b {
+				b[i] = rand.Float32()*2 - 1
+			}
+
+			matmulKLastReference(a, b, expected, tc.m, tc.n, tc.k)
+			MatMulKLast(a, b, c, tc.m, tc.n, tc.k)
+
+			var maxErr float32
+			for i := range c {
+				err := float32(math.Abs(float64(c[i] - expected[i])))
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			tolerance := float32(1e-4) * float32(tc.k)
+			if maxErr > tolerance {
+				t.Errorf("max error %e exceeds tolerance %e", maxErr, tolerance)
+			}
+		})
+	}
+}
+
+// TestMatMulKLastFloat64UnalignedSME tests f64 KLast with non-aligned SME dims.
+// f64 tile size is 8, so dims not divisible by 8 but >= 32 exercise the padding path.
+func TestMatMulKLastFloat64UnalignedSME(t *testing.T) {
+	t.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	testCases := []struct {
+		m, n, k int
+	}{
+		{33, 33, 33},
+		{50, 50, 50},
+		{33, 50, 37},
+		{100, 100, 100},
+	}
+
+	for _, tc := range testCases {
+		name := sizeStr(tc.m) + "x" + sizeStr(tc.n) + "x" + sizeStr(tc.k)
+		t.Run(name, func(t *testing.T) {
+			a := make([]float64, tc.m*tc.k)
+			b := make([]float64, tc.n*tc.k)
+			c := make([]float64, tc.m*tc.n)
+			expected := make([]float64, tc.m*tc.n)
+
+			for i := range a {
+				a[i] = float64(i%7) + 0.5
+			}
+			for i := range b {
+				b[i] = float64(i%11) + 0.25
+			}
+
+			matmulKLastReference64(a, b, expected, tc.m, tc.n, tc.k)
+			MatMulKLastFloat64(a, b, c, tc.m, tc.n, tc.k)
+
+			var maxErr float64
+			for i := range c {
+				err := math.Abs(c[i] - expected[i])
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			if maxErr > 1e-9 {
+				t.Errorf("max error %e exceeds threshold", maxErr)
+			}
+		})
+	}
+}
+
 func TestMatMulKLastNonSquare(t *testing.T) {
 	t.Logf("Dispatch level: %s", hwy.CurrentName())
 

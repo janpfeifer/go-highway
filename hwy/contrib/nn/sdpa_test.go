@@ -34,10 +34,16 @@ func TestSDPAAuto(t *testing.T) {
 		{"8x8x64/no_mask", 8, 8, 64, false},
 		{"8x16x64/no_mask", 8, 16, 64, false}, // seqLen != kvLen
 		{"16x16x128/no_mask", 16, 16, 128, false},
-		{"3x5x7/no_mask", 3, 5, 7, false}, // non-aligned
+		{"3x5x7/no_mask", 3, 5, 7, false},       // non-aligned (below SME threshold)
 		{"32x32x64/mask", 32, 32, 64, true},
 		{"64x64x64/no_mask", 64, 64, 64, false},
 		{"128x128x64/no_mask", 128, 128, 64, false},
+		// SME-eligible but non-aligned to tile boundary (exercises padding)
+		{"33x33x33/no_mask", 33, 33, 33, false},
+		{"50x50x50/no_mask", 50, 50, 50, false},
+		{"33x50x37/no_mask", 33, 50, 37, false},
+		{"33x33x33/mask", 33, 33, 33, true},
+		{"100x100x100/no_mask", 100, 100, 100, false},
 	}
 
 	for _, tt := range tests {
@@ -94,7 +100,11 @@ func TestSDPACausal(t *testing.T) {
 		{"8x8x64", 8, 8, 64},
 		{"4x8x32", 4, 8, 32}, // kvLen > seqLen (prefix caching)
 		{"16x16x64", 16, 16, 64},
-		{"3x5x7", 3, 5, 7}, // non-aligned
+		{"3x5x7", 3, 5, 7},   // non-aligned (below SME threshold)
+		{"33x33x33", 33, 33, 33},     // SME-eligible, non-aligned
+		{"50x50x50", 50, 50, 50},     // SME-eligible, non-aligned
+		{"33x50x37", 33, 50, 37},     // all different, non-aligned
+		{"100x100x100", 100, 100, 100},
 	}
 
 	for _, tt := range tests {
@@ -303,6 +313,50 @@ func TestMultiHeadSDPACausal(t *testing.T) {
 		if stdmath.IsNaN(float64(val)) || stdmath.IsInf(float64(val), 0) {
 			t.Errorf("output[%d] = %v (NaN/Inf)", i, val)
 		}
+	}
+}
+
+func TestSDPAAuto64UnalignedSME(t *testing.T) {
+	// f64 tile size is 8, so dims not divisible by 8 but >= 32 exercise padding
+	testCases := []struct {
+		seqLen, kvLen, headDim int
+	}{
+		{33, 33, 33},
+		{50, 50, 50},
+		{33, 50, 37},
+	}
+
+	for _, tc := range testCases {
+		name := fmt.Sprintf("%dx%dx%d", tc.seqLen, tc.kvLen, tc.headDim)
+		t.Run(name, func(t *testing.T) {
+			scale := 1.0 / stdmath.Sqrt(float64(tc.headDim))
+			q := make([]float64, tc.seqLen*tc.headDim)
+			k := make([]float64, tc.kvLen*tc.headDim)
+			v := make([]float64, tc.kvLen*tc.headDim)
+
+			for i := range q {
+				q[i] = float64(i)*0.01 - 0.5
+			}
+			for i := range k {
+				k[i] = float64(i)*0.008 - 0.4
+			}
+			for i := range v {
+				v[i] = float64(i)*0.006 - 0.3
+			}
+
+			autoOutput := make([]float64, tc.seqLen*tc.headDim)
+			scalarOutput := make([]float64, tc.seqLen*tc.headDim)
+			scalarScores := make([]float64, tc.seqLen*tc.kvLen)
+
+			SDPAAuto(q, k, v, nil, autoOutput, tc.seqLen, tc.kvLen, tc.headDim, scale)
+			SDPAScalar(q, k, v, nil, scalarScores, scalarOutput, tc.seqLen, tc.kvLen, tc.headDim, scale)
+
+			for i := range autoOutput {
+				if stdmath.Abs(autoOutput[i]-scalarOutput[i]) > 1e-6 {
+					t.Errorf("output[%d]: auto=%v, scalar=%v", i, autoOutput[i], scalarOutput[i])
+				}
+			}
+		})
 	}
 }
 

@@ -122,6 +122,59 @@ func TestMatMul256(t *testing.T) {
 	}
 }
 
+// TestMatMulUnalignedSME tests dimensions that are large enough for SME dispatch
+// (>= 32) but NOT aligned to tile boundaries (not multiples of 16 for f32).
+// This exercises the N/K padding paths added to avoid NEON fallback.
+func TestMatMulUnalignedSME(t *testing.T) {
+	t.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	testCases := []struct {
+		m, n, k int
+	}{
+		{33, 33, 33},     // just over tile boundary
+		{50, 50, 50},     // mid-range non-aligned
+		{100, 100, 100},  // large non-aligned
+		{33, 50, 37},     // all different, all non-aligned
+		{64, 33, 48},     // M aligned, N not, K aligned
+		{33, 64, 100},    // M not, N aligned, K not
+		{48, 48, 33},     // M,N aligned to 16, K not
+		{100, 200, 150},  // larger non-aligned
+	}
+
+	for _, tc := range testCases {
+		name := sizeStr(tc.m) + "x" + sizeStr(tc.n) + "x" + sizeStr(tc.k)
+		t.Run(name, func(t *testing.T) {
+			a := make([]float32, tc.m*tc.k)
+			b := make([]float32, tc.k*tc.n)
+			c := make([]float32, tc.m*tc.n)
+			expected := make([]float32, tc.m*tc.n)
+
+			for i := range a {
+				a[i] = rand.Float32()*2 - 1
+			}
+			for i := range b {
+				b[i] = rand.Float32()*2 - 1
+			}
+
+			matmulReference(a, b, expected, tc.m, tc.n, tc.k)
+			MatMul(a, b, c, tc.m, tc.n, tc.k)
+
+			var maxErr float32
+			for i := range c {
+				err := float32(math.Abs(float64(c[i] - expected[i])))
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			tolerance := float32(1e-4) * float32(tc.k)
+			if maxErr > tolerance {
+				t.Errorf("max error %e exceeds tolerance %e", maxErr, tolerance)
+			}
+		})
+	}
+}
+
 func TestMatMulLarge(t *testing.T) {
 	t.Logf("Dispatch level: %s", hwy.CurrentName())
 
@@ -479,6 +532,99 @@ func BenchmarkStreamingVsBlocked(b *testing.B) {
 			elapsed := b.Elapsed().Seconds()
 			gflops := flops * float64(b.N) / elapsed
 			b.ReportMetric(gflops, "GFLOPS")
+		})
+	}
+}
+
+// TestBlockedMatMulUnalignedSME tests blocked matmul with SME-eligible but non-aligned dims.
+func TestBlockedMatMulUnalignedSME(t *testing.T) {
+	testCases := []struct {
+		m, n, k int
+	}{
+		{33, 33, 33},
+		{50, 50, 50},
+		{100, 100, 100},
+		{33, 50, 37},
+		{48, 48, 33},
+	}
+
+	for _, tc := range testCases {
+		name := sizeStr(tc.m) + "x" + sizeStr(tc.n) + "x" + sizeStr(tc.k)
+		t.Run(name, func(t *testing.T) {
+			a := make([]float32, tc.m*tc.k)
+			b := make([]float32, tc.k*tc.n)
+			c := make([]float32, tc.m*tc.n)
+			expected := make([]float32, tc.m*tc.n)
+
+			for i := range a {
+				a[i] = rand.Float32()*2 - 1
+			}
+			for i := range b {
+				b[i] = rand.Float32()*2 - 1
+			}
+
+			matmulReference(a, b, expected, tc.m, tc.n, tc.k)
+			BlockedMatMul(a, b, c, tc.m, tc.n, tc.k)
+
+			var maxErr float32
+			for i := range c {
+				err := float32(math.Abs(float64(c[i] - expected[i])))
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			tolerance := float32(1e-4) * float32(tc.k)
+			if maxErr > tolerance {
+				t.Errorf("max error %e exceeds threshold %e", maxErr, tolerance)
+			}
+		})
+	}
+}
+
+// TestMatMulFloat64UnalignedSME tests float64 matmul with SME-eligible but non-aligned dims.
+// f64 tile size is 8, so dims not divisible by 8 but >= 32 exercise the padding path.
+func TestMatMulFloat64UnalignedSME(t *testing.T) {
+	t.Logf("Dispatch level: %s", hwy.CurrentName())
+
+	testCases := []struct {
+		m, n, k int
+	}{
+		{33, 33, 33},
+		{50, 50, 50},
+		{33, 50, 37},
+		{100, 100, 100},
+	}
+
+	for _, tc := range testCases {
+		name := sizeStr(tc.m) + "x" + sizeStr(tc.n) + "x" + sizeStr(tc.k)
+		t.Run(name, func(t *testing.T) {
+			a := make([]float64, tc.m*tc.k)
+			b := make([]float64, tc.k*tc.n)
+			c := make([]float64, tc.m*tc.n)
+			expected := make([]float64, tc.m*tc.n)
+
+			for i := range a {
+				a[i] = float64(i%7) + 0.5
+			}
+			for i := range b {
+				b[i] = float64(i%11) + 0.25
+			}
+
+			matmulReference64(a, b, expected, tc.m, tc.n, tc.k)
+			MatMulFloat64(a, b, c, tc.m, tc.n, tc.k)
+
+			var maxErr float64
+			for i := range c {
+				err := math.Abs(c[i] - expected[i])
+				if err > maxErr {
+					maxErr = err
+				}
+			}
+
+			if maxErr > 1e-9 {
+				t.Errorf("max error %e exceeds threshold", maxErr)
+			}
 		})
 	}
 }

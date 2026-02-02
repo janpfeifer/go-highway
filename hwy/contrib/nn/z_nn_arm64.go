@@ -24,6 +24,8 @@
 package nn
 
 import (
+	"math"
+
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/matmul"
 	"github.com/ajroetker/go-highway/hwy/contrib/nn/asm"
@@ -105,6 +107,45 @@ func softmaxNEONF64(input, output []float64) {
 const minDimForSDPANEON = 8
 const minDimForSDPASME = 32
 
+// fillNegInfColumns sets mask[i, kvLen:paddedKvLen] = -inf for all rows.
+// This prevents softmax from assigning weight to zero-padded KV positions.
+func fillNegInfColumns[T hwy.Floats](m []T, rows, kvLen, paddedKvLen int) {
+	var negInf T
+	switch any(negInf).(type) {
+	case float32:
+		negInf = T(float32(math.Inf(-1)))
+	case float64:
+		negInf = T(math.Inf(-1))
+	}
+	for i := range rows {
+		for j := kvLen; j < paddedKvLen; j++ {
+			m[i*paddedKvLen+j] = negInf
+		}
+	}
+}
+
+// buildCausalPaddingMask builds an explicit causal + padding mask for padded SDPA.
+// mask[i, j] = 0 if j <= i + offset AND j < kvLen, else -inf.
+func buildCausalPaddingMask[T hwy.Floats](m []T, seqLen, kvLen, paddedSeqLen, paddedKvLen int) {
+	offset := kvLen - seqLen
+	var zero, negInf T
+	switch any(zero).(type) {
+	case float32:
+		negInf = T(float32(math.Inf(-1)))
+	case float64:
+		negInf = T(math.Inf(-1))
+	}
+	for i := range paddedSeqLen {
+		for j := range paddedKvLen {
+			if i < seqLen && j < kvLen && j <= i+offset {
+				m[i*paddedKvLen+j] = zero
+			} else {
+				m[i*paddedKvLen+j] = negInf
+			}
+		}
+	}
+}
+
 // sdpaNEONF32 uses GOAT-generated NEON assembly for f32 SDPA.
 func sdpaNEONF32(q, k, v, mask, scores, output []float32, seqLen, kvLen, headDim int, scale float32) {
 	if seqLen < minDimForSDPANEON || kvLen < minDimForSDPANEON {
@@ -157,46 +198,167 @@ func qkvdenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v []float64, batchSize,
 
 // sdpaSMEF32 uses SME Flash Attention with online softmax via FMOPA.
 // Avoids materializing the full [seqLen, kvLen] scores matrix.
-// Falls back to NEON for unaligned or small dimensions.
+// Falls back to NEON for small dimensions; pads unaligned dimensions to tile boundary.
 func sdpaSMEF32(q, k, v, mask, scores, output []float32, seqLen, kvLen, headDim int, scale float32) {
-	if seqLen%16 != 0 || kvLen%16 != 0 || headDim%16 != 0 ||
-		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+	const tileSize = 16
+	paddedSeqLen := matmul.AlignUp(seqLen, tileSize)
+	paddedKvLen := matmul.AlignUp(kvLen, tileSize)
+	paddedHeadDim := matmul.AlignUp(headDim, tileSize)
+
+	if paddedSeqLen < minDimForSDPASME || paddedKvLen < minDimForSDPASME || paddedHeadDim < minDimForSDPASME {
 		sdpaNEONF32(q, k, v, mask, scores, output, seqLen, kvLen, headDim, scale)
 		return
 	}
 
-	// Transpose Q [seqLen, headDim] → qt [headDim, seqLen] for contiguous FMOPA loads
-	qt := getTempSlice[float32](headDim * seqLen)
+	needsPadSeq := paddedSeqLen != seqLen
+	needsPadKv := paddedKvLen != kvLen
+	needsPadHd := paddedHeadDim != headDim
+
+	// Pad Q [seqLen, headDim] → [paddedSeqLen, paddedHeadDim]
+	fmopaQ := q
+	if needsPadSeq || needsPadHd {
+		pq := getTempSlice[float32](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(pq)
+		matmul.PadMatrix2D(pq, q, seqLen, headDim, paddedSeqLen, paddedHeadDim)
+		fmopaQ = pq
+	}
+
+	// Pad K [kvLen, headDim] → [paddedKvLen, paddedHeadDim]
+	fmopaK := k
+	if needsPadKv || needsPadHd {
+		pk := getTempSlice[float32](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pk)
+		matmul.PadMatrix2D(pk, k, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaK = pk
+	}
+
+	// Pad V [kvLen, headDim] → [paddedKvLen, paddedHeadDim]
+	fmopaV := v
+	if needsPadKv || needsPadHd {
+		pv := getTempSlice[float32](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pv)
+		matmul.PadMatrix2D(pv, v, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaV = pv
+	}
+
+	// Build mask: when KV is padded, we MUST mask out padded columns with -inf
+	// to prevent softmax from assigning attention weight to zero-padded positions.
+	fmopaMask := mask
+	if needsPadKv {
+		pm := getTempSlice[float32](paddedSeqLen * paddedKvLen)
+		defer putTempSlice(pm)
+		if mask != nil {
+			matmul.PadMatrix2D(pm, mask, seqLen, kvLen, paddedSeqLen, paddedKvLen)
+		} else {
+			clear(pm)
+		}
+		fillNegInfColumns(pm, paddedSeqLen, kvLen, paddedKvLen)
+		fmopaMask = pm
+	} else if mask != nil && needsPadSeq {
+		pm := getTempSlice[float32](paddedSeqLen * paddedKvLen)
+		defer putTempSlice(pm)
+		matmul.PadMatrix2D(pm, mask, seqLen, kvLen, paddedSeqLen, paddedKvLen)
+		fmopaMask = pm
+	}
+
+	// Transpose Q [paddedSeqLen, paddedHeadDim] → qt [paddedHeadDim, paddedSeqLen]
+	qt := getTempSlice[float32](paddedHeadDim * paddedSeqLen)
 	defer putTempSlice(qt)
-	matmul.Transpose2D(q, seqLen, headDim, qt)
+	matmul.Transpose2D(fmopaQ, paddedSeqLen, paddedHeadDim, qt)
 
-	// Transpose K [kvLen, headDim] → kt [headDim, kvLen] for FMOPA column access
-	kt := getTempSlice[float32](headDim * kvLen)
+	// Transpose K [paddedKvLen, paddedHeadDim] → kt [paddedHeadDim, paddedKvLen]
+	kt := getTempSlice[float32](paddedHeadDim * paddedKvLen)
 	defer putTempSlice(kt)
-	matmul.Transpose2D(k, kvLen, headDim, kt)
+	matmul.Transpose2D(fmopaK, paddedKvLen, paddedHeadDim, kt)
 
-	asm.SDPAFMOPAF32(qt, kt, v, mask, output, seqLen, kvLen, headDim, scale)
+	if needsPadSeq || needsPadHd {
+		// Use padded output, then extract
+		paddedOut := getTempSlice[float32](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(paddedOut)
+		clear(paddedOut)
+		asm.SDPAFMOPAF32(qt, kt, fmopaV, fmopaMask, paddedOut, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+		matmul.ExtractMatrix2D(output, paddedOut, seqLen, headDim, paddedHeadDim)
+	} else {
+		asm.SDPAFMOPAF32(qt, kt, fmopaV, fmopaMask, output, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+	}
 }
 
 // sdpaSMEF64 uses SME Flash Attention with online softmax via FMOPA (float64).
 func sdpaSMEF64(q, k, v, mask, scores, output []float64, seqLen, kvLen, headDim int, scale float64) {
-	if seqLen%8 != 0 || kvLen%8 != 0 || headDim%8 != 0 ||
-		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+	const tileSize = 8
+	paddedSeqLen := matmul.AlignUp(seqLen, tileSize)
+	paddedKvLen := matmul.AlignUp(kvLen, tileSize)
+	paddedHeadDim := matmul.AlignUp(headDim, tileSize)
+
+	if paddedSeqLen < minDimForSDPASME || paddedKvLen < minDimForSDPASME || paddedHeadDim < minDimForSDPASME {
 		sdpaNEONF64(q, k, v, mask, scores, output, seqLen, kvLen, headDim, scale)
 		return
 	}
 
-	// Transpose Q [seqLen, headDim] → qt [headDim, seqLen] for contiguous FMOPA loads
-	qt := getTempSlice[float64](headDim * seqLen)
+	needsPadSeq := paddedSeqLen != seqLen
+	needsPadKv := paddedKvLen != kvLen
+	needsPadHd := paddedHeadDim != headDim
+
+	fmopaQ := q
+	if needsPadSeq || needsPadHd {
+		pq := getTempSlice[float64](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(pq)
+		matmul.PadMatrix2D(pq, q, seqLen, headDim, paddedSeqLen, paddedHeadDim)
+		fmopaQ = pq
+	}
+
+	fmopaK := k
+	if needsPadKv || needsPadHd {
+		pk := getTempSlice[float64](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pk)
+		matmul.PadMatrix2D(pk, k, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaK = pk
+	}
+
+	fmopaV := v
+	if needsPadKv || needsPadHd {
+		pv := getTempSlice[float64](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pv)
+		matmul.PadMatrix2D(pv, v, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaV = pv
+	}
+
+	// Build mask with -inf for padded KV columns
+	fmopaMask := mask
+	if needsPadKv {
+		pm := getTempSlice[float64](paddedSeqLen * paddedKvLen)
+		defer putTempSlice(pm)
+		if mask != nil {
+			matmul.PadMatrix2D(pm, mask, seqLen, kvLen, paddedSeqLen, paddedKvLen)
+		} else {
+			clear(pm)
+		}
+		fillNegInfColumns(pm, paddedSeqLen, kvLen, paddedKvLen)
+		fmopaMask = pm
+	} else if mask != nil && needsPadSeq {
+		pm := getTempSlice[float64](paddedSeqLen * paddedKvLen)
+		defer putTempSlice(pm)
+		matmul.PadMatrix2D(pm, mask, seqLen, kvLen, paddedSeqLen, paddedKvLen)
+		fmopaMask = pm
+	}
+
+	qt := getTempSlice[float64](paddedHeadDim * paddedSeqLen)
 	defer putTempSlice(qt)
-	matmul.Transpose2D(q, seqLen, headDim, qt)
+	matmul.Transpose2D(fmopaQ, paddedSeqLen, paddedHeadDim, qt)
 
-	// Transpose K [kvLen, headDim] → kt [headDim, kvLen] for FMOPA column access
-	kt := getTempSlice[float64](headDim * kvLen)
+	kt := getTempSlice[float64](paddedHeadDim * paddedKvLen)
 	defer putTempSlice(kt)
-	matmul.Transpose2D(k, kvLen, headDim, kt)
+	matmul.Transpose2D(fmopaK, paddedKvLen, paddedHeadDim, kt)
 
-	asm.SDPAFMOPAF64(qt, kt, v, mask, output, seqLen, kvLen, headDim, scale)
+	if needsPadSeq || needsPadHd {
+		paddedOut := getTempSlice[float64](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(paddedOut)
+		clear(paddedOut)
+		asm.SDPAFMOPAF64(qt, kt, fmopaV, fmopaMask, paddedOut, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+		matmul.ExtractMatrix2D(output, paddedOut, seqLen, headDim, paddedHeadDim)
+	} else {
+		asm.SDPAFMOPAF64(qt, kt, fmopaV, fmopaMask, output, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+	}
 }
 
 // =============================================================================
@@ -204,44 +366,149 @@ func sdpaSMEF64(q, k, v, mask, scores, output []float64, seqLen, kvLen, headDim 
 // =============================================================================
 
 // sdpaCausalSMEF32 uses SME Flash Attention with implicit causal masking for float32.
-// Falls back to NEON for unaligned or small dimensions.
+// Falls back to NEON for small dimensions; pads unaligned dimensions to tile boundary.
+// When padding is needed, uses the non-causal asm with an explicit combined
+// causal+padding mask to correctly handle padded KV positions.
 func sdpaCausalSMEF32(q, k, v, scores, output []float32, seqLen, kvLen, headDim int, scale float32) {
-	if seqLen%16 != 0 || kvLen%16 != 0 || headDim%16 != 0 ||
-		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+	const tileSize = 16
+	paddedSeqLen := matmul.AlignUp(seqLen, tileSize)
+	paddedKvLen := matmul.AlignUp(kvLen, tileSize)
+	paddedHeadDim := matmul.AlignUp(headDim, tileSize)
+
+	if paddedSeqLen < minDimForSDPASME || paddedKvLen < minDimForSDPASME || paddedHeadDim < minDimForSDPASME {
 		sdpaCausalNEONF32(q, k, v, scores, output, seqLen, kvLen, headDim, scale)
 		return
 	}
 
-	// Transpose Q [seqLen, headDim] → qt [headDim, seqLen]
-	qt := getTempSlice[float32](headDim * seqLen)
+	needsPadSeq := paddedSeqLen != seqLen
+	needsPadKv := paddedKvLen != kvLen
+	needsPadHd := paddedHeadDim != headDim
+
+	fmopaQ := q
+	if needsPadSeq || needsPadHd {
+		pq := getTempSlice[float32](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(pq)
+		matmul.PadMatrix2D(pq, q, seqLen, headDim, paddedSeqLen, paddedHeadDim)
+		fmopaQ = pq
+	}
+
+	fmopaK := k
+	if needsPadKv || needsPadHd {
+		pk := getTempSlice[float32](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pk)
+		matmul.PadMatrix2D(pk, k, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaK = pk
+	}
+
+	fmopaV := v
+	if needsPadKv || needsPadHd {
+		pv := getTempSlice[float32](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pv)
+		matmul.PadMatrix2D(pv, v, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaV = pv
+	}
+
+	qt := getTempSlice[float32](paddedHeadDim * paddedSeqLen)
 	defer putTempSlice(qt)
-	matmul.Transpose2D(q, seqLen, headDim, qt)
+	matmul.Transpose2D(fmopaQ, paddedSeqLen, paddedHeadDim, qt)
 
-	// Transpose K [kvLen, headDim] → kt [headDim, kvLen]
-	kt := getTempSlice[float32](headDim * kvLen)
+	kt := getTempSlice[float32](paddedHeadDim * paddedKvLen)
 	defer putTempSlice(kt)
-	matmul.Transpose2D(k, kvLen, headDim, kt)
+	matmul.Transpose2D(fmopaK, paddedKvLen, paddedHeadDim, kt)
 
-	asm.SDPACausalFMOPAF32(qt, kt, v, output, seqLen, kvLen, headDim, scale)
+	if needsPadSeq || needsPadKv {
+		// When padding, use non-causal asm with explicit causal+padding mask
+		// to correctly mask out padded KV positions.
+		cm := getTempSlice[float32](paddedSeqLen * paddedKvLen)
+		defer putTempSlice(cm)
+		buildCausalPaddingMask(cm, seqLen, kvLen, paddedSeqLen, paddedKvLen)
+
+		paddedOut := getTempSlice[float32](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(paddedOut)
+		clear(paddedOut)
+		asm.SDPAFMOPAF32(qt, kt, fmopaV, cm, paddedOut, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+		matmul.ExtractMatrix2D(output, paddedOut, seqLen, headDim, paddedHeadDim)
+	} else if needsPadHd {
+		paddedOut := getTempSlice[float32](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(paddedOut)
+		clear(paddedOut)
+		asm.SDPACausalFMOPAF32(qt, kt, fmopaV, paddedOut, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+		matmul.ExtractMatrix2D(output, paddedOut, seqLen, headDim, paddedHeadDim)
+	} else {
+		asm.SDPACausalFMOPAF32(qt, kt, fmopaV, output, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+	}
 }
 
 // sdpaCausalSMEF64 uses SME Flash Attention with implicit causal masking for float64.
+// When padding is needed, uses the non-causal asm with an explicit combined
+// causal+padding mask to correctly handle padded KV positions.
 func sdpaCausalSMEF64(q, k, v, scores, output []float64, seqLen, kvLen, headDim int, scale float64) {
-	if seqLen%8 != 0 || kvLen%8 != 0 || headDim%8 != 0 ||
-		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+	const tileSize = 8
+	paddedSeqLen := matmul.AlignUp(seqLen, tileSize)
+	paddedKvLen := matmul.AlignUp(kvLen, tileSize)
+	paddedHeadDim := matmul.AlignUp(headDim, tileSize)
+
+	if paddedSeqLen < minDimForSDPASME || paddedKvLen < minDimForSDPASME || paddedHeadDim < minDimForSDPASME {
 		sdpaCausalNEONF64(q, k, v, scores, output, seqLen, kvLen, headDim, scale)
 		return
 	}
 
-	qt := getTempSlice[float64](headDim * seqLen)
+	needsPadSeq := paddedSeqLen != seqLen
+	needsPadKv := paddedKvLen != kvLen
+	needsPadHd := paddedHeadDim != headDim
+
+	fmopaQ := q
+	if needsPadSeq || needsPadHd {
+		pq := getTempSlice[float64](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(pq)
+		matmul.PadMatrix2D(pq, q, seqLen, headDim, paddedSeqLen, paddedHeadDim)
+		fmopaQ = pq
+	}
+
+	fmopaK := k
+	if needsPadKv || needsPadHd {
+		pk := getTempSlice[float64](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pk)
+		matmul.PadMatrix2D(pk, k, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaK = pk
+	}
+
+	fmopaV := v
+	if needsPadKv || needsPadHd {
+		pv := getTempSlice[float64](paddedKvLen * paddedHeadDim)
+		defer putTempSlice(pv)
+		matmul.PadMatrix2D(pv, v, kvLen, headDim, paddedKvLen, paddedHeadDim)
+		fmopaV = pv
+	}
+
+	qt := getTempSlice[float64](paddedHeadDim * paddedSeqLen)
 	defer putTempSlice(qt)
-	matmul.Transpose2D(q, seqLen, headDim, qt)
+	matmul.Transpose2D(fmopaQ, paddedSeqLen, paddedHeadDim, qt)
 
-	kt := getTempSlice[float64](headDim * kvLen)
+	kt := getTempSlice[float64](paddedHeadDim * paddedKvLen)
 	defer putTempSlice(kt)
-	matmul.Transpose2D(k, kvLen, headDim, kt)
+	matmul.Transpose2D(fmopaK, paddedKvLen, paddedHeadDim, kt)
 
-	asm.SDPACausalFMOPAF64(qt, kt, v, output, seqLen, kvLen, headDim, scale)
+	if needsPadSeq || needsPadKv {
+		// When padding, use non-causal asm with explicit causal+padding mask
+		cm := getTempSlice[float64](paddedSeqLen * paddedKvLen)
+		defer putTempSlice(cm)
+		buildCausalPaddingMask(cm, seqLen, kvLen, paddedSeqLen, paddedKvLen)
+
+		paddedOut := getTempSlice[float64](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(paddedOut)
+		clear(paddedOut)
+		asm.SDPAFMOPAF64(qt, kt, fmopaV, cm, paddedOut, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+		matmul.ExtractMatrix2D(output, paddedOut, seqLen, headDim, paddedHeadDim)
+	} else if needsPadHd {
+		paddedOut := getTempSlice[float64](paddedSeqLen * paddedHeadDim)
+		defer putTempSlice(paddedOut)
+		clear(paddedOut)
+		asm.SDPACausalFMOPAF64(qt, kt, fmopaV, paddedOut, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+		matmul.ExtractMatrix2D(output, paddedOut, seqLen, headDim, paddedHeadDim)
+	} else {
+		asm.SDPACausalFMOPAF64(qt, kt, fmopaV, output, paddedSeqLen, paddedKvLen, paddedHeadDim, scale)
+	}
 }
 
 // =============================================================================
