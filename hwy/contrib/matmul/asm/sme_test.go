@@ -94,8 +94,8 @@ func TestGoatGeneratedF32(t *testing.T) {
 			// Reference implementation
 			matmulReference(a, b, expected, m, n, k)
 
-			// Goat-generated SME implementation
-			MatMulFMOPAF32(at, b, c, m, n, k)
+			// Multi-tile SME implementation
+			MultiTileMatMulFMOPAF32(at, b, c, m, n, k)
 
 			var maxErr float32
 			for i := range c {
@@ -141,8 +141,8 @@ func TestGoatGeneratedF64(t *testing.T) {
 			// Reference implementation
 			matmulReference64(a, b, expected, m, n, k)
 
-			// Goat-generated SME implementation
-			MatMulFMOPAF64(at, b, c, m, n, k)
+			// Multi-tile SME implementation
+			MultiTileMatMulFMOPAF64(at, b, c, m, n, k)
 
 			var maxErr float64
 			for i := range c {
@@ -244,8 +244,8 @@ func TestGoatGeneratedF16(t *testing.T) {
 			// Reference implementation
 			matmulReferenceF16(a, b, expected, m, n, k)
 
-			// Goat-generated SME implementation
-			MatMulFMOPAF16(at, b, c, m, n, k)
+			// Multi-tile SME implementation
+			MultiTileMatMulFMOPAF16(at, b, c, m, n, k)
 
 			var maxErr float32
 			for i := range c {
@@ -292,8 +292,8 @@ func TestGoatGeneratedBF16(t *testing.T) {
 			// Reference implementation
 			matmulReferenceBF16(a, b, expected, m, n, k)
 
-			// Goat-generated SME implementation
-			MatMulBFMOPABF16(at, b, c, m, n, k)
+			// Multi-tile SME implementation
+			MultiTileMatMulFMOPABF16(at, b, c, m, n, k)
 
 			var maxErr float32
 			for i := range c {

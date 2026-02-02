@@ -62,13 +62,13 @@ func BenchmarkMatMulNEONvsSME(b *testing.B) {
 			b.ReportMetric(gflops, "GFLOPS")
 		})
 
-		// SME FMOPA (uses pre-transposed AT)
+		// SME multi-tile FMOPA (uses pre-transposed AT)
 		if size%16 == 0 {
 			b.Run(sizeStr(size)+"/SME", func(b *testing.B) {
 				b.SetBytes(int64((m*k + k*n + m*n) * 4))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					asm.MatMulFMOPAF32(at, bMat, c, m, n, k)
+					asm.MultiTileMatMulFMOPAF32(at, bMat, c, m, n, k)
 				}
 				b.StopTimer()
 				elapsed := b.Elapsed().Seconds()
@@ -144,13 +144,13 @@ func BenchmarkBlockedMatMulNEONvsSME(b *testing.B) {
 			b.ReportMetric(gflops, "GFLOPS")
 		})
 
-		// SME blocked FMOPA (uses pre-transposed AT) - only for 16-aligned sizes
+		// SME multi-tile FMOPA (uses pre-transposed AT) - only for 16-aligned sizes
 		if size%16 == 0 {
 			b.Run(sizeStr(size)+"/SME", func(b *testing.B) {
 				b.SetBytes(int64((m*k + k*n + m*n) * 4))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					asm.BlockedMatMulFMOPAF32(at, bMat, c, m, n, k)
+					asm.MultiTileMatMulFMOPAF32(at, bMat, c, m, n, k)
 				}
 				b.StopTimer()
 				elapsed := b.Elapsed().Seconds()
@@ -164,7 +164,7 @@ func BenchmarkBlockedMatMulNEONvsSME(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					Transpose2D(a, m, k, at)
-					asm.BlockedMatMulFMOPAF32(at, bMat, c, m, n, k)
+					asm.MultiTileMatMulFMOPAF32(at, bMat, c, m, n, k)
 				}
 				b.StopTimer()
 				elapsed := b.Elapsed().Seconds()

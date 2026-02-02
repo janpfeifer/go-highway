@@ -155,10 +155,9 @@ func qkvdenseNEONF64(x, wQKV, biasQ, biasK, biasV, q, k, v []float64, batchSize,
 // SME SDPA adapter functions
 // =============================================================================
 
-// sdpaSMEF32 decomposes SDPA into multi-tile FMOPA matmul + Go softmax.
-// Step 1: scores = Q @ K^T (via MatMulKLast, which uses multi-tile FMOPA)
-// Step 2: scale scores, add mask, row-wise softmax (in Go)
-// Step 3: output = scores @ V (via BlockedMatMul, which uses multi-tile FMOPA)
+// sdpaSMEF32 uses SME Flash Attention with online softmax via FMOPA.
+// Avoids materializing the full [seqLen, kvLen] scores matrix.
+// Falls back to NEON for unaligned or small dimensions.
 func sdpaSMEF32(q, k, v, mask, scores, output []float32, seqLen, kvLen, headDim int, scale float32) {
 	if seqLen%16 != 0 || kvLen%16 != 0 || headDim%16 != 0 ||
 		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
@@ -166,12 +165,20 @@ func sdpaSMEF32(q, k, v, mask, scores, output []float32, seqLen, kvLen, headDim 
 		return
 	}
 
-	matmul.MatMulKLastFloat32(q, k, scores, seqLen, kvLen, headDim)
-	scaleMaskSoftmax(scores, mask, seqLen, kvLen, scale)
-	matmul.BlockedMatMulFloat32(scores, v, output, seqLen, headDim, kvLen)
+	// Transpose Q [seqLen, headDim] → qt [headDim, seqLen] for contiguous FMOPA loads
+	qt := getTempSlice[float32](headDim * seqLen)
+	defer putTempSlice(qt)
+	matmul.Transpose2D(q, seqLen, headDim, qt)
+
+	// Transpose K [kvLen, headDim] → kt [headDim, kvLen] for FMOPA column access
+	kt := getTempSlice[float32](headDim * kvLen)
+	defer putTempSlice(kt)
+	matmul.Transpose2D(k, kvLen, headDim, kt)
+
+	asm.SDPAFMOPAF32(qt, kt, v, mask, output, seqLen, kvLen, headDim, scale)
 }
 
-// sdpaSMEF64 decomposes SDPA into multi-tile FMOPA matmul + Go softmax (float64).
+// sdpaSMEF64 uses SME Flash Attention with online softmax via FMOPA (float64).
 func sdpaSMEF64(q, k, v, mask, scores, output []float64, seqLen, kvLen, headDim int, scale float64) {
 	if seqLen%8 != 0 || kvLen%8 != 0 || headDim%8 != 0 ||
 		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
@@ -179,29 +186,62 @@ func sdpaSMEF64(q, k, v, mask, scores, output []float64, seqLen, kvLen, headDim 
 		return
 	}
 
-	matmul.MatMulKLastFloat64(q, k, scores, seqLen, kvLen, headDim)
-	scaleMaskSoftmax(scores, mask, seqLen, kvLen, scale)
-	matmul.BlockedMatMulFloat64(scores, v, output, seqLen, headDim, kvLen)
+	// Transpose Q [seqLen, headDim] → qt [headDim, seqLen] for contiguous FMOPA loads
+	qt := getTempSlice[float64](headDim * seqLen)
+	defer putTempSlice(qt)
+	matmul.Transpose2D(q, seqLen, headDim, qt)
+
+	// Transpose K [kvLen, headDim] → kt [headDim, kvLen] for FMOPA column access
+	kt := getTempSlice[float64](headDim * kvLen)
+	defer putTempSlice(kt)
+	matmul.Transpose2D(k, kvLen, headDim, kt)
+
+	asm.SDPAFMOPAF64(qt, kt, v, mask, output, seqLen, kvLen, headDim, scale)
 }
 
-// scaleMaskSoftmax scales scores, adds mask, and applies row-wise softmax in-place.
-func scaleMaskSoftmax[T hwy.Floats](scores, mask []T, seqLen, kvLen int, scale T) {
-	for i := 0; i < seqLen; i++ {
-		row := scores[i*kvLen : (i+1)*kvLen]
+// =============================================================================
+// SME Causal SDPA adapter functions
+// =============================================================================
 
-		if mask != nil {
-			mRow := mask[i*kvLen : (i+1)*kvLen]
-			for j := range row {
-				row[j] = row[j]*scale + mRow[j]
-			}
-		} else {
-			for j := range row {
-				row[j] *= scale
-			}
-		}
-
-		SoftmaxInPlace(row)
+// sdpaCausalSMEF32 uses SME Flash Attention with implicit causal masking for float32.
+// Falls back to NEON for unaligned or small dimensions.
+func sdpaCausalSMEF32(q, k, v, scores, output []float32, seqLen, kvLen, headDim int, scale float32) {
+	if seqLen%16 != 0 || kvLen%16 != 0 || headDim%16 != 0 ||
+		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+		sdpaCausalNEONF32(q, k, v, scores, output, seqLen, kvLen, headDim, scale)
+		return
 	}
+
+	// Transpose Q [seqLen, headDim] → qt [headDim, seqLen]
+	qt := getTempSlice[float32](headDim * seqLen)
+	defer putTempSlice(qt)
+	matmul.Transpose2D(q, seqLen, headDim, qt)
+
+	// Transpose K [kvLen, headDim] → kt [headDim, kvLen]
+	kt := getTempSlice[float32](headDim * kvLen)
+	defer putTempSlice(kt)
+	matmul.Transpose2D(k, kvLen, headDim, kt)
+
+	asm.SDPACausalFMOPAF32(qt, kt, v, output, seqLen, kvLen, headDim, scale)
+}
+
+// sdpaCausalSMEF64 uses SME Flash Attention with implicit causal masking for float64.
+func sdpaCausalSMEF64(q, k, v, scores, output []float64, seqLen, kvLen, headDim int, scale float64) {
+	if seqLen%8 != 0 || kvLen%8 != 0 || headDim%8 != 0 ||
+		seqLen < minDimForSDPASME || kvLen < minDimForSDPASME || headDim < minDimForSDPASME {
+		sdpaCausalNEONF64(q, k, v, scores, output, seqLen, kvLen, headDim, scale)
+		return
+	}
+
+	qt := getTempSlice[float64](headDim * seqLen)
+	defer putTempSlice(qt)
+	matmul.Transpose2D(q, seqLen, headDim, qt)
+
+	kt := getTempSlice[float64](headDim * kvLen)
+	defer putTempSlice(kt)
+	matmul.Transpose2D(k, kvLen, headDim, kt)
+
+	asm.SDPACausalFMOPAF64(qt, kt, v, output, seqLen, kvLen, headDim, scale)
 }
 
 // =============================================================================
@@ -285,9 +325,14 @@ func init() {
 		QKVDenseFloat64 = qkvdenseNEONF64
 	}
 
-	// Causal SDPA stays on NEON (no SME causal kernel exists)
-	SDPACausalFloat32 = sdpaCausalNEONF32
-	SDPACausalFloat64 = sdpaCausalNEONF64
+	// Causal SDPA dispatch
+	if hwy.HasSME() {
+		SDPACausalFloat32 = sdpaCausalSMEF32
+		SDPACausalFloat64 = sdpaCausalSMEF64
+	} else {
+		SDPACausalFloat32 = sdpaCausalNEONF32
+		SDPACausalFloat64 = sdpaCausalNEONF64
+	}
 
 	// Float16/BFloat16 use the hwygen-generated promoted implementations
 	// (promote to f32, compute, demote) which are already efficient enough

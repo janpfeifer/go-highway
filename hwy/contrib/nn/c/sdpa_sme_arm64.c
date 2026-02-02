@@ -14,26 +14,27 @@
  * limitations under the License.
  */
 
-// SME Flash Attention for ARM64
+// SME Flash Attention for ARM64 — Multi-Tile (4 ZA tiles)
 //
-// Tiled Flash Attention using FMOPA with online softmax.
-// Avoids materializing the full [seqLen, kvLen] scores matrix.
-// Memory: O(seqLen * headDim) instead of O(seqLen * kvLen).
+// Uses all 4 ZA tiles in a 2x2 arrangement for 32x32 score blocks (f32)
+// or 16x16 score blocks (f64). FlashAttention-2 with online softmax.
 //
-// Algorithm (FlashAttention-2 style):
-//   For each Q tile (block of TILE_M=16 rows):
-//     Initialize O = 0, l = 0, m = -inf per row
-//     For each K/V tile (TILE_N=16 columns):
-//       S_tile = Q_tile @ K_tile^T (via FMOPA)
-//       Scale S_tile, add mask
-//       m_new = max(m_prev, rowmax(S_tile))
-//       alpha = exp(m_prev - m_new)
-//       l_new = alpha * l_prev + rowsum(exp(S_tile - m_new))
-//       O = alpha * O + exp(S_tile - m_new) @ V_tile
-//     O /= l_new
+// Memory: O(seqLen * headDim) — never materializes full scores matrix.
+//
+// Layout (f32, 32x32 score block):
+//                kv cols 0-15    kv cols 16-31
+//   q rows 0-15:    ZA0              ZA2
+//   q rows 16-31:   ZA1              ZA3
+//
+// Inputs:
+//   qt: [headDim, seqLen] (pre-transposed Q for contiguous column loads)
+//   kt: [headDim, kvLen]  (pre-transposed K for contiguous column loads)
+//   v:  [kvLen, headDim]  (row-major)
+//   mask: [seqLen, kvLen] or NULL
+//   output: [seqLen, headDim] (row-major)
 //
 // NEON intrinsics cannot be used inside __arm_streaming functions.
-// All non-FMOPA operations use scalar C or SVE intrinsics.
+// All non-FMOPA operations use SVE intrinsics or scalar C.
 
 // GOAT's C parser uses GOAT_PARSER=1, clang doesn't
 #ifndef GOAT_PARSER
@@ -41,17 +42,19 @@
 #endif
 
 // =============================================================================
-// sdpa_fmopa_f32: SME Flash Attention for float32
+// sdpa_fmopa_f32: Multi-tile SME Flash Attention for float32
 // =============================================================================
 //
-// Q is [seqLen, headDim], K is [kvLen, headDim], V is [kvLen, headDim]
-// kt is [headDim, kvLen] (pre-transposed K for FMOPA column access)
-// mask is [seqLen, kvLen] or NULL
+// qt is [headDim, seqLen] (pre-transposed Q)
+// kt is [headDim, kvLen]  (pre-transposed K)
+// v is [kvLen, headDim], mask is [seqLen, kvLen] or NULL
 // output is [seqLen, headDim]
 //
-// func sdpa_fmopa_f32(q, kt, v, mask, output, pdims, pscale unsafe.Pointer)
+// Requires seqLen, kvLen, headDim all multiples of 16, all >= 32.
+//
+// func sdpa_fmopa_f32(qt, kt, v, mask, output, pdims, pscale unsafe.Pointer)
 // pdims: [0]=seqLen, [1]=kvLen, [2]=headDim
-void sdpa_fmopa_f32(float *q, float *kt, float *v, float *mask,
+void sdpa_fmopa_f32(float *qt, float *kt, float *v, float *mask,
                       float *output,
                       long *pdims, float *pscale)
     __arm_streaming __arm_out("za") {
@@ -64,187 +67,408 @@ void sdpa_fmopa_f32(float *q, float *kt, float *v, float *mask,
     if (kvLen <= 0) return;
     if (headDim <= 0) return;
 
-    // Scalar exp f32 constants
-    float inv_ln2 = 1.44269504088896341f;
-    float ln2_hi = 0.693359375f;
-    float ln2_lo = -2.12194440e-4f;
+    svbool_t pg = svptrue_b32();
+
+    // SVE exp f32 constants
+    svfloat32_t sv_inv_ln2 = svdup_f32(1.44269504088896341f);
+    svfloat32_t sv_ln2_hi  = svdup_f32(0.693359375f);
+    svfloat32_t sv_ln2_lo  = svdup_f32(-2.12194440e-4f);
+    svfloat32_t sv_c1 = svdup_f32(1.0f);
+    svfloat32_t sv_c2 = svdup_f32(0.5f);
+    svfloat32_t sv_c3 = svdup_f32(0.16666666666666666f);
+    svfloat32_t sv_c4 = svdup_f32(0.041666666666666664f);
+    svfloat32_t sv_c5 = svdup_f32(0.008333333333333333f);
+    svfloat32_t sv_c6 = svdup_f32(0.001388888888888889f);
+    svint32_t sv_bias = svdup_s32(127);
+    svfloat32_t sv_exp_min = svdup_f32(-87.3365f);
+    svfloat32_t sv_zero = svdup_f32(0.0f);
+    svfloat32_t sv_scale = svdup_f32(scale);
 
     float negInfVal = -1.0f / 0.0f;
+    svfloat32_t sv_neginf = svdup_f32(negInfVal);
 
-    // Process Q in blocks of 16 rows
-    for (long qi = 0; qi < seqLen; qi += 16) {
-        long qRows = 16;
-        if (qi + qRows > seqLen) {
-            qRows = seqLen - qi;
+    // Process Q in blocks of 32 rows (4-tile), 16-row remainder with 2-tile
+    for (long qi = 0; qi < seqLen; qi += 32) {
+        long qBlock = 32;
+        if (qi + qBlock > seqLen) {
+            qBlock = seqLen - qi;
         }
 
         // Per-row running max (m) and sum (l) for online softmax
-        float m_arr[16];
-        float l_arr[16];
-        for (int r = 0; r < 16; r++) {
+        // Use 32 slots; for qBlock=16 remainder, only first 16 used
+        float m_arr[32];
+        float l_arr[32];
+        for (int r = 0; r < 32; r++) {
             m_arr[r] = negInfVal;
             l_arr[r] = 0.0f;
         }
 
         // Zero output accumulator for this Q block
-        for (long r = 0; r < qRows; r++) {
+        for (long r = 0; r < qBlock; r++) {
             for (long d = 0; d < headDim; d++) {
                 output[(qi + r) * headDim + d] = 0.0f;
             }
         }
 
-        // Iterate over K/V in blocks of 16 columns
-        for (long kj = 0; kj < kvLen; kj += 16) {
-            long kCols = 16;
-            if (kj + kCols > kvLen) {
-                kCols = kvLen - kj;
+        // Iterate over K/V in blocks of 32 columns (4-tile)
+        for (long kj = 0; kj < kvLen; kj += 32) {
+            long kBlock = 32;
+            if (kj + kBlock > kvLen) {
+                kBlock = kvLen - kj;
             }
 
-            // Compute S_tile = Q_block @ K_block^T using FMOPA
+            // =====================================================================
+            // Phase 1: Q@K^T → score tiles using FMOPA
+            // =====================================================================
             svzero_za();
 
-            for (long dd = 0; dd < headDim; dd++) {
-                // Load Q column: q[qi:qi+16, dd] — strided by headDim
-                float q_col[16];
-                for (int r = 0; r < 16; r++) {
-                    if (qi + r < seqLen) {
-                        q_col[r] = q[(qi + r) * headDim + dd];
-                    }
-                    if (qi + r >= seqLen) {
-                        q_col[r] = 0.0f;
+            if (qBlock == 32) {
+                if (kBlock == 32) {
+                    // Full 4-tile: 32 Q rows × 32 KV cols
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t a1 = svld1_f32(pg, qt + dd * seqLen + qi + 16);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svfloat32_t b1 = svld1_f32(pg, kt + dd * kvLen + kj + 16);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                        svmopa_za32_f32_m(1, pg, pg, a1, b0);
+                        svmopa_za32_f32_m(2, pg, pg, a0, b1);
+                        svmopa_za32_f32_m(3, pg, pg, a1, b1);
                     }
                 }
-                svfloat32_t za_col = svld1_f32(svptrue_b32(), q_col);
-
-                // Load K^T row: kt[dd, kj:kj+16] — contiguous
-                svfloat32_t zb_row = svld1_f32(svptrue_b32(), kt + dd * kvLen + kj);
-
-                svmopa_za32_f32_m(0, svptrue_b32(), svptrue_b32(), za_col, zb_row);
+                if (kBlock == 16) {
+                    // 2-tile: 32 Q rows × 16 KV cols (ZA0 + ZA1)
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t a1 = svld1_f32(pg, qt + dd * seqLen + qi + 16);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                        svmopa_za32_f32_m(1, pg, pg, a1, b0);
+                    }
+                }
+            }
+            if (qBlock == 16) {
+                if (kBlock == 32) {
+                    // 2-tile: 16 Q rows × 32 KV cols (ZA0 + ZA2)
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svfloat32_t b1 = svld1_f32(pg, kt + dd * kvLen + kj + 16);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                        svmopa_za32_f32_m(2, pg, pg, a0, b1);
+                    }
+                }
+                if (kBlock == 16) {
+                    // 1-tile: 16 Q rows × 16 KV cols (ZA0 only)
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                    }
+                }
             }
 
-            // Read S_tile from ZA, apply scale + mask, online softmax update
+            // =====================================================================
+            // Phase 2: Read scores from ZA, online softmax, build P_tile
+            // =====================================================================
+            // First: read all scores from ZA into row-major buffer scores[32][32]
+            // using constant tile indices (required by SVE intrinsics)
+            float scores_buf[32 * 32];
+
+            // ZA0: rows 0-15, cols 0-15
             for (int row = 0; row < 16; row++) {
-                if (qi + row >= seqLen) break;
-
-                svfloat32_t zrow = svread_hor_za32_f32_m(svundef_f32(), svptrue_b32(), 0, row);
-                float s_row[16];
-                svst1_f32(svptrue_b32(), s_row, zrow);
-
-                // Scale + mask, find new max
-                float row_max = m_arr[row];
-                for (int col = 0; col < 16; col++) {
-                    if (kj + col >= kvLen) {
-                        s_row[col] = negInfVal;
-                        continue;
-                    }
-                    s_row[col] *= scale;
-                    if (mask) {
-                        s_row[col] += mask[(qi + row) * kvLen + kj + col];
-                    }
-                    if (s_row[col] > row_max) {
-                        row_max = s_row[col];
+                svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 0, row);
+                svst1_f32(pg, scores_buf + row * 32, zr);
+            }
+            if (kBlock > 16) {
+                // ZA2: rows 0-15, cols 16-31
+                for (int row = 0; row < 16; row++) {
+                    svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 2, row);
+                    svst1_f32(pg, scores_buf + row * 32 + 16, zr);
+                }
+            }
+            if (qBlock > 16) {
+                // ZA1: rows 16-31, cols 0-15
+                for (int row = 0; row < 16; row++) {
+                    svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 1, row);
+                    svst1_f32(pg, scores_buf + (row + 16) * 32, zr);
+                }
+                if (kBlock > 16) {
+                    // ZA3: rows 16-31, cols 16-31
+                    for (int row = 0; row < 16; row++) {
+                        svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 3, row);
+                        svst1_f32(pg, scores_buf + (row + 16) * 32 + 16, zr);
                     }
                 }
+            }
 
-                // Online softmax: correction factor
+            // P_tile stored column-major: pt[kv_col * 32 + q_row] for FMOPA P@V
+            float pt[32 * 32];
+
+            // Process each score row: scale, mask, online softmax, build P_tile
+            for (int row = 0; row < 32; row++) {
+                if (row >= qBlock) break;
+
+                float *s_row = scores_buf + row * 32;
+
+                // Scale + mask using SVE
+                svfloat32_t sv_s0 = svld1_f32(pg, s_row);
+                sv_s0 = svmul_f32_z(pg, sv_s0, sv_scale);
+                if (mask) {
+                    svfloat32_t sv_m0 = svld1_f32(pg, mask + (qi + row) * kvLen + kj);
+                    sv_s0 = svadd_f32_z(pg, sv_s0, sv_m0);
+                }
+                svst1_f32(pg, s_row, sv_s0);
+
+                svfloat32_t sv_max = sv_s0;
+
+                if (kBlock > 16) {
+                    svfloat32_t sv_s1 = svld1_f32(pg, s_row + 16);
+                    sv_s1 = svmul_f32_z(pg, sv_s1, sv_scale);
+                    if (mask) {
+                        svfloat32_t sv_m1 = svld1_f32(pg, mask + (qi + row) * kvLen + kj + 16);
+                        sv_s1 = svadd_f32_z(pg, sv_s1, sv_m1);
+                    }
+                    svst1_f32(pg, s_row + 16, sv_s1);
+                    sv_max = svmax_f32_z(pg, sv_max, sv_s1);
+                }
+
+                float row_max = svmaxv_f32(pg, sv_max);
+
+                // Online softmax correction
                 float m_prev = m_arr[row];
                 float m_new = row_max;
+                if (m_prev > m_new) {
+                    m_new = m_prev;
+                }
                 m_arr[row] = m_new;
 
-                // alpha = exp(m_prev - m_new) using scalar Horner polynomial
+                // alpha = exp(m_prev - m_new)
                 float alpha_scalar = 1.0f;
                 if (m_prev != negInfVal) {
-                    float ax = m_prev - m_new;
-                    if (ax < -87.3365f) ax = -87.3365f;
-                    float akf = ax * inv_ln2;
-                    int aki = (int)(akf + (akf >= 0 ? 0.5f : -0.5f));
-                    float akff = (float)aki;
-                    float ar = ax - akff * ln2_hi;
-                    ar = ar - akff * ln2_lo;
-                    float ap = 0.001388888888888889f;
-                    ap = 0.008333333333333333f + ap * ar;
-                    ap = 0.041666666666666664f + ap * ar;
-                    ap = 0.16666666666666666f + ap * ar;
-                    ap = 0.5f + ap * ar;
-                    ap = 1.0f + ap * ar;
-                    ap = 1.0f + ap * ar;
-                    int a_scale_bits = (aki + 127) << 23;
-                    float a_scale_val = *(float *)&a_scale_bits;
-                    alpha_scalar = ap * a_scale_val;
+                    if (m_prev != m_new) {
+                        // Compute scalar exp(m_prev - m_new)
+                        float ax = m_prev - m_new;
+                        if (ax < -87.3365f) ax = -87.3365f;
+                        float akf = ax * 1.44269504088896341f;
+                        int aki = (int)(akf + (akf >= 0 ? 0.5f : -0.5f));
+                        float akff = (float)aki;
+                        float ar = ax - akff * 0.693359375f;
+                        ar = ar - akff * -2.12194440e-4f;
+                        float ap = 0.001388888888888889f;
+                        ap = 0.008333333333333333f + ap * ar;
+                        ap = 0.041666666666666664f + ap * ar;
+                        ap = 0.16666666666666666f + ap * ar;
+                        ap = 0.5f + ap * ar;
+                        ap = 1.0f + ap * ar;
+                        ap = 1.0f + ap * ar;
+                        int a_bits = (aki + 127) << 23;
+                        float a_scale_val = *(float *)&a_bits;
+                        alpha_scalar = ap * a_scale_val;
+                    }
                 }
 
                 // Rescale previous l and O
                 l_arr[row] = alpha_scalar * l_arr[row];
-                long oOff = (qi + row) * headDim;
-                for (long p = 0; p < headDim; p++) {
-                    output[oOff + p] *= alpha_scalar;
+                if (alpha_scalar != 1.0f) {
+                    svfloat32_t sv_alpha = svdup_f32(alpha_scalar);
+                    long oOff = (qi + row) * headDim;
+                    for (long d = 0; d < headDim; d += 16) {
+                        svfloat32_t ov = svld1_f32(pg, output + oOff + d);
+                        ov = svmul_f32_z(pg, ov, sv_alpha);
+                        svst1_f32(pg, output + oOff + d, ov);
+                    }
                 }
 
-                // Compute exp(s_row - m_new) and accumulate
-                float p_row[16];
-                float row_sum = 0.0f;
+                // SVE exp(s_row - m_new) for first 16 elements
+                svfloat32_t sv_mnew = svdup_f32(m_new);
+                svfloat32_t sv_x0 = svld1_f32(pg, s_row);
+                sv_x0 = svsub_f32_z(pg, sv_x0, sv_mnew);
+                sv_x0 = svmax_f32_z(pg, sv_x0, sv_exp_min);
+
+                // Range reduction
+                svfloat32_t sv_kf0 = svmul_f32_z(pg, sv_x0, sv_inv_ln2);
+                svint32_t sv_ki0 = svcvt_s32_f32_z(pg, sv_kf0);
+                svfloat32_t sv_kff0 = svcvt_f32_s32_z(pg, sv_ki0);
+                svfloat32_t sv_r0 = svmsb_f32_z(pg, sv_kff0, sv_ln2_hi, sv_x0);
+                sv_r0 = svmsb_f32_z(pg, sv_kff0, sv_ln2_lo, sv_r0);
+
+                // Horner polynomial
+                svfloat32_t sv_p0 = sv_c6;
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c5);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c4);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c3);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c2);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c1);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c1);
+
+                // 2^k scaling
+                svint32_t sv_bits0 = svlsl_n_s32_z(pg, svadd_s32_z(pg, sv_ki0, sv_bias), 23);
+                svfloat32_t sv_pow0 = svreinterpret_f32_s32(sv_bits0);
+                svfloat32_t sv_exp0 = svmul_f32_z(pg, sv_p0, sv_pow0);
+
+                float row_sum = svaddv_f32(pg, sv_exp0);
+
+                // Store column-major into P_tile for FMOPA P@V
+                // pt[col * 32 + row] = exp_val[col]
+                float exp_buf0[16];
+                svst1_f32(pg, exp_buf0, sv_exp0);
                 for (int col = 0; col < 16; col++) {
-                    if (kj + col >= kvLen) {
-                        p_row[col] = 0.0f;
-                        continue;
-                    }
-                    float sx = s_row[col] - m_new;
-                    if (sx < -87.3365f) sx = -87.3365f;
-                    // Scalar exp(sx) using Horner polynomial
-                    float skf = sx * inv_ln2;
-                    int ski = (int)(skf + (skf >= 0 ? 0.5f : -0.5f));
-                    float skff = (float)ski;
-                    float sr = sx - skff * ln2_hi;
-                    sr = sr - skff * ln2_lo;
-                    float sp = 0.001388888888888889f;
-                    sp = 0.008333333333333333f + sp * sr;
-                    sp = 0.041666666666666664f + sp * sr;
-                    sp = 0.16666666666666666f + sp * sr;
-                    sp = 0.5f + sp * sr;
-                    sp = 1.0f + sp * sr;
-                    sp = 1.0f + sp * sr;
-                    int s_scale_bits = (ski + 127) << 23;
-                    float s_scale_val = *(float *)&s_scale_bits;
-                    p_row[col] = sp * s_scale_val;
-                    row_sum += p_row[col];
+                    pt[col * 32 + row] = exp_buf0[col];
                 }
+
+                if (kBlock > 16) {
+                    // SVE exp for elements 16-31
+                    svfloat32_t sv_x1 = svld1_f32(pg, s_row + 16);
+                    sv_x1 = svsub_f32_z(pg, sv_x1, sv_mnew);
+                    sv_x1 = svmax_f32_z(pg, sv_x1, sv_exp_min);
+
+                    svfloat32_t sv_kf1 = svmul_f32_z(pg, sv_x1, sv_inv_ln2);
+                    svint32_t sv_ki1 = svcvt_s32_f32_z(pg, sv_kf1);
+                    svfloat32_t sv_kff1 = svcvt_f32_s32_z(pg, sv_ki1);
+                    svfloat32_t sv_r1 = svmsb_f32_z(pg, sv_kff1, sv_ln2_hi, sv_x1);
+                    sv_r1 = svmsb_f32_z(pg, sv_kff1, sv_ln2_lo, sv_r1);
+
+                    svfloat32_t sv_p1 = sv_c6;
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c5);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c4);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c3);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c2);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c1);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c1);
+
+                    svint32_t sv_bits1 = svlsl_n_s32_z(pg, svadd_s32_z(pg, sv_ki1, sv_bias), 23);
+                    svfloat32_t sv_pow1 = svreinterpret_f32_s32(sv_bits1);
+                    svfloat32_t sv_exp1 = svmul_f32_z(pg, sv_p1, sv_pow1);
+
+                    row_sum += svaddv_f32(pg, sv_exp1);
+
+                    float exp_buf1[16];
+                    svst1_f32(pg, exp_buf1, sv_exp1);
+                    for (int col = 0; col < 16; col++) {
+                        pt[(col + 16) * 32 + row] = exp_buf1[col];
+                    }
+                }
+
                 l_arr[row] += row_sum;
+            }
 
-                // Accumulate: O[row,:] += p_row @ V[kj:kj+kCols, :]
-                for (int col = 0; col < 16; col++) {
-                    if (kj + col >= kvLen) break;
-                    if (p_row[col] == 0.0f) continue;
+            // Zero unused P_tile rows (for qBlock < 32)
+            for (int row = qBlock; row < 32; row++) {
+                for (int col = 0; col < 32; col++) {
+                    pt[col * 32 + row] = 0.0f;
+                }
+            }
+            // Zero unused P_tile cols (for kBlock < 32)
+            for (int col = kBlock; col < 32; col++) {
+                for (int row = 0; row < 32; row++) {
+                    pt[col * 32 + row] = 0.0f;
+                }
+            }
 
-                    float w = p_row[col];
-                    float *vRow = v + (kj + col) * headDim;
-                    for (long p = 0; p < headDim; p++) {
-                        output[oOff + p] += w * vRow[p];
-                    }
+            // =====================================================================
+            // Phase 3: P@V → output accumulation using 4-tile FMOPA
+            // =====================================================================
+            // P_tile is [32 q_rows × 32 kv_cols] stored column-major in pt
+            // V block is v[kj:kj+kBlock, :] row-major [kBlock, headDim]
+            // Process headDim in 32-col chunks (4-tile), 16-col remainder
+            long d = 0;
+            for (; d + 32 <= headDim; d += 32) {
+                svzero_za();
+
+                // P columns × V rows
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat32_t p0 = svld1_f32(pg, pt + kk * 32);
+                    svfloat32_t p1 = svld1_f32(pg, pt + kk * 32 + 16);
+                    svfloat32_t v0 = svld1_f32(pg, v + (kj + kk) * headDim + d);
+                    svfloat32_t v1 = svld1_f32(pg, v + (kj + kk) * headDim + d + 16);
+                    svmopa_za32_f32_m(0, pg, pg, p0, v0);
+                    svmopa_za32_f32_m(1, pg, pg, p1, v0);
+                    svmopa_za32_f32_m(2, pg, pg, p0, v1);
+                    svmopa_za32_f32_m(3, pg, pg, p1, v1);
+                }
+
+                // Accumulate into output: read ZA and add
+                for (int row = 0; row < 16; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat32_t r0 = svread_hor_za32_f32_m(svundef_f32(), pg, 0, row);
+                    svfloat32_t o0 = svld1_f32(pg, output + (qi + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + row) * headDim + d, svadd_f32_z(pg, o0, r0));
+
+                    svfloat32_t r2 = svread_hor_za32_f32_m(svundef_f32(), pg, 2, row);
+                    svfloat32_t o2 = svld1_f32(pg, output + (qi + row) * headDim + d + 16);
+                    svst1_f32(pg, output + (qi + row) * headDim + d + 16, svadd_f32_z(pg, o2, r2));
+                }
+                for (int row = 0; row < 16; row++) {
+                    if (qi + 16 + row >= seqLen) break;
+                    svfloat32_t r1 = svread_hor_za32_f32_m(svundef_f32(), pg, 1, row);
+                    svfloat32_t o1 = svld1_f32(pg, output + (qi + 16 + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + 16 + row) * headDim + d, svadd_f32_z(pg, o1, r1));
+
+                    svfloat32_t r3 = svread_hor_za32_f32_m(svundef_f32(), pg, 3, row);
+                    svfloat32_t o3 = svld1_f32(pg, output + (qi + 16 + row) * headDim + d + 16);
+                    svst1_f32(pg, output + (qi + 16 + row) * headDim + d + 16, svadd_f32_z(pg, o3, r3));
+                }
+            }
+
+            // Remainder: 16-col strip with 2-tile (ZA0 + ZA1)
+            if (d < headDim) {
+                svzero_za();
+
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat32_t p0 = svld1_f32(pg, pt + kk * 32);
+                    svfloat32_t p1 = svld1_f32(pg, pt + kk * 32 + 16);
+                    svfloat32_t v0 = svld1_f32(pg, v + (kj + kk) * headDim + d);
+                    svmopa_za32_f32_m(0, pg, pg, p0, v0);
+                    svmopa_za32_f32_m(1, pg, pg, p1, v0);
+                }
+
+                for (int row = 0; row < 16; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat32_t r0 = svread_hor_za32_f32_m(svundef_f32(), pg, 0, row);
+                    svfloat32_t o0 = svld1_f32(pg, output + (qi + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + row) * headDim + d, svadd_f32_z(pg, o0, r0));
+                }
+                for (int row = 0; row < 16; row++) {
+                    if (qi + 16 + row >= seqLen) break;
+                    svfloat32_t r1 = svread_hor_za32_f32_m(svundef_f32(), pg, 1, row);
+                    svfloat32_t o1 = svld1_f32(pg, output + (qi + 16 + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + 16 + row) * headDim + d, svadd_f32_z(pg, o1, r1));
                 }
             }
         }
 
         // Final normalize: O /= l
-        for (long r = 0; r < qRows; r++) {
+        for (long r = 0; r < qBlock; r++) {
             if (l_arr[r] == 0.0f) continue;
             float invL = 1.0f / l_arr[r];
+            svfloat32_t sv_invL = svdup_f32(invL);
             long oOff = (qi + r) * headDim;
-            for (long p = 0; p < headDim; p++) {
-                output[oOff + p] *= invL;
+            for (long d = 0; d < headDim; d += 16) {
+                svfloat32_t ov = svld1_f32(pg, output + oOff + d);
+                ov = svmul_f32_z(pg, ov, sv_invL);
+                svst1_f32(pg, output + oOff + d, ov);
             }
         }
     }
 }
 
 // =============================================================================
-// sdpa_fmopa_f64: SME Flash Attention for float64
+// sdpa_fmopa_f64: Multi-tile SME Flash Attention for float64
 // =============================================================================
 //
-// Same algorithm with 8x8 tiles for float64.
+// Same algorithm with 8x8 tiles per ZA, 4-tile = 16x16 output blocks.
 //
-// func sdpa_fmopa_f64(q, kt, v, mask, output, pdims, pscale unsafe.Pointer)
+// Layout (f64, 16x16 score block):
+//                kv cols 0-7    kv cols 8-15
+//   q rows 0-7:     ZA0            ZA2
+//   q rows 8-15:    ZA1            ZA3
+//
+// Requires seqLen, kvLen, headDim all multiples of 8, all >= 16.
+//
+// func sdpa_fmopa_f64(qt, kt, v, mask, output, pdims, pscale unsafe.Pointer)
 // pdims: [0]=seqLen, [1]=kvLen, [2]=headDim
-void sdpa_fmopa_f64(double *q, double *kt, double *v, double *mask,
+void sdpa_fmopa_f64(double *qt, double *kt, double *v, double *mask,
                       double *output,
                       long *pdims, double *pscale)
     __arm_streaming __arm_out("za") {
@@ -257,161 +481,1080 @@ void sdpa_fmopa_f64(double *q, double *kt, double *v, double *mask,
     if (kvLen <= 0) return;
     if (headDim <= 0) return;
 
-    // Scalar exp f64 constants
-    double inv_ln2_d = 1.4426950408889634;
-    double ln2_hi_d = 0.6931471803691238;
-    double ln2_lo_d = 1.9082149292705877e-10;
+    svbool_t pg = svptrue_b64();
+
+    // SVE exp f64 constants
+    svfloat64_t sv_inv_ln2 = svdup_f64(1.4426950408889634);
+    svfloat64_t sv_ln2_hi  = svdup_f64(0.6931471803691238);
+    svfloat64_t sv_ln2_lo  = svdup_f64(1.9082149292705877e-10);
+    svfloat64_t sv_c1 = svdup_f64(1.0);
+    svfloat64_t sv_c2 = svdup_f64(0.5);
+    svfloat64_t sv_c3 = svdup_f64(0.16666666666666666);
+    svfloat64_t sv_c4 = svdup_f64(0.041666666666666664);
+    svfloat64_t sv_c5 = svdup_f64(0.008333333333333333);
+    svfloat64_t sv_c6 = svdup_f64(0.001388888888888889);
+    svfloat64_t sv_c7 = svdup_f64(1.98412698412698412698e-4);
+    svfloat64_t sv_c8 = svdup_f64(2.48015873015873015873e-5);
+    svint64_t sv_bias = svdup_s64(1023);
+    svfloat64_t sv_exp_min = svdup_f64(-708.396);
+    svfloat64_t sv_zero = svdup_f64(0.0);
+    svfloat64_t sv_scale = svdup_f64(scale);
 
     double negInfVal = -1.0 / 0.0;
 
-    for (long qi = 0; qi < seqLen; qi += 8) {
-        long qRows = 8;
-        if (qi + qRows > seqLen) {
-            qRows = seqLen - qi;
+    // Process Q in blocks of 16 rows (4-tile), 8-row remainder
+    for (long qi = 0; qi < seqLen; qi += 16) {
+        long qBlock = 16;
+        if (qi + qBlock > seqLen) {
+            qBlock = seqLen - qi;
         }
 
-        double m_arr[8];
-        double l_arr[8];
-        for (int r = 0; r < 8; r++) {
+        double m_arr[16];
+        double l_arr[16];
+        for (int r = 0; r < 16; r++) {
             m_arr[r] = negInfVal;
             l_arr[r] = 0.0;
         }
 
-        for (long r = 0; r < qRows; r++) {
+        for (long r = 0; r < qBlock; r++) {
             for (long d = 0; d < headDim; d++) {
                 output[(qi + r) * headDim + d] = 0.0;
             }
         }
 
-        for (long kj = 0; kj < kvLen; kj += 8) {
-            long kCols = 8;
-            if (kj + kCols > kvLen) {
-                kCols = kvLen - kj;
+        // Iterate over K/V in blocks of 16 columns (4-tile)
+        for (long kj = 0; kj < kvLen; kj += 16) {
+            long kBlock = 16;
+            if (kj + kBlock > kvLen) {
+                kBlock = kvLen - kj;
             }
 
+            // Phase 1: Q@K^T using FMOPA
             svzero_za();
 
-            for (long dd = 0; dd < headDim; dd++) {
-                double q_col[8];
-                for (int r = 0; r < 8; r++) {
-                    if (qi + r < seqLen) {
-                        q_col[r] = q[(qi + r) * headDim + dd];
-                    }
-                    if (qi + r >= seqLen) {
-                        q_col[r] = 0.0;
+            if (qBlock == 16) {
+                if (kBlock == 16) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t a1 = svld1_f64(pg, qt + dd * seqLen + qi + 8);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svfloat64_t b1 = svld1_f64(pg, kt + dd * kvLen + kj + 8);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                        svmopa_za64_f64_m(1, pg, pg, a1, b0);
+                        svmopa_za64_f64_m(2, pg, pg, a0, b1);
+                        svmopa_za64_f64_m(3, pg, pg, a1, b1);
                     }
                 }
-                svfloat64_t za_col = svld1_f64(svptrue_b64(), q_col);
-                svfloat64_t zb_row = svld1_f64(svptrue_b64(), kt + dd * kvLen + kj);
-                svmopa_za64_f64_m(0, svptrue_b64(), svptrue_b64(), za_col, zb_row);
+                if (kBlock == 8) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t a1 = svld1_f64(pg, qt + dd * seqLen + qi + 8);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                        svmopa_za64_f64_m(1, pg, pg, a1, b0);
+                    }
+                }
+            }
+            if (qBlock == 8) {
+                if (kBlock == 16) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svfloat64_t b1 = svld1_f64(pg, kt + dd * kvLen + kj + 8);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                        svmopa_za64_f64_m(2, pg, pg, a0, b1);
+                    }
+                }
+                if (kBlock == 8) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                    }
+                }
             }
 
+            // Phase 2: Online softmax
+            // First: read all scores from ZA into row-major buffer
+            double scores_buf[16 * 16];
+
+            // ZA0: rows 0-7, cols 0-7
             for (int row = 0; row < 8; row++) {
-                if (qi + row >= seqLen) break;
-
-                svfloat64_t zrow = svread_hor_za64_f64_m(svundef_f64(), svptrue_b64(), 0, row);
-                double s_row[8];
-                svst1_f64(svptrue_b64(), s_row, zrow);
-
-                double row_max = m_arr[row];
-                for (int col = 0; col < 8; col++) {
-                    if (kj + col >= kvLen) {
-                        s_row[col] = negInfVal;
-                        continue;
-                    }
-                    s_row[col] *= scale;
-                    if (mask) {
-                        s_row[col] += mask[(qi + row) * kvLen + kj + col];
-                    }
-                    if (s_row[col] > row_max) {
-                        row_max = s_row[col];
+                svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 0, row);
+                svst1_f64(pg, scores_buf + row * 16, zr);
+            }
+            if (kBlock > 8) {
+                // ZA2: rows 0-7, cols 8-15
+                for (int row = 0; row < 8; row++) {
+                    svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 2, row);
+                    svst1_f64(pg, scores_buf + row * 16 + 8, zr);
+                }
+            }
+            if (qBlock > 8) {
+                // ZA1: rows 8-15, cols 0-7
+                for (int row = 0; row < 8; row++) {
+                    svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 1, row);
+                    svst1_f64(pg, scores_buf + (row + 8) * 16, zr);
+                }
+                if (kBlock > 8) {
+                    // ZA3: rows 8-15, cols 8-15
+                    for (int row = 0; row < 8; row++) {
+                        svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 3, row);
+                        svst1_f64(pg, scores_buf + (row + 8) * 16 + 8, zr);
                     }
                 }
+            }
+
+            // P_tile column-major: pt[kv_col * 16 + q_row]
+            double pt[16 * 16];
+
+            for (int row = 0; row < 16; row++) {
+                if (row >= qBlock) break;
+
+                double *s_row = scores_buf + row * 16;
+
+                // Scale + mask
+                svfloat64_t sv_s0 = svld1_f64(pg, s_row);
+                sv_s0 = svmul_f64_z(pg, sv_s0, sv_scale);
+                if (mask) {
+                    svfloat64_t sv_m0 = svld1_f64(pg, mask + (qi + row) * kvLen + kj);
+                    sv_s0 = svadd_f64_z(pg, sv_s0, sv_m0);
+                }
+                svst1_f64(pg, s_row, sv_s0);
+                svfloat64_t sv_max = sv_s0;
+
+                if (kBlock > 8) {
+                    svfloat64_t sv_s1 = svld1_f64(pg, s_row + 8);
+                    sv_s1 = svmul_f64_z(pg, sv_s1, sv_scale);
+                    if (mask) {
+                        svfloat64_t sv_m1 = svld1_f64(pg, mask + (qi + row) * kvLen + kj + 8);
+                        sv_s1 = svadd_f64_z(pg, sv_s1, sv_m1);
+                    }
+                    svst1_f64(pg, s_row + 8, sv_s1);
+                    sv_max = svmax_f64_z(pg, sv_max, sv_s1);
+                }
+
+                double row_max = svmaxv_f64(pg, sv_max);
 
                 double m_prev = m_arr[row];
                 double m_new = row_max;
+                if (m_prev > m_new) {
+                    m_new = m_prev;
+                }
                 m_arr[row] = m_new;
 
-                // alpha = exp(m_prev - m_new) using scalar Horner polynomial
                 double alpha_scalar = 1.0;
                 if (m_prev != negInfVal) {
-                    double ax = m_prev - m_new;
-                    if (ax < -708.396) ax = -708.396;
-                    double akf = ax * inv_ln2_d;
-                    long aki = (long)(akf + (akf >= 0 ? 0.5 : -0.5));
-                    double akff = (double)aki;
-                    double ar = ax - akff * ln2_hi_d;
-                    ar = ar - akff * ln2_lo_d;
-                    double ap = 2.48015873015873015873e-5;
-                    ap = 1.98412698412698412698e-4 + ap * ar;
-                    ap = 1.38888888888888888889e-3 + ap * ar;
-                    ap = 8.33333333333333333333e-3 + ap * ar;
-                    ap = 4.16666666666666666667e-2 + ap * ar;
-                    ap = 1.66666666666666666667e-1 + ap * ar;
-                    ap = 0.5 + ap * ar;
-                    ap = 1.0 + ap * ar;
-                    ap = 1.0 + ap * ar;
-                    long a_scale_bits = (aki + 1023) << 52;
-                    double a_scale_val = *(double *)&a_scale_bits;
-                    alpha_scalar = ap * a_scale_val;
+                    if (m_prev != m_new) {
+                        double ax = m_prev - m_new;
+                        if (ax < -708.396) ax = -708.396;
+                        double akf = ax * 1.4426950408889634;
+                        long aki = (long)(akf + (akf >= 0 ? 0.5 : -0.5));
+                        double akff = (double)aki;
+                        double ar = ax - akff * 0.6931471803691238;
+                        ar = ar - akff * 1.9082149292705877e-10;
+                        double ap = 2.48015873015873015873e-5;
+                        ap = 1.98412698412698412698e-4 + ap * ar;
+                        ap = 1.38888888888888888889e-3 + ap * ar;
+                        ap = 8.33333333333333333333e-3 + ap * ar;
+                        ap = 4.16666666666666666667e-2 + ap * ar;
+                        ap = 1.66666666666666666667e-1 + ap * ar;
+                        ap = 0.5 + ap * ar;
+                        ap = 1.0 + ap * ar;
+                        ap = 1.0 + ap * ar;
+                        long a_bits = (aki + 1023) << 52;
+                        double a_scale_val = *(double *)&a_bits;
+                        alpha_scalar = ap * a_scale_val;
+                    }
                 }
 
                 l_arr[row] = alpha_scalar * l_arr[row];
-                long oOff = (qi + row) * headDim;
-                for (long p = 0; p < headDim; p++) {
-                    output[oOff + p] *= alpha_scalar;
+                if (alpha_scalar != 1.0) {
+                    svfloat64_t sv_alpha = svdup_f64(alpha_scalar);
+                    long oOff = (qi + row) * headDim;
+                    for (long d = 0; d < headDim; d += 8) {
+                        svfloat64_t ov = svld1_f64(pg, output + oOff + d);
+                        ov = svmul_f64_z(pg, ov, sv_alpha);
+                        svst1_f64(pg, output + oOff + d, ov);
+                    }
                 }
 
-                double p_row[8];
-                double row_sum = 0.0;
+                // SVE exp for first 8 elements
+                svfloat64_t sv_mnew = svdup_f64(m_new);
+                svfloat64_t sv_x0 = svld1_f64(pg, s_row);
+                sv_x0 = svsub_f64_z(pg, sv_x0, sv_mnew);
+                sv_x0 = svmax_f64_z(pg, sv_x0, sv_exp_min);
+
+                svfloat64_t sv_kf0 = svmul_f64_z(pg, sv_x0, sv_inv_ln2);
+                svint64_t sv_ki0 = svcvt_s64_f64_z(pg, sv_kf0);
+                svfloat64_t sv_kff0 = svcvt_f64_s64_z(pg, sv_ki0);
+                svfloat64_t sv_r0 = svmsb_f64_z(pg, sv_kff0, sv_ln2_hi, sv_x0);
+                sv_r0 = svmsb_f64_z(pg, sv_kff0, sv_ln2_lo, sv_r0);
+
+                svfloat64_t sv_p0 = sv_c8;
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c7);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c6);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c5);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c4);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c3);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c2);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c1);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c1);
+
+                svint64_t sv_bits0 = svlsl_n_s64_z(pg, svadd_s64_z(pg, sv_ki0, sv_bias), 52);
+                svfloat64_t sv_pow0 = svreinterpret_f64_s64(sv_bits0);
+                svfloat64_t sv_exp0 = svmul_f64_z(pg, sv_p0, sv_pow0);
+
+                double row_sum = svaddv_f64(pg, sv_exp0);
+
+                double exp_buf0[8];
+                svst1_f64(pg, exp_buf0, sv_exp0);
                 for (int col = 0; col < 8; col++) {
-                    if (kj + col >= kvLen) {
-                        p_row[col] = 0.0;
-                        continue;
-                    }
-                    double sx = s_row[col] - m_new;
-                    if (sx < -708.396) sx = -708.396;
-                    double skf = sx * inv_ln2_d;
-                    long ski = (long)(skf + (skf >= 0 ? 0.5 : -0.5));
-                    double skff = (double)ski;
-                    double sr = sx - skff * ln2_hi_d;
-                    sr = sr - skff * ln2_lo_d;
-                    double sp = 2.48015873015873015873e-5;
-                    sp = 1.98412698412698412698e-4 + sp * sr;
-                    sp = 1.38888888888888888889e-3 + sp * sr;
-                    sp = 8.33333333333333333333e-3 + sp * sr;
-                    sp = 4.16666666666666666667e-2 + sp * sr;
-                    sp = 1.66666666666666666667e-1 + sp * sr;
-                    sp = 0.5 + sp * sr;
-                    sp = 1.0 + sp * sr;
-                    sp = 1.0 + sp * sr;
-                    long s_scale_bits = (ski + 1023) << 52;
-                    double s_scale_val = *(double *)&s_scale_bits;
-                    p_row[col] = sp * s_scale_val;
-                    row_sum += p_row[col];
+                    pt[col * 16 + row] = exp_buf0[col];
                 }
+
+                if (kBlock > 8) {
+                    svfloat64_t sv_x1 = svld1_f64(pg, s_row + 8);
+                    sv_x1 = svsub_f64_z(pg, sv_x1, sv_mnew);
+                    sv_x1 = svmax_f64_z(pg, sv_x1, sv_exp_min);
+
+                    svfloat64_t sv_kf1 = svmul_f64_z(pg, sv_x1, sv_inv_ln2);
+                    svint64_t sv_ki1 = svcvt_s64_f64_z(pg, sv_kf1);
+                    svfloat64_t sv_kff1 = svcvt_f64_s64_z(pg, sv_ki1);
+                    svfloat64_t sv_r1 = svmsb_f64_z(pg, sv_kff1, sv_ln2_hi, sv_x1);
+                    sv_r1 = svmsb_f64_z(pg, sv_kff1, sv_ln2_lo, sv_r1);
+
+                    svfloat64_t sv_p1 = sv_c8;
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c7);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c6);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c5);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c4);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c3);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c2);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c1);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c1);
+
+                    svint64_t sv_bits1 = svlsl_n_s64_z(pg, svadd_s64_z(pg, sv_ki1, sv_bias), 52);
+                    svfloat64_t sv_pow1 = svreinterpret_f64_s64(sv_bits1);
+                    svfloat64_t sv_exp1 = svmul_f64_z(pg, sv_p1, sv_pow1);
+
+                    row_sum += svaddv_f64(pg, sv_exp1);
+
+                    double exp_buf1[8];
+                    svst1_f64(pg, exp_buf1, sv_exp1);
+                    for (int col = 0; col < 8; col++) {
+                        pt[(col + 8) * 16 + row] = exp_buf1[col];
+                    }
+                }
+
                 l_arr[row] += row_sum;
+            }
 
-                for (int col = 0; col < 8; col++) {
-                    if (kj + col >= kvLen) break;
-                    if (p_row[col] == 0.0) continue;
+            // Zero unused P_tile
+            for (int row = qBlock; row < 16; row++) {
+                for (int col = 0; col < 16; col++) {
+                    pt[col * 16 + row] = 0.0;
+                }
+            }
+            for (int col = kBlock; col < 16; col++) {
+                for (int row = 0; row < 16; row++) {
+                    pt[col * 16 + row] = 0.0;
+                }
+            }
 
-                    double w = p_row[col];
-                    double *vRow = v + (kj + col) * headDim;
-                    for (long p = 0; p < headDim; p++) {
-                        output[oOff + p] += w * vRow[p];
-                    }
+            // Phase 3: P@V using 4-tile FMOPA
+            long d = 0;
+            for (; d + 16 <= headDim; d += 16) {
+                svzero_za();
+
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat64_t p0 = svld1_f64(pg, pt + kk * 16);
+                    svfloat64_t p1 = svld1_f64(pg, pt + kk * 16 + 8);
+                    svfloat64_t v0 = svld1_f64(pg, v + (kj + kk) * headDim + d);
+                    svfloat64_t v1 = svld1_f64(pg, v + (kj + kk) * headDim + d + 8);
+                    svmopa_za64_f64_m(0, pg, pg, p0, v0);
+                    svmopa_za64_f64_m(1, pg, pg, p1, v0);
+                    svmopa_za64_f64_m(2, pg, pg, p0, v1);
+                    svmopa_za64_f64_m(3, pg, pg, p1, v1);
+                }
+
+                for (int row = 0; row < 8; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat64_t r0 = svread_hor_za64_f64_m(svundef_f64(), pg, 0, row);
+                    svfloat64_t o0 = svld1_f64(pg, output + (qi + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + row) * headDim + d, svadd_f64_z(pg, o0, r0));
+
+                    svfloat64_t r2 = svread_hor_za64_f64_m(svundef_f64(), pg, 2, row);
+                    svfloat64_t o2 = svld1_f64(pg, output + (qi + row) * headDim + d + 8);
+                    svst1_f64(pg, output + (qi + row) * headDim + d + 8, svadd_f64_z(pg, o2, r2));
+                }
+                for (int row = 0; row < 8; row++) {
+                    if (qi + 8 + row >= seqLen) break;
+                    svfloat64_t r1 = svread_hor_za64_f64_m(svundef_f64(), pg, 1, row);
+                    svfloat64_t o1 = svld1_f64(pg, output + (qi + 8 + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + 8 + row) * headDim + d, svadd_f64_z(pg, o1, r1));
+
+                    svfloat64_t r3 = svread_hor_za64_f64_m(svundef_f64(), pg, 3, row);
+                    svfloat64_t o3 = svld1_f64(pg, output + (qi + 8 + row) * headDim + d + 8);
+                    svst1_f64(pg, output + (qi + 8 + row) * headDim + d + 8, svadd_f64_z(pg, o3, r3));
+                }
+            }
+
+            // Remainder: 8-col strip with 2-tile (ZA0 + ZA1)
+            if (d < headDim) {
+                svzero_za();
+
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat64_t p0 = svld1_f64(pg, pt + kk * 16);
+                    svfloat64_t p1 = svld1_f64(pg, pt + kk * 16 + 8);
+                    svfloat64_t v0 = svld1_f64(pg, v + (kj + kk) * headDim + d);
+                    svmopa_za64_f64_m(0, pg, pg, p0, v0);
+                    svmopa_za64_f64_m(1, pg, pg, p1, v0);
+                }
+
+                for (int row = 0; row < 8; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat64_t r0 = svread_hor_za64_f64_m(svundef_f64(), pg, 0, row);
+                    svfloat64_t o0 = svld1_f64(pg, output + (qi + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + row) * headDim + d, svadd_f64_z(pg, o0, r0));
+                }
+                for (int row = 0; row < 8; row++) {
+                    if (qi + 8 + row >= seqLen) break;
+                    svfloat64_t r1 = svread_hor_za64_f64_m(svundef_f64(), pg, 1, row);
+                    svfloat64_t o1 = svld1_f64(pg, output + (qi + 8 + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + 8 + row) * headDim + d, svadd_f64_z(pg, o1, r1));
                 }
             }
         }
 
         // Final normalize
-        for (long r = 0; r < qRows; r++) {
+        for (long r = 0; r < qBlock; r++) {
             if (l_arr[r] == 0.0) continue;
             double invL = 1.0 / l_arr[r];
+            svfloat64_t sv_invL = svdup_f64(invL);
             long oOff = (qi + r) * headDim;
-            for (long p = 0; p < headDim; p++) {
-                output[oOff + p] *= invL;
+            for (long d = 0; d < headDim; d += 8) {
+                svfloat64_t ov = svld1_f64(pg, output + oOff + d);
+                ov = svmul_f64_z(pg, ov, sv_invL);
+                svst1_f64(pg, output + oOff + d, ov);
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Causal variants
+// =============================================================================
+
+// sdpa_causal_fmopa_f32: Causal Multi-tile SME Flash Attention for float32
+//
+// Same as sdpa_fmopa_f32 but with implicit causal mask:
+// q row i can attend to kv col j iff j <= i + offset, where offset = kvLen - seqLen.
+//
+// func sdpa_causal_fmopa_f32(qt, kt, v, output, pdims, pscale unsafe.Pointer)
+// pdims: [0]=seqLen, [1]=kvLen, [2]=headDim
+void sdpa_causal_fmopa_f32(float *qt, float *kt, float *v,
+                             float *output,
+                             long *pdims, float *pscale)
+    __arm_streaming __arm_out("za") {
+    long seqLen = pdims[0];
+    long kvLen = pdims[1];
+    long headDim = pdims[2];
+    float scale = *pscale;
+
+    if (seqLen <= 0) return;
+    if (kvLen <= 0) return;
+    if (headDim <= 0) return;
+
+    long causal_offset = kvLen - seqLen;
+
+    svbool_t pg = svptrue_b32();
+
+    svfloat32_t sv_inv_ln2 = svdup_f32(1.44269504088896341f);
+    svfloat32_t sv_ln2_hi  = svdup_f32(0.693359375f);
+    svfloat32_t sv_ln2_lo  = svdup_f32(-2.12194440e-4f);
+    svfloat32_t sv_c1 = svdup_f32(1.0f);
+    svfloat32_t sv_c2 = svdup_f32(0.5f);
+    svfloat32_t sv_c3 = svdup_f32(0.16666666666666666f);
+    svfloat32_t sv_c4 = svdup_f32(0.041666666666666664f);
+    svfloat32_t sv_c5 = svdup_f32(0.008333333333333333f);
+    svfloat32_t sv_c6 = svdup_f32(0.001388888888888889f);
+    svint32_t sv_bias = svdup_s32(127);
+    svfloat32_t sv_exp_min = svdup_f32(-87.3365f);
+    svfloat32_t sv_zero = svdup_f32(0.0f);
+    svfloat32_t sv_scale = svdup_f32(scale);
+
+    float negInfVal = -1.0f / 0.0f;
+    svfloat32_t sv_neginf = svdup_f32(negInfVal);
+
+    for (long qi = 0; qi < seqLen; qi += 32) {
+        long qBlock = 32;
+        if (qi + qBlock > seqLen) qBlock = seqLen - qi;
+
+        float m_arr[32];
+        float l_arr[32];
+        for (int r = 0; r < 32; r++) {
+            m_arr[r] = negInfVal;
+            l_arr[r] = 0.0f;
+        }
+
+        for (long r = 0; r < qBlock; r++) {
+            for (long d = 0; d < headDim; d++) {
+                output[(qi + r) * headDim + d] = 0.0f;
+            }
+        }
+
+        for (long kj = 0; kj < kvLen; kj += 32) {
+            long kBlock = 32;
+            if (kj + kBlock > kvLen) kBlock = kvLen - kj;
+
+            // Skip tile if fully past causal boundary
+            if (kj > qi + qBlock - 1 + causal_offset) break;
+
+            // Phase 1: Q@K^T (same as non-causal)
+            svzero_za();
+
+            if (qBlock == 32) {
+                if (kBlock == 32) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t a1 = svld1_f32(pg, qt + dd * seqLen + qi + 16);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svfloat32_t b1 = svld1_f32(pg, kt + dd * kvLen + kj + 16);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                        svmopa_za32_f32_m(1, pg, pg, a1, b0);
+                        svmopa_za32_f32_m(2, pg, pg, a0, b1);
+                        svmopa_za32_f32_m(3, pg, pg, a1, b1);
+                    }
+                }
+                if (kBlock == 16) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t a1 = svld1_f32(pg, qt + dd * seqLen + qi + 16);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                        svmopa_za32_f32_m(1, pg, pg, a1, b0);
+                    }
+                }
+            }
+            if (qBlock == 16) {
+                if (kBlock == 32) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svfloat32_t b1 = svld1_f32(pg, kt + dd * kvLen + kj + 16);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                        svmopa_za32_f32_m(2, pg, pg, a0, b1);
+                    }
+                }
+                if (kBlock == 16) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat32_t a0 = svld1_f32(pg, qt + dd * seqLen + qi);
+                        svfloat32_t b0 = svld1_f32(pg, kt + dd * kvLen + kj);
+                        svmopa_za32_f32_m(0, pg, pg, a0, b0);
+                    }
+                }
+            }
+
+            // Phase 2: Read scores, apply causal mask, online softmax
+            float scores_buf[32 * 32];
+
+            for (int row = 0; row < 16; row++) {
+                svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 0, row);
+                svst1_f32(pg, scores_buf + row * 32, zr);
+            }
+            if (kBlock > 16) {
+                for (int row = 0; row < 16; row++) {
+                    svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 2, row);
+                    svst1_f32(pg, scores_buf + row * 32 + 16, zr);
+                }
+            }
+            if (qBlock > 16) {
+                for (int row = 0; row < 16; row++) {
+                    svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 1, row);
+                    svst1_f32(pg, scores_buf + (row + 16) * 32, zr);
+                }
+                if (kBlock > 16) {
+                    for (int row = 0; row < 16; row++) {
+                        svfloat32_t zr = svread_hor_za32_f32_m(svundef_f32(), pg, 3, row);
+                        svst1_f32(pg, scores_buf + (row + 16) * 32 + 16, zr);
+                    }
+                }
+            }
+
+            float pt[32 * 32];
+
+            for (int row = 0; row < 32; row++) {
+                if (row >= qBlock) break;
+
+                float *s_row = scores_buf + row * 32;
+                long causal_bound = qi + row + causal_offset;
+
+                // Apply causal mask then scale
+                for (int col = 0; col < 32; col++) {
+                    if (col >= kBlock) break;
+                    if (kj + col > causal_bound) {
+                        s_row[col] = negInfVal;
+                    }
+                }
+
+                svfloat32_t sv_s0 = svld1_f32(pg, s_row);
+                sv_s0 = svmul_f32_z(pg, sv_s0, sv_scale);
+                svst1_f32(pg, s_row, sv_s0);
+                svfloat32_t sv_max = sv_s0;
+
+                if (kBlock > 16) {
+                    svfloat32_t sv_s1 = svld1_f32(pg, s_row + 16);
+                    sv_s1 = svmul_f32_z(pg, sv_s1, sv_scale);
+                    svst1_f32(pg, s_row + 16, sv_s1);
+                    sv_max = svmax_f32_z(pg, sv_max, sv_s1);
+                }
+
+                float row_max = svmaxv_f32(pg, sv_max);
+
+                if (row_max == negInfVal) {
+                    for (int col = 0; col < 32; col++) {
+                        pt[col * 32 + row] = 0.0f;
+                    }
+                    continue;
+                }
+
+                float m_prev = m_arr[row];
+                float m_new = row_max;
+                if (m_prev > m_new) m_new = m_prev;
+                m_arr[row] = m_new;
+
+                float alpha_scalar = 1.0f;
+                if (m_prev != negInfVal) {
+                    if (m_prev != m_new) {
+                        float ax = m_prev - m_new;
+                        if (ax < -87.3365f) ax = -87.3365f;
+                        float akf = ax * 1.44269504088896341f;
+                        int aki = (int)(akf + (akf >= 0 ? 0.5f : -0.5f));
+                        float akff = (float)aki;
+                        float ar = ax - akff * 0.693359375f;
+                        ar = ar - akff * -2.12194440e-4f;
+                        float ap = 0.001388888888888889f;
+                        ap = 0.008333333333333333f + ap * ar;
+                        ap = 0.041666666666666664f + ap * ar;
+                        ap = 0.16666666666666666f + ap * ar;
+                        ap = 0.5f + ap * ar;
+                        ap = 1.0f + ap * ar;
+                        ap = 1.0f + ap * ar;
+                        int a_bits = (aki + 127) << 23;
+                        float a_scale_val = *(float *)&a_bits;
+                        alpha_scalar = ap * a_scale_val;
+                    }
+                }
+
+                l_arr[row] = alpha_scalar * l_arr[row];
+                if (alpha_scalar != 1.0f) {
+                    svfloat32_t sv_alpha = svdup_f32(alpha_scalar);
+                    long oOff = (qi + row) * headDim;
+                    for (long d = 0; d < headDim; d += 16) {
+                        svfloat32_t ov = svld1_f32(pg, output + oOff + d);
+                        ov = svmul_f32_z(pg, ov, sv_alpha);
+                        svst1_f32(pg, output + oOff + d, ov);
+                    }
+                }
+
+                svfloat32_t sv_mnew = svdup_f32(m_new);
+                svfloat32_t sv_x0 = svld1_f32(pg, s_row);
+                sv_x0 = svsub_f32_z(pg, sv_x0, sv_mnew);
+                sv_x0 = svmax_f32_z(pg, sv_x0, sv_exp_min);
+
+                svfloat32_t sv_kf0 = svmul_f32_z(pg, sv_x0, sv_inv_ln2);
+                svint32_t sv_ki0 = svcvt_s32_f32_z(pg, sv_kf0);
+                svfloat32_t sv_kff0 = svcvt_f32_s32_z(pg, sv_ki0);
+                svfloat32_t sv_r0 = svmsb_f32_z(pg, sv_kff0, sv_ln2_hi, sv_x0);
+                sv_r0 = svmsb_f32_z(pg, sv_kff0, sv_ln2_lo, sv_r0);
+
+                svfloat32_t sv_p0 = sv_c6;
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c5);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c4);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c3);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c2);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c1);
+                sv_p0 = svmad_f32_z(pg, sv_p0, sv_r0, sv_c1);
+
+                svint32_t sv_bits0 = svlsl_n_s32_z(pg, svadd_s32_z(pg, sv_ki0, sv_bias), 23);
+                svfloat32_t sv_pow0 = svreinterpret_f32_s32(sv_bits0);
+                svfloat32_t sv_exp0 = svmul_f32_z(pg, sv_p0, sv_pow0);
+
+                float row_sum = svaddv_f32(pg, sv_exp0);
+
+                float exp_buf0[16];
+                svst1_f32(pg, exp_buf0, sv_exp0);
+                for (int col = 0; col < 16; col++) {
+                    pt[col * 32 + row] = exp_buf0[col];
+                }
+
+                if (kBlock > 16) {
+                    svfloat32_t sv_x1 = svld1_f32(pg, s_row + 16);
+                    sv_x1 = svsub_f32_z(pg, sv_x1, sv_mnew);
+                    sv_x1 = svmax_f32_z(pg, sv_x1, sv_exp_min);
+
+                    svfloat32_t sv_kf1 = svmul_f32_z(pg, sv_x1, sv_inv_ln2);
+                    svint32_t sv_ki1 = svcvt_s32_f32_z(pg, sv_kf1);
+                    svfloat32_t sv_kff1 = svcvt_f32_s32_z(pg, sv_ki1);
+                    svfloat32_t sv_r1 = svmsb_f32_z(pg, sv_kff1, sv_ln2_hi, sv_x1);
+                    sv_r1 = svmsb_f32_z(pg, sv_kff1, sv_ln2_lo, sv_r1);
+
+                    svfloat32_t sv_p1 = sv_c6;
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c5);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c4);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c3);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c2);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c1);
+                    sv_p1 = svmad_f32_z(pg, sv_p1, sv_r1, sv_c1);
+
+                    svint32_t sv_bits1 = svlsl_n_s32_z(pg, svadd_s32_z(pg, sv_ki1, sv_bias), 23);
+                    svfloat32_t sv_pow1 = svreinterpret_f32_s32(sv_bits1);
+                    svfloat32_t sv_exp1 = svmul_f32_z(pg, sv_p1, sv_pow1);
+
+                    row_sum += svaddv_f32(pg, sv_exp1);
+
+                    float exp_buf1[16];
+                    svst1_f32(pg, exp_buf1, sv_exp1);
+                    for (int col = 0; col < 16; col++) {
+                        pt[(col + 16) * 32 + row] = exp_buf1[col];
+                    }
+                }
+
+                l_arr[row] += row_sum;
+            }
+
+            for (int row = qBlock; row < 32; row++) {
+                for (int col = 0; col < 32; col++) {
+                    pt[col * 32 + row] = 0.0f;
+                }
+            }
+            for (int col = kBlock; col < 32; col++) {
+                for (int row = 0; row < 32; row++) {
+                    pt[col * 32 + row] = 0.0f;
+                }
+            }
+
+            // Phase 3: P@V (same as non-causal)
+            long d = 0;
+            for (; d + 32 <= headDim; d += 32) {
+                svzero_za();
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat32_t p0 = svld1_f32(pg, pt + kk * 32);
+                    svfloat32_t p1 = svld1_f32(pg, pt + kk * 32 + 16);
+                    svfloat32_t v0 = svld1_f32(pg, v + (kj + kk) * headDim + d);
+                    svfloat32_t v1 = svld1_f32(pg, v + (kj + kk) * headDim + d + 16);
+                    svmopa_za32_f32_m(0, pg, pg, p0, v0);
+                    svmopa_za32_f32_m(1, pg, pg, p1, v0);
+                    svmopa_za32_f32_m(2, pg, pg, p0, v1);
+                    svmopa_za32_f32_m(3, pg, pg, p1, v1);
+                }
+                for (int row = 0; row < 16; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat32_t r0 = svread_hor_za32_f32_m(svundef_f32(), pg, 0, row);
+                    svfloat32_t o0 = svld1_f32(pg, output + (qi + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + row) * headDim + d, svadd_f32_z(pg, o0, r0));
+                    svfloat32_t r2 = svread_hor_za32_f32_m(svundef_f32(), pg, 2, row);
+                    svfloat32_t o2 = svld1_f32(pg, output + (qi + row) * headDim + d + 16);
+                    svst1_f32(pg, output + (qi + row) * headDim + d + 16, svadd_f32_z(pg, o2, r2));
+                }
+                for (int row = 0; row < 16; row++) {
+                    if (qi + 16 + row >= seqLen) break;
+                    svfloat32_t r1 = svread_hor_za32_f32_m(svundef_f32(), pg, 1, row);
+                    svfloat32_t o1 = svld1_f32(pg, output + (qi + 16 + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + 16 + row) * headDim + d, svadd_f32_z(pg, o1, r1));
+                    svfloat32_t r3 = svread_hor_za32_f32_m(svundef_f32(), pg, 3, row);
+                    svfloat32_t o3 = svld1_f32(pg, output + (qi + 16 + row) * headDim + d + 16);
+                    svst1_f32(pg, output + (qi + 16 + row) * headDim + d + 16, svadd_f32_z(pg, o3, r3));
+                }
+            }
+            if (d < headDim) {
+                svzero_za();
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat32_t p0 = svld1_f32(pg, pt + kk * 32);
+                    svfloat32_t p1 = svld1_f32(pg, pt + kk * 32 + 16);
+                    svfloat32_t v0 = svld1_f32(pg, v + (kj + kk) * headDim + d);
+                    svmopa_za32_f32_m(0, pg, pg, p0, v0);
+                    svmopa_za32_f32_m(1, pg, pg, p1, v0);
+                }
+                for (int row = 0; row < 16; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat32_t r0 = svread_hor_za32_f32_m(svundef_f32(), pg, 0, row);
+                    svfloat32_t o0 = svld1_f32(pg, output + (qi + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + row) * headDim + d, svadd_f32_z(pg, o0, r0));
+                }
+                for (int row = 0; row < 16; row++) {
+                    if (qi + 16 + row >= seqLen) break;
+                    svfloat32_t r1 = svread_hor_za32_f32_m(svundef_f32(), pg, 1, row);
+                    svfloat32_t o1 = svld1_f32(pg, output + (qi + 16 + row) * headDim + d);
+                    svst1_f32(pg, output + (qi + 16 + row) * headDim + d, svadd_f32_z(pg, o1, r1));
+                }
+            }
+        }
+
+        for (long r = 0; r < qBlock; r++) {
+            if (l_arr[r] == 0.0f) continue;
+            float invL = 1.0f / l_arr[r];
+            svfloat32_t sv_invL = svdup_f32(invL);
+            long oOff = (qi + r) * headDim;
+            for (long d = 0; d < headDim; d += 16) {
+                svfloat32_t ov = svld1_f32(pg, output + oOff + d);
+                ov = svmul_f32_z(pg, ov, sv_invL);
+                svst1_f32(pg, output + oOff + d, ov);
+            }
+        }
+    }
+}
+
+// sdpa_causal_fmopa_f64: Causal Multi-tile SME Flash Attention for float64
+//
+// func sdpa_causal_fmopa_f64(qt, kt, v, output, pdims, pscale unsafe.Pointer)
+void sdpa_causal_fmopa_f64(double *qt, double *kt, double *v,
+                             double *output,
+                             long *pdims, double *pscale)
+    __arm_streaming __arm_out("za") {
+    long seqLen = pdims[0];
+    long kvLen = pdims[1];
+    long headDim = pdims[2];
+    double scale = *pscale;
+
+    if (seqLen <= 0) return;
+    if (kvLen <= 0) return;
+    if (headDim <= 0) return;
+
+    long causal_offset = kvLen - seqLen;
+
+    svbool_t pg = svptrue_b64();
+
+    svfloat64_t sv_inv_ln2 = svdup_f64(1.4426950408889634);
+    svfloat64_t sv_ln2_hi  = svdup_f64(0.6931471803691238);
+    svfloat64_t sv_ln2_lo  = svdup_f64(1.9082149292705877e-10);
+    svfloat64_t sv_c1 = svdup_f64(1.0);
+    svfloat64_t sv_c2 = svdup_f64(0.5);
+    svfloat64_t sv_c3 = svdup_f64(0.16666666666666666);
+    svfloat64_t sv_c4 = svdup_f64(0.041666666666666664);
+    svfloat64_t sv_c5 = svdup_f64(0.008333333333333333);
+    svfloat64_t sv_c6 = svdup_f64(0.001388888888888889);
+    svfloat64_t sv_c7 = svdup_f64(1.98412698412698412698e-4);
+    svfloat64_t sv_c8 = svdup_f64(2.48015873015873015873e-5);
+    svint64_t sv_bias = svdup_s64(1023);
+    svfloat64_t sv_exp_min = svdup_f64(-708.396);
+    svfloat64_t sv_zero = svdup_f64(0.0);
+    svfloat64_t sv_scale = svdup_f64(scale);
+
+    double negInfVal = -1.0 / 0.0;
+
+    for (long qi = 0; qi < seqLen; qi += 16) {
+        long qBlock = 16;
+        if (qi + qBlock > seqLen) qBlock = seqLen - qi;
+
+        double m_arr[16];
+        double l_arr[16];
+        for (int r = 0; r < 16; r++) {
+            m_arr[r] = negInfVal;
+            l_arr[r] = 0.0;
+        }
+
+        for (long r = 0; r < qBlock; r++) {
+            for (long d = 0; d < headDim; d++) {
+                output[(qi + r) * headDim + d] = 0.0;
+            }
+        }
+
+        for (long kj = 0; kj < kvLen; kj += 16) {
+            long kBlock = 16;
+            if (kj + kBlock > kvLen) kBlock = kvLen - kj;
+
+            if (kj > qi + qBlock - 1 + causal_offset) break;
+
+            svzero_za();
+
+            if (qBlock == 16) {
+                if (kBlock == 16) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t a1 = svld1_f64(pg, qt + dd * seqLen + qi + 8);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svfloat64_t b1 = svld1_f64(pg, kt + dd * kvLen + kj + 8);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                        svmopa_za64_f64_m(1, pg, pg, a1, b0);
+                        svmopa_za64_f64_m(2, pg, pg, a0, b1);
+                        svmopa_za64_f64_m(3, pg, pg, a1, b1);
+                    }
+                }
+                if (kBlock == 8) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t a1 = svld1_f64(pg, qt + dd * seqLen + qi + 8);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                        svmopa_za64_f64_m(1, pg, pg, a1, b0);
+                    }
+                }
+            }
+            if (qBlock == 8) {
+                if (kBlock == 16) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svfloat64_t b1 = svld1_f64(pg, kt + dd * kvLen + kj + 8);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                        svmopa_za64_f64_m(2, pg, pg, a0, b1);
+                    }
+                }
+                if (kBlock == 8) {
+                    for (long dd = 0; dd < headDim; dd++) {
+                        svfloat64_t a0 = svld1_f64(pg, qt + dd * seqLen + qi);
+                        svfloat64_t b0 = svld1_f64(pg, kt + dd * kvLen + kj);
+                        svmopa_za64_f64_m(0, pg, pg, a0, b0);
+                    }
+                }
+            }
+
+            double scores_buf[16 * 16];
+
+            for (int row = 0; row < 8; row++) {
+                svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 0, row);
+                svst1_f64(pg, scores_buf + row * 16, zr);
+            }
+            if (kBlock > 8) {
+                for (int row = 0; row < 8; row++) {
+                    svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 2, row);
+                    svst1_f64(pg, scores_buf + row * 16 + 8, zr);
+                }
+            }
+            if (qBlock > 8) {
+                for (int row = 0; row < 8; row++) {
+                    svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 1, row);
+                    svst1_f64(pg, scores_buf + (row + 8) * 16, zr);
+                }
+                if (kBlock > 8) {
+                    for (int row = 0; row < 8; row++) {
+                        svfloat64_t zr = svread_hor_za64_f64_m(svundef_f64(), pg, 3, row);
+                        svst1_f64(pg, scores_buf + (row + 8) * 16 + 8, zr);
+                    }
+                }
+            }
+
+            double pt[16 * 16];
+
+            for (int row = 0; row < 16; row++) {
+                if (row >= qBlock) break;
+
+                double *s_row = scores_buf + row * 16;
+                long causal_bound = qi + row + causal_offset;
+
+                for (int col = 0; col < 16; col++) {
+                    if (col >= kBlock) break;
+                    if (kj + col > causal_bound) {
+                        s_row[col] = negInfVal;
+                    }
+                }
+
+                svfloat64_t sv_s0 = svld1_f64(pg, s_row);
+                sv_s0 = svmul_f64_z(pg, sv_s0, sv_scale);
+                svst1_f64(pg, s_row, sv_s0);
+                svfloat64_t sv_max = sv_s0;
+
+                if (kBlock > 8) {
+                    svfloat64_t sv_s1 = svld1_f64(pg, s_row + 8);
+                    sv_s1 = svmul_f64_z(pg, sv_s1, sv_scale);
+                    svst1_f64(pg, s_row + 8, sv_s1);
+                    sv_max = svmax_f64_z(pg, sv_max, sv_s1);
+                }
+
+                double row_max = svmaxv_f64(pg, sv_max);
+
+                if (row_max == negInfVal) {
+                    for (int col = 0; col < 16; col++) {
+                        pt[col * 16 + row] = 0.0;
+                    }
+                    continue;
+                }
+
+                double m_prev = m_arr[row];
+                double m_new = row_max;
+                if (m_prev > m_new) m_new = m_prev;
+                m_arr[row] = m_new;
+
+                double alpha_scalar = 1.0;
+                if (m_prev != negInfVal) {
+                    if (m_prev != m_new) {
+                        double ax = m_prev - m_new;
+                        if (ax < -708.396) ax = -708.396;
+                        double akf = ax * 1.4426950408889634;
+                        long aki = (long)(akf + (akf >= 0 ? 0.5 : -0.5));
+                        double akff = (double)aki;
+                        double ar = ax - akff * 0.6931471803691238;
+                        ar = ar - akff * 1.9082149292705877e-10;
+                        double ap = 2.48015873015873015873e-5;
+                        ap = 1.98412698412698412698e-4 + ap * ar;
+                        ap = 1.38888888888888888889e-3 + ap * ar;
+                        ap = 8.33333333333333333333e-3 + ap * ar;
+                        ap = 4.16666666666666666667e-2 + ap * ar;
+                        ap = 1.66666666666666666667e-1 + ap * ar;
+                        ap = 0.5 + ap * ar;
+                        ap = 1.0 + ap * ar;
+                        ap = 1.0 + ap * ar;
+                        long a_bits = (aki + 1023) << 52;
+                        double a_scale_val = *(double *)&a_bits;
+                        alpha_scalar = ap * a_scale_val;
+                    }
+                }
+
+                l_arr[row] = alpha_scalar * l_arr[row];
+                if (alpha_scalar != 1.0) {
+                    svfloat64_t sv_alpha = svdup_f64(alpha_scalar);
+                    long oOff = (qi + row) * headDim;
+                    for (long d = 0; d < headDim; d += 8) {
+                        svfloat64_t ov = svld1_f64(pg, output + oOff + d);
+                        ov = svmul_f64_z(pg, ov, sv_alpha);
+                        svst1_f64(pg, output + oOff + d, ov);
+                    }
+                }
+
+                svfloat64_t sv_mnew = svdup_f64(m_new);
+                svfloat64_t sv_x0 = svld1_f64(pg, s_row);
+                sv_x0 = svsub_f64_z(pg, sv_x0, sv_mnew);
+                sv_x0 = svmax_f64_z(pg, sv_x0, sv_exp_min);
+
+                svfloat64_t sv_kf0 = svmul_f64_z(pg, sv_x0, sv_inv_ln2);
+                svint64_t sv_ki0 = svcvt_s64_f64_z(pg, sv_kf0);
+                svfloat64_t sv_kff0 = svcvt_f64_s64_z(pg, sv_ki0);
+                svfloat64_t sv_r0 = svmsb_f64_z(pg, sv_kff0, sv_ln2_hi, sv_x0);
+                sv_r0 = svmsb_f64_z(pg, sv_kff0, sv_ln2_lo, sv_r0);
+
+                svfloat64_t sv_p0 = sv_c8;
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c7);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c6);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c5);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c4);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c3);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c2);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c1);
+                sv_p0 = svmad_f64_z(pg, sv_p0, sv_r0, sv_c1);
+
+                svint64_t sv_bits0 = svlsl_n_s64_z(pg, svadd_s64_z(pg, sv_ki0, sv_bias), 52);
+                svfloat64_t sv_pow0 = svreinterpret_f64_s64(sv_bits0);
+                svfloat64_t sv_exp0 = svmul_f64_z(pg, sv_p0, sv_pow0);
+
+                double row_sum = svaddv_f64(pg, sv_exp0);
+
+                double exp_buf0[8];
+                svst1_f64(pg, exp_buf0, sv_exp0);
+                for (int col = 0; col < 8; col++) {
+                    pt[col * 16 + row] = exp_buf0[col];
+                }
+
+                if (kBlock > 8) {
+                    svfloat64_t sv_x1 = svld1_f64(pg, s_row + 8);
+                    sv_x1 = svsub_f64_z(pg, sv_x1, sv_mnew);
+                    sv_x1 = svmax_f64_z(pg, sv_x1, sv_exp_min);
+
+                    svfloat64_t sv_kf1 = svmul_f64_z(pg, sv_x1, sv_inv_ln2);
+                    svint64_t sv_ki1 = svcvt_s64_f64_z(pg, sv_kf1);
+                    svfloat64_t sv_kff1 = svcvt_f64_s64_z(pg, sv_ki1);
+                    svfloat64_t sv_r1 = svmsb_f64_z(pg, sv_kff1, sv_ln2_hi, sv_x1);
+                    sv_r1 = svmsb_f64_z(pg, sv_kff1, sv_ln2_lo, sv_r1);
+
+                    svfloat64_t sv_p1 = sv_c8;
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c7);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c6);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c5);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c4);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c3);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c2);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c1);
+                    sv_p1 = svmad_f64_z(pg, sv_p1, sv_r1, sv_c1);
+
+                    svint64_t sv_bits1 = svlsl_n_s64_z(pg, svadd_s64_z(pg, sv_ki1, sv_bias), 52);
+                    svfloat64_t sv_pow1 = svreinterpret_f64_s64(sv_bits1);
+                    svfloat64_t sv_exp1 = svmul_f64_z(pg, sv_p1, sv_pow1);
+
+                    row_sum += svaddv_f64(pg, sv_exp1);
+
+                    double exp_buf1[8];
+                    svst1_f64(pg, exp_buf1, sv_exp1);
+                    for (int col = 0; col < 8; col++) {
+                        pt[(col + 8) * 16 + row] = exp_buf1[col];
+                    }
+                }
+
+                l_arr[row] += row_sum;
+            }
+
+            for (int row = qBlock; row < 16; row++) {
+                for (int col = 0; col < 16; col++) pt[col * 16 + row] = 0.0;
+            }
+            for (int col = kBlock; col < 16; col++) {
+                for (int row = 0; row < 16; row++) pt[col * 16 + row] = 0.0;
+            }
+
+            long d = 0;
+            for (; d + 16 <= headDim; d += 16) {
+                svzero_za();
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat64_t p0 = svld1_f64(pg, pt + kk * 16);
+                    svfloat64_t p1 = svld1_f64(pg, pt + kk * 16 + 8);
+                    svfloat64_t v0 = svld1_f64(pg, v + (kj + kk) * headDim + d);
+                    svfloat64_t v1 = svld1_f64(pg, v + (kj + kk) * headDim + d + 8);
+                    svmopa_za64_f64_m(0, pg, pg, p0, v0);
+                    svmopa_za64_f64_m(1, pg, pg, p1, v0);
+                    svmopa_za64_f64_m(2, pg, pg, p0, v1);
+                    svmopa_za64_f64_m(3, pg, pg, p1, v1);
+                }
+                for (int row = 0; row < 8; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat64_t r0 = svread_hor_za64_f64_m(svundef_f64(), pg, 0, row);
+                    svfloat64_t o0 = svld1_f64(pg, output + (qi + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + row) * headDim + d, svadd_f64_z(pg, o0, r0));
+                    svfloat64_t r2 = svread_hor_za64_f64_m(svundef_f64(), pg, 2, row);
+                    svfloat64_t o2 = svld1_f64(pg, output + (qi + row) * headDim + d + 8);
+                    svst1_f64(pg, output + (qi + row) * headDim + d + 8, svadd_f64_z(pg, o2, r2));
+                }
+                for (int row = 0; row < 8; row++) {
+                    if (qi + 8 + row >= seqLen) break;
+                    svfloat64_t r1 = svread_hor_za64_f64_m(svundef_f64(), pg, 1, row);
+                    svfloat64_t o1 = svld1_f64(pg, output + (qi + 8 + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + 8 + row) * headDim + d, svadd_f64_z(pg, o1, r1));
+                    svfloat64_t r3 = svread_hor_za64_f64_m(svundef_f64(), pg, 3, row);
+                    svfloat64_t o3 = svld1_f64(pg, output + (qi + 8 + row) * headDim + d + 8);
+                    svst1_f64(pg, output + (qi + 8 + row) * headDim + d + 8, svadd_f64_z(pg, o3, r3));
+                }
+            }
+            if (d < headDim) {
+                svzero_za();
+                for (int kk = 0; kk < kBlock; kk++) {
+                    svfloat64_t p0 = svld1_f64(pg, pt + kk * 16);
+                    svfloat64_t p1 = svld1_f64(pg, pt + kk * 16 + 8);
+                    svfloat64_t v0 = svld1_f64(pg, v + (kj + kk) * headDim + d);
+                    svmopa_za64_f64_m(0, pg, pg, p0, v0);
+                    svmopa_za64_f64_m(1, pg, pg, p1, v0);
+                }
+                for (int row = 0; row < 8; row++) {
+                    if (qi + row >= seqLen) break;
+                    svfloat64_t r0 = svread_hor_za64_f64_m(svundef_f64(), pg, 0, row);
+                    svfloat64_t o0 = svld1_f64(pg, output + (qi + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + row) * headDim + d, svadd_f64_z(pg, o0, r0));
+                }
+                for (int row = 0; row < 8; row++) {
+                    if (qi + 8 + row >= seqLen) break;
+                    svfloat64_t r1 = svread_hor_za64_f64_m(svundef_f64(), pg, 1, row);
+                    svfloat64_t o1 = svld1_f64(pg, output + (qi + 8 + row) * headDim + d);
+                    svst1_f64(pg, output + (qi + 8 + row) * headDim + d, svadd_f64_z(pg, o1, r1));
+                }
+            }
+        }
+
+        for (long r = 0; r < qBlock; r++) {
+            if (l_arr[r] == 0.0) continue;
+            double invL = 1.0 / l_arr[r];
+            svfloat64_t sv_invL = svdup_f64(invL);
+            long oOff = (qi + r) * headDim;
+            for (long d = 0; d < headDim; d += 8) {
+                svfloat64_t ov = svld1_f64(pg, output + oOff + d);
+                ov = svmul_f64_z(pg, ov, sv_invL);
+                svst1_f64(pg, output + oOff + d, ov);
             }
         }
     }

@@ -22,8 +22,8 @@ import (
 	"github.com/ajroetker/go-highway/hwy"
 )
 
-// TestMatMulFMOPAF16Debug tests F16 FMOPA matmul with a simple case
-func TestMatMulFMOPAF16Debug(t *testing.T) {
+// TestMultiTileMatMulFMOPAF16Debug tests F16 FMOPA matmul with a simple case
+func TestMultiTileMatMulFMOPAF16Debug(t *testing.T) {
 	const n = 16
 
 	// A = all 2.0, B = all 3.0
@@ -40,9 +40,9 @@ func TestMatMulFMOPAF16Debug(t *testing.T) {
 		c[i] = hwy.Float32ToFloat16(-999.0)
 	}
 
-	t.Logf("Calling MatMulFMOPAF16 with m=%d, n=%d, k=%d", n, n, n)
+	t.Logf("Calling MultiTileMatMulFMOPAF16 with m=%d, n=%d, k=%d", n, n, n)
 
-	MatMulFMOPAF16(at, b, c, n, n, n)
+	MultiTileMatMulFMOPAF16(at, b, c, n, n, n)
 
 	expected := float32(96) // 16 * 2 * 3
 	t.Logf("Expected value: %f", expected)
@@ -87,8 +87,8 @@ func TestMatMulFMOPAF16Debug(t *testing.T) {
 	}
 }
 
-// TestMatMulFMOPAF16Identity tests F16 with identity matrix
-func TestMatMulFMOPAF16Identity(t *testing.T) {
+// TestMultiTileMatMulFMOPAF16Identity tests F16 with identity matrix
+func TestMultiTileMatMulFMOPAF16Identity(t *testing.T) {
 	const n = 16
 
 	// Create A matrix (transposed) with known values
@@ -111,7 +111,7 @@ func TestMatMulFMOPAF16Identity(t *testing.T) {
 	}
 
 	// C = AT^T * B = I * B = B
-	MatMulFMOPAF16(at, b, c, n, n, n)
+	MultiTileMatMulFMOPAF16(at, b, c, n, n, n)
 
 	t.Log("First row of C (expected 1, 2, 3, ..., 16):")
 	for j := range n {

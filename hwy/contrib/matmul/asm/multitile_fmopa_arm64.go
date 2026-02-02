@@ -3,7 +3,7 @@
 // versions:
 // 	clang   21.1.8
 // 	objdump 2.45.1
-// flags: -march=armv9-a+sme+sme-f64f64 -O3
+// flags: -march=armv9-a+sme+sme-f64f64+sme-f16f16+bf16 -O3
 // source: ../c/multitile_fmopa_arm64.c
 
 package asm
@@ -21,3 +21,15 @@ func multitile_fmopa_at_f64_strided(at, b, c, pm, pn, pk, pldc, pcoff unsafe.Poi
 
 //go:noescape
 func multitile_fmopa_at_f64(at, b, c, pm, pn, pk unsafe.Pointer)
+
+//go:noescape
+func multitile_fmopa_at_f16(at, b, c, pm, pn, pk, scratch unsafe.Pointer)
+
+//go:noescape
+func multitile_fmopa_at_f16_strided(at, b, c, pm, pn, pk, pldc, pcoff, scratch unsafe.Pointer)
+
+//go:noescape
+func multitile_bfmopa_at_bf16(at, b, c, pm, pn, pk, scratch unsafe.Pointer)
+
+//go:noescape
+func multitile_bfmopa_at_bf16_strided(at, b, c, pm, pn, pk, pldc, pcoff, scratch unsafe.Pointer)

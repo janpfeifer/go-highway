@@ -70,7 +70,7 @@ func BenchmarkMatMulKLastNEONvsSME(b *testing.B) {
 					Transpose2D(a, m, k, at)
 					Transpose2D(bMat, n, k, bt)
 					// Call FMOPA
-					asm.MatMulFMOPAF32(at, bt, c, m, n, k)
+					asm.MultiTileMatMulFMOPAF32(at, bt, c, m, n, k)
 				}
 				b.StopTimer()
 				elapsed := b.Elapsed().Seconds()

@@ -25,6 +25,13 @@ import (
 	"github.com/ajroetker/go-highway/hwy/contrib/nn/asm"
 )
 
+// transposeF32 transposes a [rows, cols] matrix to [cols, rows].
+func transposeF32(src []float32, rows, cols int) []float32 {
+	dst := make([]float32, cols*rows)
+	matmul.Transpose2D(src, rows, cols, dst)
+	return dst
+}
+
 // TestSDPASMEDirect calls the SME FMOPA assembly directly with trivial inputs
 // to isolate numerical issues from the adapter layer.
 func TestSDPASMEDirect(t *testing.T) {
@@ -54,13 +61,16 @@ func TestSDPASMEDirect(t *testing.T) {
 		}
 	}
 
+	// qt = transpose(q) — all ones, so transpose is identity
+	qt := transposeF32(q, seqLen, headDim)
+
 	// With Q=1, KT=1: Q@KT = [[16,16,...],[16,16,...],...]
 	// After scale (0.0625): scores = [[1,1,...],[1,1,...],...]
 	// softmax([1,1,...,1]) = [1/16, 1/16, ..., 1/16]
 	// output = (1/16) * sum(V rows) = (1/16) * (0+1+...+15) * ones = 7.5
 	expected := float32(7.5)
 
-	asm.SDPAFMOPAF32(q, kt, v, nil, output, seqLen, kvLen, headDim, scale)
+	asm.SDPAFMOPAF32(qt, kt, v, nil, output, seqLen, kvLen, headDim, scale)
 
 	t.Logf("output[0]=%v, expected=%v", output[0], expected)
 	t.Logf("output[15]=%v", output[15])
@@ -76,7 +86,7 @@ func TestSDPASMEDirect(t *testing.T) {
 		}
 	}
 
-	// Now test with 32x32x64 (the failing case dimensions)
+	// Now test with 32x32x64 (uses full 4-tile path)
 	seqLen2, kvLen2, headDim2 := 32, 32, 64
 	scale2 := float32(1.0) / float32(headDim2) // 1/64 = 0.015625
 
@@ -97,11 +107,13 @@ func TestSDPASMEDirect(t *testing.T) {
 		}
 	}
 
+	qt2 := transposeF32(q2, seqLen2, headDim2)
+
 	// Q@KT = 64 for all entries, scaled by 1/64 = 1.0, softmax = 1/32
 	// output = (1/32) * sum(0..31) = (1/32) * 496 = 15.5
 	expected2 := float32(15.5)
 
-	asm.SDPAFMOPAF32(q2, kt2, v2, nil, output2, seqLen2, kvLen2, headDim2, scale2)
+	asm.SDPAFMOPAF32(qt2, kt2, v2, nil, output2, seqLen2, kvLen2, headDim2, scale2)
 
 	t.Logf("32x32x64: output[0]=%v, expected=%v", output2[0], expected2)
 	t.Logf("32x32x64: output[63]=%v", output2[63])
@@ -117,7 +129,7 @@ func TestSDPASMEDirect(t *testing.T) {
 		}
 	}
 
-	// Test with actual test data but manual transpose (like the adapter does)
+	// Test with actual test data
 	seqLen3, kvLen3, headDim3 := 32, 32, 64
 	scale3 := float32(1.0 / stdmath.Sqrt(float64(headDim3)))
 
@@ -134,25 +146,9 @@ func TestSDPASMEDirect(t *testing.T) {
 		v3[i] = float32(i)*0.006 - 0.3
 	}
 
-	// Manual transpose K [kvLen3, headDim3] → KT [headDim3, kvLen3]
-	kt3 := make([]float32, headDim3*kvLen3)
-	for i := 0; i < kvLen3; i++ {
-		for j := 0; j < headDim3; j++ {
-			kt3[j*kvLen3+i] = k3[i*headDim3+j]
-		}
-	}
-
-	// Also test through adapter (Transpose2D)
-	kt3b := make([]float32, headDim3*kvLen3)
-	matmul.Transpose2D(k3, kvLen3, headDim3, kt3b)
-
-	// Check transpose match
-	for i := range kt3 {
-		if kt3[i] != kt3b[i] {
-			t.Errorf("transpose mismatch at %d: manual=%v, Transpose2D=%v", i, kt3[i], kt3b[i])
-			break
-		}
-	}
+	// Transpose Q and K
+	qt3 := transposeF32(q3, seqLen3, headDim3)
+	kt3 := transposeF32(k3, kvLen3, headDim3)
 
 	// Get reference from scalar
 	scalarOutput3 := make([]float32, seqLen3*headDim3)
@@ -161,7 +157,7 @@ func TestSDPASMEDirect(t *testing.T) {
 
 	// Call SME directly
 	smeOutput3 := make([]float32, seqLen3*headDim3)
-	asm.SDPAFMOPAF32(q3, kt3, v3, nil, smeOutput3, seqLen3, kvLen3, headDim3, scale3)
+	asm.SDPAFMOPAF32(qt3, kt3, v3, nil, smeOutput3, seqLen3, kvLen3, headDim3, scale3)
 
 	t.Logf("direct SME: output[0]=%v, scalar=%v", smeOutput3[0], scalarOutput3[0])
 	t.Logf("direct SME: output[64]=%v, scalar=%v", smeOutput3[64], scalarOutput3[64])
@@ -180,130 +176,71 @@ func TestSDPASMEDirect(t *testing.T) {
 			i, smeOutput3[i], scalarOutput3[i], autoOutput3[i],
 			diff, stdmath.Abs(float64(autoOutput3[i]-scalarOutput3[i])))
 	}
+}
 
-	// Diagnostic: test if Q row variation affects output (tests gather correctness)
-	// Q[r, :] = r for all d, KT = 1, V[r, :] = r
-	// Different Q rows produce different attention weights → different outputs
-	seqLen4, kvLen4, headDim4 := 32, 32, 64
-	scale4 := float32(1.0 / stdmath.Sqrt(float64(headDim4)))
-	q4 := make([]float32, seqLen4*headDim4)
-	kt4 := make([]float32, headDim4*kvLen4)
-	v4 := make([]float32, kvLen4*headDim4)
-	for r := 0; r < seqLen4; r++ {
-		for d := 0; d < headDim4; d++ {
-			q4[r*headDim4+d] = float32(r)
-		}
-	}
-	for i := range kt4 {
-		kt4[i] = 1.0
-	}
-	for r := 0; r < kvLen4; r++ {
-		for d := 0; d < headDim4; d++ {
-			v4[r*headDim4+d] = float32(r)
-		}
+// TestSDPACausalSME tests the causal SME flash attention kernel with dimensions
+// large enough to trigger the SME path (>= minDimForSDPASME=32).
+func TestSDPACausalSME(t *testing.T) {
+	if !hwy.HasSME() {
+		t.Skip("no SME support")
 	}
 
-	smeOut4 := make([]float32, seqLen4*headDim4)
-	asm.SDPAFMOPAF32(q4, kt4, v4, nil, smeOut4, seqLen4, kvLen4, headDim4, scale4)
-
-	// Row 0: Q=0, all scores = 0, uniform softmax → avg(V) = 15.5
-	// Row 31: Q=31, all scores = 31*64*scale = 31*64*0.125=248, uniform → 15.5
-	// (Since KT=1, all kv positions get same score per row, so softmax is always uniform)
-	// So all rows should produce 15.5 regardless of Q variation.
-	// This doesn't test gather! Need asymmetric KT.
-	t.Logf("symmetric KT: row0=%v row31=%v (expect 15.5)", smeOut4[0], smeOut4[31*headDim4])
-
-	// Better test: make KT asymmetric
-	// KT[dd=0, kj=0] = 1000, rest = 0
-	// Q[r, d=0] = r, Q[r, d>0] = 0
-	// Then score[r, kj=0] = r * 1000, score[r, kj>0] = 0
-	// For r=0: all scores = 0, uniform → avg(V) = 15.5
-	// For r=31: score[0] >> others, softmax peaks at kj=0 → output ≈ V[0] = 0
-	for i := range q4 {
-		q4[i] = 0
-	}
-	for r := 0; r < seqLen4; r++ {
-		q4[r*headDim4+0] = float32(r) // only d=0 has value
-	}
-	for i := range kt4 {
-		kt4[i] = 0
-	}
-	kt4[0*kvLen4+0] = 100 // KT[dd=0, kj=0] = 100
-
-	for i := range v4 {
-		v4[i] = 0
-	}
-	for r := 0; r < kvLen4; r++ {
-		for d := 0; d < headDim4; d++ {
-			v4[r*headDim4+d] = float32(r)
-		}
+	tests := []struct {
+		name    string
+		seqLen  int
+		kvLen   int
+		headDim int
+	}{
+		{"32x32x64", 32, 32, 64},
+		{"32x64x64", 32, 64, 64},   // kvLen > seqLen (prefix caching)
+		{"64x64x64", 64, 64, 64},
+		{"64x64x128", 64, 64, 128},
+		{"128x128x64", 128, 128, 64},
 	}
 
-	smeOut5 := make([]float32, seqLen4*headDim4)
-	asm.SDPAFMOPAF32(q4, kt4, v4, nil, smeOut5, seqLen4, kvLen4, headDim4, scale4)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scale := float32(1.0 / stdmath.Sqrt(float64(tt.headDim)))
+			q := make([]float32, tt.seqLen*tt.headDim)
+			k := make([]float32, tt.kvLen*tt.headDim)
+			v := make([]float32, tt.kvLen*tt.headDim)
 
-	// Row 0: Q[0,0]=0 → all scores=0 → uniform → output=15.5
-	// Row 31: Q[31,0]=31 → score[kj=0]=31*100*scale=31*100*0.125=387.5 (huge!)
-	//   → softmax peaks hard at kj=0 → output ≈ V[0,:] = 0
-	t.Logf("asymmetric: row0[0]=%v (expect ~15.5), row31[0]=%v (expect ~0.0)",
-		smeOut5[0], smeOut5[31*headDim4])
-	t.Logf("asymmetric: row1[0]=%v, row16[0]=%v",
-		smeOut5[1*headDim4], smeOut5[16*headDim4])
+			for i := range q {
+				q[i] = float32(i)*0.01 - 0.5
+			}
+			for i := range k {
+				k[i] = float32(i)*0.008 - 0.4
+			}
+			for i := range v {
+				v[i] = float32(i)*0.006 - 0.3
+			}
 
-	// Isolate: Q has realistic data, KT=1, V=incrementing
-	// If Q gather works: different Q rows produce same score (all KT=1),
-	// BUT different Q rows have different magnitudes, so scores differ between rows
-	// Actually no — with KT=1, score[r, c] = sum(Q[r,:]) which varies by row
-	// This causes different softmax weights across rows
-	q6 := make([]float32, 32*64)
-	kt6 := make([]float32, 64*32)
-	v6 := make([]float32, 32*64)
-	out6 := make([]float32, 32*64)
-	for i := range q6 {
-		q6[i] = float32(i)*0.01 - 0.5 // same as failing test
-	}
-	for i := range kt6 {
-		kt6[i] = 1.0
-	}
-	for r := 0; r < 32; r++ {
-		for d := 0; d < 64; d++ {
-			v6[r*64+d] = float32(r)
-		}
-	}
-	asm.SDPAFMOPAF32(q6, kt6, v6, nil, out6, 32, 32, 64, float32(0.125))
-	// With KT=1: score[r, c] = sum_d(Q[r,d]) * 1 = same for all c
-	// So softmax is uniform for each row → output = 15.5 for all rows
-	// This doesn't distinguish rows either! Need non-uniform KT.
-	t.Logf("Q=data,KT=1: row0=%v row31=%v (expect 15.5)", out6[0], out6[31*64])
+			// Reference: scalar causal
+			scalarOutput := make([]float32, tt.seqLen*tt.headDim)
+			scalarScores := make([]float32, tt.seqLen*tt.kvLen)
+			SDPACausalScalar(q, k, v, scalarScores, scalarOutput, tt.seqLen, tt.kvLen, tt.headDim, scale)
 
-	// OK let me try: Q=1, KT has one big element at [0,0], V[0]=100, V[else]=0
-	for i := range q6 {
-		q6[i] = 1.0
-	}
-	for i := range kt6 {
-		kt6[i] = 0.0
-	}
-	kt6[0*32+0] = 100 // KT[dd=0, kj=0] = 100
-	for i := range v6 {
-		v6[i] = 0
-	}
-	v6[0*64+0] = 100 // V[kj=0, d=0] = 100
+			// SME causal via dispatch
+			smeOutput := make([]float32, tt.seqLen*tt.headDim)
+			SDPACausalAuto(q, k, v, smeOutput, tt.seqLen, tt.kvLen, tt.headDim, scale)
 
-	asm.SDPAFMOPAF32(q6, kt6, v6, nil, out6, 32, 32, 64, float32(0.125))
-	// Q=1, KT[0,0]=100: score[r, 0] = Q[r,0]*KT[0,0] = 1*100 = 100
-	// After scale: 100*0.125 = 12.5 (very large)
-	// softmax: w[0] ≈ 1, w[1:] ≈ 0 → output[r, 0] ≈ V[0,0] = 100
-	t.Logf("Q=1,KT[0,0]=100: out[0]=%v (expect ~100), out[1]=%v (expect ~0)",
-		out6[0], out6[1])
+			t.Logf("scalar[0]=%v sme[0]=%v", scalarOutput[0], smeOutput[0])
+			t.Logf("scalar[%d]=%v sme[%d]=%v", tt.headDim, scalarOutput[tt.headDim], tt.headDim, smeOutput[tt.headDim])
 
-	// Now test: Q[0,0]=1 rest 0, KT[0,0]=100, V same
-	for i := range q6 {
-		q6[i] = 0
+			maxDiff := float64(0)
+			for i := range smeOutput {
+				diff := stdmath.Abs(float64(smeOutput[i] - scalarOutput[i]))
+				if diff > maxDiff {
+					maxDiff = diff
+				}
+				if diff > 1e-3 {
+					t.Errorf("output[%d]=%v, want ~%v (diff=%v)", i, smeOutput[i], scalarOutput[i], diff)
+					if i > 10 {
+						t.Fatalf("too many errors, stopping")
+					}
+				}
+			}
+			t.Logf("max diff: %e", maxDiff)
+		})
 	}
-	q6[0] = 1.0 // Only Q[row=0, d=0] = 1
-	asm.SDPAFMOPAF32(q6, kt6, v6, nil, out6, 32, 32, 64, float32(0.125))
-	// Row 0: score[0,0] = 1*100=100, scaled=12.5 → peaked at kj=0
-	// Row 1: score[1,c] = 0 for all c → uniform → output[1,0] ≈ V_avg = 0
-	t.Logf("Q[0,0]=1: row0[0]=%v (expect ~100), row1[0]=%v (expect ~0)",
-		out6[0], out6[1*64])
 }
