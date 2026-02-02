@@ -37,12 +37,13 @@ import (
 
 // SDPAFMOPAF32 computes scaled dot-product attention using SME Flash Attention for float32.
 //
-// Uses tiled Flash Attention with online softmax via FMOPA. Avoids materializing
-// the full [seqLen, kvLen] scores matrix.
+// Uses multi-tile (4 ZA tiles) Flash Attention with online softmax via FMOPA.
+// Avoids materializing the full [seqLen, kvLen] scores matrix.
 //
+// qt is [headDim, seqLen] (pre-transposed Q for contiguous FMOPA column access).
 // kt is [headDim, kvLen] (pre-transposed K for FMOPA column access).
 // mask is [seqLen, kvLen] or nil.
-func SDPAFMOPAF32(q []float32, kt []float32, v, mask, output []float32,
+func SDPAFMOPAF32(qt []float32, kt []float32, v, mask, output []float32,
 	seqLen, kvLen, headDim int, scale float32) {
 	if seqLen <= 0 || kvLen <= 0 || headDim <= 0 {
 		return
@@ -58,7 +59,7 @@ func SDPAFMOPAF32(q []float32, kt []float32, v, mask, output []float32,
 	dims := [3]int64{int64(seqLen), int64(kvLen), int64(headDim)}
 
 	sdpa_fmopa_f32(
-		unsafe.Pointer(&q[0]),
+		unsafe.Pointer(&qt[0]),
 		unsafe.Pointer(&kt[0]),
 		unsafe.Pointer(&v[0]),
 		maskPtr,
@@ -70,8 +71,9 @@ func SDPAFMOPAF32(q []float32, kt []float32, v, mask, output []float32,
 
 // SDPAFMOPAF64 computes scaled dot-product attention using SME Flash Attention for float64.
 //
+// qt is [headDim, seqLen] (pre-transposed Q for contiguous FMOPA column access).
 // kt is [headDim, kvLen] (pre-transposed K for FMOPA column access).
-func SDPAFMOPAF64(q []float64, kt []float64, v, mask, output []float64,
+func SDPAFMOPAF64(qt []float64, kt []float64, v, mask, output []float64,
 	seqLen, kvLen, headDim int, scale float64) {
 	if seqLen <= 0 || kvLen <= 0 || headDim <= 0 {
 		return
@@ -87,10 +89,59 @@ func SDPAFMOPAF64(q []float64, kt []float64, v, mask, output []float64,
 	dims := [3]int64{int64(seqLen), int64(kvLen), int64(headDim)}
 
 	sdpa_fmopa_f64(
-		unsafe.Pointer(&q[0]),
+		unsafe.Pointer(&qt[0]),
 		unsafe.Pointer(&kt[0]),
 		unsafe.Pointer(&v[0]),
 		maskPtr,
+		unsafe.Pointer(&output[0]),
+		unsafe.Pointer(&dims[0]),
+		unsafe.Pointer(&scale),
+	)
+}
+
+// SDPACausalFMOPAF32 computes causal scaled dot-product attention using SME Flash Attention for float32.
+//
+// Uses multi-tile (4 ZA tiles) Flash Attention with online softmax and implicit causal masking.
+// The causal mask ensures position i can only attend to positions j <= i + (kvLen - seqLen).
+//
+// qt is [headDim, seqLen] (pre-transposed Q for contiguous FMOPA column access).
+// kt is [headDim, kvLen] (pre-transposed K for FMOPA column access).
+func SDPACausalFMOPAF32(qt []float32, kt []float32, v, output []float32,
+	seqLen, kvLen, headDim int, scale float32) {
+	if seqLen <= 0 || kvLen <= 0 || headDim <= 0 {
+		return
+	}
+	defer hwy.SMEGuard()()
+
+	dims := [3]int64{int64(seqLen), int64(kvLen), int64(headDim)}
+
+	sdpa_causal_fmopa_f32(
+		unsafe.Pointer(&qt[0]),
+		unsafe.Pointer(&kt[0]),
+		unsafe.Pointer(&v[0]),
+		unsafe.Pointer(&output[0]),
+		unsafe.Pointer(&dims[0]),
+		unsafe.Pointer(&scale),
+	)
+}
+
+// SDPACausalFMOPAF64 computes causal scaled dot-product attention using SME Flash Attention for float64.
+//
+// qt is [headDim, seqLen] (pre-transposed Q for contiguous FMOPA column access).
+// kt is [headDim, kvLen] (pre-transposed K for FMOPA column access).
+func SDPACausalFMOPAF64(qt []float64, kt []float64, v, output []float64,
+	seqLen, kvLen, headDim int, scale float64) {
+	if seqLen <= 0 || kvLen <= 0 || headDim <= 0 {
+		return
+	}
+	defer hwy.SMEGuard()()
+
+	dims := [3]int64{int64(seqLen), int64(kvLen), int64(headDim)}
+
+	sdpa_causal_fmopa_f64(
+		unsafe.Pointer(&qt[0]),
+		unsafe.Pointer(&kt[0]),
+		unsafe.Pointer(&v[0]),
 		unsafe.Pointer(&output[0]),
 		unsafe.Pointer(&dims[0]),
 		unsafe.Pointer(&scale),

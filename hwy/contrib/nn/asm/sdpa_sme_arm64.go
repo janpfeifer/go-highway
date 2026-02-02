@@ -11,7 +11,13 @@ package asm
 import "unsafe"
 
 //go:noescape
-func sdpa_fmopa_f32(q, kt, v, mask, output, pdims, pscale unsafe.Pointer)
+func sdpa_fmopa_f32(qt, kt, v, mask, output, pdims, pscale unsafe.Pointer)
 
 //go:noescape
-func sdpa_fmopa_f64(q, kt, v, mask, output, pdims, pscale unsafe.Pointer)
+func sdpa_fmopa_f64(qt, kt, v, mask, output, pdims, pscale unsafe.Pointer)
+
+//go:noescape
+func sdpa_causal_fmopa_f32(qt, kt, v, output, pdims, pscale unsafe.Pointer)
+
+//go:noescape
+func sdpa_causal_fmopa_f64(qt, kt, v, output, pdims, pscale unsafe.Pointer)
