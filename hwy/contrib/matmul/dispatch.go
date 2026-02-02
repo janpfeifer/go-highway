@@ -117,16 +117,6 @@ func MatMulAuto[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
 	}
 }
 
-// MatMulAutoFloat32 is the non-generic version for float32.
-func MatMulAutoFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
-	MatMulAuto(pool, a, b, c, m, n, k)
-}
-
-// MatMulAutoFloat64 is the non-generic version for float64.
-func MatMulAutoFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
-	MatMulAuto(pool, a, b, c, m, n, k)
-}
-
 // MatMulKLastAuto automatically selects the best algorithm for K-last layout.
 // Requires a persistent worker pool for parallel execution.
 //
@@ -164,26 +154,6 @@ func MatMulKLastAuto[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k i
 	}
 
 	ParallelMatMulKLast(pool, a, b, c, m, n, k)
-}
-
-// MatMulKLastAutoFloat32 is the non-generic version for float32.
-func MatMulKLastAutoFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
-	MatMulKLastAuto(pool, a, b, c, m, n, k)
-}
-
-// MatMulKLastAutoFloat64 is the non-generic version for float64.
-func MatMulKLastAutoFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
-	MatMulKLastAuto(pool, a, b, c, m, n, k)
-}
-
-// MatMulKLastAutoFloat16 is the non-generic version for Float16.
-func MatMulKLastAutoFloat16(pool *workerpool.Pool, a, b, c []hwy.Float16, m, n, k int) {
-	MatMulKLastAuto(pool, a, b, c, m, n, k)
-}
-
-// MatMulKLastAutoBFloat16 is the non-generic version for BFloat16.
-func MatMulKLastAutoBFloat16(pool *workerpool.Pool, a, b, c []hwy.BFloat16, m, n, k int) {
-	MatMulKLastAuto(pool, a, b, c, m, n, k)
 }
 
 // =============================================================================

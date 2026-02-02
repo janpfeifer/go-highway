@@ -360,6 +360,9 @@ func TestPackedMatMulNonSquare(t *testing.T) {
 
 // TestParallelPackedMatMul verifies parallel packed matmul produces correct results.
 func TestParallelPackedMatMul(t *testing.T) {
+	pool := workerpool.New(0)
+	defer pool.Close()
+
 	sizes := []int{256, 512}
 
 	for _, size := range sizes {
@@ -379,7 +382,7 @@ func TestParallelPackedMatMul(t *testing.T) {
 			}
 
 			matmulReference(a, b, expected, m, n, k)
-			ParallelPackedMatMul(a, b, c, m, n, k)
+			ParallelPackedMatMul(pool, a, b, c, m, n, k)
 
 			var maxErr float32
 			for i := range c {
@@ -437,6 +440,9 @@ func BenchmarkPackedMatMul(b *testing.B) {
 
 // BenchmarkParallelPackedMatMul benchmarks the parallel packed matmul.
 func BenchmarkParallelPackedMatMul(b *testing.B) {
+	pool := workerpool.New(0)
+	defer pool.Close()
+
 	b.Logf("Dispatch level: %s", hwy.CurrentName())
 
 	sizes := []int{256, 512, 1024}
@@ -462,7 +468,7 @@ func BenchmarkParallelPackedMatMul(b *testing.B) {
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				ParallelPackedMatMul(a, bMat, c, m, n, k)
+				ParallelPackedMatMul(pool, a, bMat, c, m, n, k)
 			}
 
 			b.StopTimer()
@@ -545,7 +551,7 @@ func BenchmarkPackedVsBlocked(b *testing.B) {
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				ParallelPackedMatMul(a, bMat, c, m, n, k)
+				ParallelPackedMatMul(pool, a, bMat, c, m, n, k)
 			}
 
 			b.StopTimer()

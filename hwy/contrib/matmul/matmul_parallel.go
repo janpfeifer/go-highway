@@ -65,22 +65,3 @@ func ParallelMatMulFineGrained[T hwy.Floats](pool *workerpool.Pool, a, b, c []T,
 	})
 }
 
-// ParallelMatMulFloat32 is the non-generic version for float32.
-func ParallelMatMulFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
-	ParallelMatMul(pool, a, b, c, m, n, k)
-}
-
-// ParallelMatMulFloat64 is the non-generic version for float64.
-func ParallelMatMulFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
-	ParallelMatMul(pool, a, b, c, m, n, k)
-}
-
-// ParallelMatMulFineGrainedFloat32 is the non-generic version for float32.
-func ParallelMatMulFineGrainedFloat32(pool *workerpool.Pool, a, b, c []float32, m, n, k int) {
-	ParallelMatMulFineGrained(pool, a, b, c, m, n, k)
-}
-
-// ParallelMatMulFineGrainedFloat64 is the non-generic version for float64.
-func ParallelMatMulFineGrainedFloat64(pool *workerpool.Pool, a, b, c []float64, m, n, k int) {
-	ParallelMatMulFineGrained(pool, a, b, c, m, n, k)
-}
