@@ -1506,6 +1506,10 @@ func fusedNF4MatMulSME(
 		return
 	}
 
+	// Pin goroutine to OS thread and block SIGURG to prevent async preemption
+	// from corrupting ZA register state during SME streaming mode.
+	defer hwy.SMEGuard()()
+
 	numGroups := (N + groupSize - 1) / groupSize
 
 	// Get tile buffer from pool
@@ -1588,6 +1592,10 @@ func fusedInt4MatMulSME(
 		BaseFusedInt4MatMul_fallback(input, packed, scales, output, M, K, N, groupSize)
 		return
 	}
+
+	// Pin goroutine to OS thread and block SIGURG to prevent async preemption
+	// from corrupting ZA register state during SME streaming mode.
+	defer hwy.SMEGuard()()
 
 	numGroups := (N + groupSize - 1) / groupSize
 
