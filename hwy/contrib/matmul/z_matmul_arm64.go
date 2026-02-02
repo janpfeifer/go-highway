@@ -26,7 +26,6 @@ package matmul
 import (
 	"runtime"
 	"sync"
-	"unsafe"
 
 	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/matmul/asm"
@@ -478,28 +477,14 @@ func matmulFMOPAF16(a, b, c []hwy.Float16, m, n, k int) {
 	// Transpose A (paddedM×K) to AT (K×paddedM) for contiguous column access
 	transposeMatrix(fmopaA, fmopaM, k, atBuf)
 
-	// Scratch buffer for f32->f16 conversion
-	var scratch [16]float32
-	mVal := int64(fmopaM)
-	nVal := int64(n)
-	kVal := int64(k)
-
 	// Determine output buffer for FMOPA
 	fmopaC := c
 	if needsPadding {
 		fmopaC = paddedC
 	}
 
-	// Call FMOPA with transposed A (from asm package)
-	asm.MatmulFmopaAtF16(
-		unsafe.Pointer(unsafe.SliceData(atBuf)),
-		unsafe.Pointer(unsafe.SliceData(b)),
-		unsafe.Pointer(unsafe.SliceData(fmopaC)),
-		unsafe.Pointer(&mVal),
-		unsafe.Pointer(&nVal),
-		unsafe.Pointer(&kVal),
-		unsafe.Pointer(&scratch[0]),
-	)
+	// Call multi-tile FMOPA with transposed A (from asm package)
+	asm.MultiTileMatMulFMOPAF16(atBuf, b, fmopaC, fmopaM, n, k)
 
 	if needsPadding {
 		copy(c[:m*n], paddedC[:m*n])
@@ -572,28 +557,14 @@ func matmulFMOPABF16(a, b, c []hwy.BFloat16, m, n, k int) {
 	// Transpose A (paddedM×K) to AT (K×paddedM) for contiguous column access
 	transposeMatrix(fmopaA, fmopaM, k, atBuf)
 
-	// Scratch buffer for f32->bf16 conversion
-	var scratch [16]float32
-	mVal := int64(fmopaM)
-	nVal := int64(n)
-	kVal := int64(k)
-
 	// Determine output buffer for BFMOPA
 	fmopaC := c
 	if needsPadding {
 		fmopaC = paddedC
 	}
 
-	// Call BFMOPA with transposed A (from asm package)
-	asm.MatmulBfmopaAtBF16(
-		unsafe.Pointer(unsafe.SliceData(atBuf)),
-		unsafe.Pointer(unsafe.SliceData(b)),
-		unsafe.Pointer(unsafe.SliceData(fmopaC)),
-		unsafe.Pointer(&mVal),
-		unsafe.Pointer(&nVal),
-		unsafe.Pointer(&kVal),
-		unsafe.Pointer(&scratch[0]),
-	)
+	// Call multi-tile BFMOPA with transposed A (from asm package)
+	asm.MultiTileMatMulFMOPABF16(atBuf, b, fmopaC, fmopaM, n, k)
 
 	if needsPadding {
 		copy(c[:m*n], paddedC[:m*n])
@@ -1195,12 +1166,6 @@ func matmulKLastFMOPAF16(a, b, c []hwy.Float16, m, n, k int) {
 	}
 	defer klastTransposePoolBF16.Put(btStrip)
 
-	// Scratch buffer for f32<->f16 conversion
-	var scratch [16]float32
-	mVal := int64(fmopaM)
-	kVal := int64(k)
-	ldcVal := int64(n)
-
 	// For padded M, use a padded C buffer
 	var outputC []hwy.Float16
 	if needsPadding {
@@ -1224,24 +1189,12 @@ func matmulKLastFMOPAF16(a, b, c []hwy.Float16, m, n, k int) {
 	// Process B in strips — strided kernel writes directly into outputC columns
 	for j := 0; j < n; j += stripN {
 		sn := min(stripN, n-j)
-		snVal := int64(sn)
-		coffVal := int64(j)
 
 		// Transpose strip of B rows [j, j+sn) from B[N,K] → btStrip[K, sn]
 		Transpose2D(b[j*k:(j+sn)*k], sn, k, btStrip[:k*sn])
 
-		// Strided FMOPA: writes to outputC with stride ldc at column offset j
-		asm.MatmulFmopaAtF16Strided(
-			unsafe.Pointer(unsafe.SliceData(atBuf)),
-			unsafe.Pointer(unsafe.SliceData(btStrip)),
-			unsafe.Pointer(unsafe.SliceData(outputC)),
-			unsafe.Pointer(&mVal),
-			unsafe.Pointer(&snVal),
-			unsafe.Pointer(&kVal),
-			unsafe.Pointer(&ldcVal),
-			unsafe.Pointer(&coffVal),
-			unsafe.Pointer(&scratch[0]),
-		)
+		// Strided multi-tile FMOPA: writes to outputC with stride n at column offset j
+		asm.MultiTileMatMulFMOPAF16Strided(atBuf, btStrip[:k*sn], outputC, fmopaM, sn, k, n, j)
 	}
 }
 
@@ -1307,12 +1260,6 @@ func matmulKLastFMOPABF16(a, b, c []hwy.BFloat16, m, n, k int) {
 	}
 	defer klastTransposePoolBBF16.Put(btStrip)
 
-	// Scratch buffer for f32<->bf16 conversion
-	var scratch [16]float32
-	mVal := int64(fmopaM)
-	kVal := int64(k)
-	ldcVal := int64(n)
-
 	// For padded M, use a padded C buffer
 	var outputC []hwy.BFloat16
 	if needsPadding {
@@ -1336,24 +1283,12 @@ func matmulKLastFMOPABF16(a, b, c []hwy.BFloat16, m, n, k int) {
 	// Process B in strips — strided kernel writes directly into outputC columns
 	for j := 0; j < n; j += stripN {
 		sn := min(stripN, n-j)
-		snVal := int64(sn)
-		coffVal := int64(j)
 
 		// Transpose strip of B rows [j, j+sn) from B[N,K] → btStrip[K, sn]
 		Transpose2D(b[j*k:(j+sn)*k], sn, k, btStrip[:k*sn])
 
-		// Strided BFMOPA: writes to outputC with stride ldc at column offset j
-		asm.MatmulBfmopaAtBF16Strided(
-			unsafe.Pointer(unsafe.SliceData(atBuf)),
-			unsafe.Pointer(unsafe.SliceData(btStrip)),
-			unsafe.Pointer(unsafe.SliceData(outputC)),
-			unsafe.Pointer(&mVal),
-			unsafe.Pointer(&snVal),
-			unsafe.Pointer(&kVal),
-			unsafe.Pointer(&ldcVal),
-			unsafe.Pointer(&coffVal),
-			unsafe.Pointer(&scratch[0]),
-		)
+		// Strided multi-tile BFMOPA: writes to outputC with stride n at column offset j
+		asm.MultiTileMatMulFMOPABF16Strided(atBuf, btStrip[:k*sn], outputC, fmopaM, sn, k, n, j)
 	}
 }
 

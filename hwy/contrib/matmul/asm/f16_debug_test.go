@@ -47,7 +47,7 @@ func TestF16Debug(t *testing.T) {
 	matmulReferenceF16(a, b, expected, m, n, k)
 
 	// SME
-	MatMulFMOPAF16(at, b, c, m, n, k)
+	MultiTileMatMulFMOPAF16(at, b, c, m, n, k)
 
 	// Print first few elements
 	fmt.Println("First 16 elements of C (row 0):")
