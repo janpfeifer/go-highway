@@ -15,10 +15,8 @@
 package matmul
 
 import (
-	"runtime"
-	"sync"
-
 	"github.com/ajroetker/go-highway/hwy"
+	"github.com/ajroetker/go-highway/hwy/contrib/workerpool"
 )
 
 // Parallel tuning parameters for packed matmul
@@ -38,23 +36,23 @@ const (
 // Work is divided into horizontal strips along the M dimension. Each worker
 // has its own packing buffers to avoid contention.
 //
-// For small matrices, falls back to single-threaded PackedMatMul.
+// For small matrices or nil pool, falls back to single-threaded PackedMatMul.
 //
 // Parameters:
+//   - pool: Persistent worker pool for parallel execution
 //   - a: Input matrix A in row-major order (M × K)
 //   - b: Input matrix B in row-major order (K × N)
 //   - c: Output matrix C in row-major order (M × N), will be zeroed
 //   - m, n, k: Matrix dimensions
-func ParallelPackedMatMul[T hwy.Floats](a, b, c []T, m, n, k int) {
+func ParallelPackedMatMul[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
 	totalOps := m * n * k
 
-	// For small matrices, use single-threaded version
-	if totalOps < MinPackedParallelOps {
+	// For small matrices or nil pool, use single-threaded version
+	if pool == nil || totalOps < MinPackedParallelOps {
 		PackedMatMul(a, b, c, m, n, k)
 		return
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
 	params := getCacheParams[T]()
 
 	// Calculate number of row strips
@@ -62,47 +60,21 @@ func ParallelPackedMatMul[T hwy.Floats](a, b, c []T, m, n, k int) {
 	stripSize := max(params.Mc, PackedRowsPerStrip)
 	numStrips := (m + stripSize - 1) / stripSize
 
-	// Limit workers to number of strips
-	if numWorkers > numStrips {
-		numWorkers = numStrips
-	}
-
-	// Work queue of row strips
-	work := make(chan int, numStrips)
-	for strip := range numStrips {
-		work <- strip
-	}
-	close(work)
-
-	// Pre-allocate packing buffers per worker
-	type workerBuffers struct {
-		packedA []T
-		packedB []T
-	}
-
 	// Zero the output matrix once (shared across all workers)
 	zeroMatrix(c, m*n)
 
-	// Workers grab strips from queue
-	var wg sync.WaitGroup
-	for range numWorkers {
-		wg.Go(func() {
-			// Each worker has its own packing buffers
-			buffers := workerBuffers{
-				packedA: make([]T, params.PackedASize()),
-				packedB: make([]T, params.PackedBSize()),
-			}
+	// Workers process strips via atomic work stealing
+	pool.ParallelForAtomic(numStrips, func(strip int) {
+		// Each worker has its own packing buffers
+		packedA := make([]T, params.PackedASize())
+		packedB := make([]T, params.PackedBSize())
 
-			for strip := range work {
-				rowStart := strip * stripSize
-				rowEnd := min(rowStart+stripSize, m)
+		rowStart := strip * stripSize
+		rowEnd := min(rowStart+stripSize, m)
 
-				// Process this strip using the worker's buffers
-				processStripPacked(a, b, c, m, n, k, rowStart, rowEnd, buffers.packedA, buffers.packedB, params)
-			}
-		})
-	}
-	wg.Wait()
+		// Process this strip using the worker's buffers
+		processStripPacked(a, b, c, m, n, k, rowStart, rowEnd, packedA, packedB, params)
+	})
 }
 
 // processStripPacked computes a horizontal strip of C using packed matmul.
@@ -141,40 +113,25 @@ func processStripPacked[T hwy.Floats](a, b, c []T, m, n, k, rowStart, rowEnd int
 	}
 }
 
-// ParallelPackedMatMulFloat32 is the non-generic version for float32.
-func ParallelPackedMatMulFloat32(a, b, c []float32, m, n, k int) {
-	ParallelPackedMatMul(a, b, c, m, n, k)
-}
-
-// ParallelPackedMatMulFloat64 is the non-generic version for float64.
-func ParallelPackedMatMulFloat64(a, b, c []float64, m, n, k int) {
-	ParallelPackedMatMul(a, b, c, m, n, k)
-}
-
 // ParallelPackedMatMulSharedB is an optimized parallel version that packs B
 // once and shares it across all workers.
 //
 // This is more efficient when M >> N, as B packing overhead is amortized.
 // However, it requires more memory for the shared packed B buffer.
-func ParallelPackedMatMulSharedB[T hwy.Floats](a, b, c []T, m, n, k int) {
+func ParallelPackedMatMulSharedB[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k int) {
 	totalOps := m * n * k
 
-	// For small matrices, use single-threaded version
-	if totalOps < MinPackedParallelOps {
+	// For small matrices or nil pool, use single-threaded version
+	if pool == nil || totalOps < MinPackedParallelOps {
 		PackedMatMul(a, b, c, m, n, k)
 		return
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
 	params := getCacheParams[T]()
 
 	// Calculate number of row strips
 	stripSize := max(params.Mc, PackedRowsPerStrip)
 	numStrips := (m + stripSize - 1) / stripSize
-
-	if numWorkers > numStrips {
-		numWorkers = numStrips
-	}
 
 	// Allocate shared packed B buffer (larger, for entire B)
 	// Layout: [ceil(N/Nr), K, Nr]
@@ -188,29 +145,18 @@ func ParallelPackedMatMulSharedB[T hwy.Floats](a, b, c []T, m, n, k int) {
 	// Zero the output matrix
 	zeroMatrix(c, m*n)
 
-	// Work queue
-	work := make(chan int, numStrips)
-	for strip := range numStrips {
-		work <- strip
-	}
-	close(work)
-
 	// Workers process strips using shared packed B
-	var wg sync.WaitGroup
-	for range numWorkers {
-		wg.Go(func() {
-			// Each worker only needs packed A buffer
-			packedA := make([]T, params.PackedASize())
+	pool.ParallelFor(numStrips, func(start, end int) {
+		// Each worker only needs packed A buffer
+		packedA := make([]T, params.PackedASize())
 
-			for strip := range work {
-				rowStart := strip * stripSize
-				rowEnd := min(rowStart+stripSize, m)
+		for strip := start; strip < end; strip++ {
+			rowStart := strip * stripSize
+			rowEnd := min(rowStart+stripSize, m)
 
-				processStripWithSharedB(a, sharedPackedB, c, m, n, k, rowStart, rowEnd, packedA, params)
-			}
-		})
-	}
-	wg.Wait()
+			processStripWithSharedB(a, sharedPackedB, c, m, n, k, rowStart, rowEnd, packedA, params)
+		}
+	})
 }
 
 // packEntireRHS packs the entire RHS matrix B for shared access.

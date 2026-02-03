@@ -252,7 +252,7 @@ func BenchmarkParallelPackedMatMulV1vsV2(b *testing.B) {
 
 		b.Run("V1/"+sizeStrV2(size), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				ParallelPackedMatMul(a, bMat, c, m, n, k)
+				ParallelPackedMatMul(pool, a, bMat, c, m, n, k)
 			}
 		})
 
