@@ -44,7 +44,7 @@ func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -59,7 +59,7 @@ func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			onePlusErf1 := vOne.Add(erfX1)
 			halfOnePlusErf1 := vHalf.Mul(onePlusErf1)
 			result1 := x1.Mul(halfOnePlusErf1)
-			result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
+			result1.StorePtr(unsafe.Pointer(&output[ii+8:][0]))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -76,7 +76,7 @@ func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -104,7 +104,7 @@ func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -119,7 +119,7 @@ func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			onePlusErf1 := vOne.Add(erfX1)
 			halfOnePlusErf1 := vHalf.Mul(onePlusErf1)
 			result1 := x1.Mul(halfOnePlusErf1)
-			result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
+			result1.StorePtr(unsafe.Pointer(&output[ii+8:][0]))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -136,7 +136,7 @@ func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			onePlusErf := vOne.Add(erfX)
 			halfOnePlusErf := vHalf.Mul(onePlusErf)
 			result := x.Mul(halfOnePlusErf)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -280,7 +280,7 @@ func BaseGELUApprox_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx2_Float16(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -294,7 +294,7 @@ func BaseGELUApprox_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			xScaled1 := x1.Mul(vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_avx2_Float16(xScaled1)
 			result1 := x1.Mul(sigmoidX1)
-			result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
+			result1.StorePtr(unsafe.Pointer(&output[ii+8:][0]))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -310,7 +310,7 @@ func BaseGELUApprox_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx2_Float16(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -335,7 +335,7 @@ func BaseGELUApprox_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx2_BFloat16(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())
@@ -349,7 +349,7 @@ func BaseGELUApprox_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			xScaled1 := x1.Mul(vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_avx2_BFloat16(xScaled1)
 			result1 := x1.Mul(sigmoidX1)
-			result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
+			result1.StorePtr(unsafe.Pointer(&output[ii+8:][0]))
 		} else {
 			for i1 := ii; i1 < size; i1++ {
 				x1 := float64(input[i1].Float32())
@@ -365,7 +365,7 @@ func BaseGELUApprox_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx2_BFloat16(xScaled)
 			result := x.Mul(sigmoidX)
-			result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
+			result.StorePtr(unsafe.Pointer(&output[ii:][0]))
 		} else {
 			for i := ii; i < size; i++ {
 				x := float64(input[i].Float32())

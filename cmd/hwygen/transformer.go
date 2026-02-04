@@ -2388,14 +2388,32 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				}
 				return
 			}
-			// For AVX promoted types, convert to method call: v.StoreSlice(dst)
+			// For AVX promoted types, convert to pointer-based method call: v.StorePtr(ptr)
 			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
 				call.Fun = &ast.SelectorExpr{
-					X:   call.Args[0],
-					Sel: ast.NewIdent("StoreSlice"),
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
 				}
-				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
-				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+				// unsafe.Pointer(&dst[0])
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
 				return
 			}
 			// For Fallback, keep hwy.StoreSlice(v, dst) as-is
