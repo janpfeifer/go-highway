@@ -82,9 +82,9 @@ func BasePackedMicroKernel[T hwy.Floats](packedA, packedB []T, c []T, n, ir, jr,
 		vA3 := hwy.Set(a3)
 
 		// Load Nr values from packed B (2 vectors, contiguous)
-		// Use LoadFull for pointer-based access without bounds checking
-		vB0 := hwy.LoadFull(packedB[bIdx:])
-		vB1 := hwy.LoadFull(packedB[bIdx+lanes:])
+		// Use Load for pointer-based access without bounds checking
+		vB0 := hwy.Load(packedB[bIdx:])
+		vB1 := hwy.Load(packedB[bIdx+lanes:])
 		bIdx += nr
 
 		// 8 FMA operations
@@ -105,38 +105,38 @@ func BasePackedMicroKernel[T hwy.Floats](packedA, packedB []T, c []T, n, ir, jr,
 	cRow3 := (ir + 3) * n
 
 	// Load existing C values, add accumulators, store back
-	// Use LoadFull/StoreFull for pointer-based access without bounds checking
-	vC := hwy.LoadFull(c[cRow0+jr:])
+	// Use Load/Store for pointer-based access without bounds checking
+	vC := hwy.Load(c[cRow0+jr:])
 	vC = hwy.Add(vC, acc00)
-	hwy.StoreFull(vC, c[cRow0+jr:])
+	hwy.Store(vC, c[cRow0+jr:])
 
-	vC = hwy.LoadFull(c[cRow0+jr+lanes:])
+	vC = hwy.Load(c[cRow0+jr+lanes:])
 	vC = hwy.Add(vC, acc01)
-	hwy.StoreFull(vC, c[cRow0+jr+lanes:])
+	hwy.Store(vC, c[cRow0+jr+lanes:])
 
-	vC = hwy.LoadFull(c[cRow1+jr:])
+	vC = hwy.Load(c[cRow1+jr:])
 	vC = hwy.Add(vC, acc10)
-	hwy.StoreFull(vC, c[cRow1+jr:])
+	hwy.Store(vC, c[cRow1+jr:])
 
-	vC = hwy.LoadFull(c[cRow1+jr+lanes:])
+	vC = hwy.Load(c[cRow1+jr+lanes:])
 	vC = hwy.Add(vC, acc11)
-	hwy.StoreFull(vC, c[cRow1+jr+lanes:])
+	hwy.Store(vC, c[cRow1+jr+lanes:])
 
-	vC = hwy.LoadFull(c[cRow2+jr:])
+	vC = hwy.Load(c[cRow2+jr:])
 	vC = hwy.Add(vC, acc20)
-	hwy.StoreFull(vC, c[cRow2+jr:])
+	hwy.Store(vC, c[cRow2+jr:])
 
-	vC = hwy.LoadFull(c[cRow2+jr+lanes:])
+	vC = hwy.Load(c[cRow2+jr+lanes:])
 	vC = hwy.Add(vC, acc21)
-	hwy.StoreFull(vC, c[cRow2+jr+lanes:])
+	hwy.Store(vC, c[cRow2+jr+lanes:])
 
-	vC = hwy.LoadFull(c[cRow3+jr:])
+	vC = hwy.Load(c[cRow3+jr:])
 	vC = hwy.Add(vC, acc30)
-	hwy.StoreFull(vC, c[cRow3+jr:])
+	hwy.Store(vC, c[cRow3+jr:])
 
-	vC = hwy.LoadFull(c[cRow3+jr+lanes:])
+	vC = hwy.Load(c[cRow3+jr+lanes:])
 	vC = hwy.Add(vC, acc31)
-	hwy.StoreFull(vC, c[cRow3+jr+lanes:])
+	hwy.Store(vC, c[cRow3+jr+lanes:])
 }
 
 // basePackedMicroKernelGeneral handles arbitrary micro-tile sizes.

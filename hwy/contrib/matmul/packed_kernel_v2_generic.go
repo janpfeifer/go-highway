@@ -52,7 +52,7 @@ func packedMicroKernelGenericImpl[T hwy.Floats](
 	for p := 0; p < panelK; p++ {
 		// Load B vectors
 		for v := 0; v < numBVecs; v++ {
-			bVec := hwy.Load(packedB[bIdx+v*lanes:])
+			bVec := hwy.LoadSlice(packedB[bIdx+v*lanes:])
 
 			// FMA with each A row
 			for row := 0; row < mr; row++ {
@@ -69,7 +69,7 @@ func packedMicroKernelGenericImpl[T hwy.Floats](
 	for row := 0; row < mr; row++ {
 		outIdx := (outRowStart+row)*outputStride + outColStart
 		for v := 0; v < numBVecs; v++ {
-			hwy.Store(acc[row*numBVecs+v], output[outIdx+v*lanes:])
+			hwy.StoreSlice(acc[row*numBVecs+v], output[outIdx+v*lanes:])
 		}
 	}
 }

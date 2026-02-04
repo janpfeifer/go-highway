@@ -35,7 +35,7 @@ func BaseCopyIf[T hwy.Lanes](src, dst []T, pred func(hwy.Vec[T]) hwy.Mask[T]) in
 
 	// Process full vectors
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 
 		// Limit how many we can store
@@ -52,7 +52,7 @@ func BaseCopyIf[T hwy.Lanes](src, dst []T, pred func(hwy.Vec[T]) hwy.Mask[T]) in
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]T, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 
 		// Create a tail mask to only process valid elements

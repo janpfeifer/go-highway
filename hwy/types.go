@@ -23,14 +23,14 @@
 //	import "github.com/ajroetker/go-highway/hwy"
 //
 //	// Load data into vectors
-//	a := hwy.Load(data1)
-//	b := hwy.Load(data2)
+//	a := hwy.LoadSlice(data1)
+//	b := hwy.LoadSlice(data2)
 //
 //	// Perform SIMD operations
 //	result := hwy.Add(a, b)
 //
 //	// Store results
-//	hwy.Store(result, output)
+//	hwy.StoreSlice(result, output)
 package hwy
 
 // Float16Types is a constraint for half-precision float types.

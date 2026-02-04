@@ -248,7 +248,7 @@ func BaseDeltaEncode32_neon(src []uint32, base uint32, dst []uint32) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*2 <= len(src); i += lanes * 2 {
+	for ; i+lanes*4 <= len(src); i += lanes * 4 {
 		curr := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i])))
 		prevVec := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
@@ -258,6 +258,16 @@ func BaseDeltaEncode32_neon(src []uint32, base uint32, dst []uint32) {
 		prevVec1 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i-1+4])))
 		delta1 := curr1.Sub(prevVec1)
 		delta1.Store((*[4]uint32)(unsafe.Pointer(&dst[i+4])))
+		prev = src[i+lanes-1]
+		curr2 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i+8])))
+		prevVec2 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i-1+8])))
+		delta2 := curr2.Sub(prevVec2)
+		delta2.Store((*[4]uint32)(unsafe.Pointer(&dst[i+8])))
+		prev = src[i+lanes-1]
+		curr3 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i+12])))
+		prevVec3 := asm.LoadUint32x4((*[4]uint32)(unsafe.Pointer(&src[i-1+12])))
+		delta3 := curr3.Sub(prevVec3)
+		delta3.Store((*[4]uint32)(unsafe.Pointer(&dst[i+12])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {
@@ -278,7 +288,7 @@ func BaseDeltaEncode64_neon(src []uint64, base uint64, dst []uint64) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*2 <= len(src); i += lanes * 2 {
+	for ; i+lanes*4 <= len(src); i += lanes * 4 {
 		curr := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i])))
 		prevVec := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
@@ -288,6 +298,16 @@ func BaseDeltaEncode64_neon(src []uint64, base uint64, dst []uint64) {
 		prevVec1 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i-1+2])))
 		delta1 := curr1.Sub(prevVec1)
 		delta1.Store((*[2]uint64)(unsafe.Pointer(&dst[i+2])))
+		prev = src[i+lanes-1]
+		curr2 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i+4])))
+		prevVec2 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i-1+4])))
+		delta2 := curr2.Sub(prevVec2)
+		delta2.Store((*[2]uint64)(unsafe.Pointer(&dst[i+4])))
+		prev = src[i+lanes-1]
+		curr3 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i+6])))
+		prevVec3 := asm.LoadUint64x2((*[2]uint64)(unsafe.Pointer(&src[i-1+6])))
+		delta3 := curr3.Sub(prevVec3)
+		delta3.Store((*[2]uint64)(unsafe.Pointer(&dst[i+6])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {

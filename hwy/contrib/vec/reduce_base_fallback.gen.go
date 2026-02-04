@@ -14,7 +14,7 @@ func BaseSum_fallback_Float16(v []hwy.Float16) hwy.Float16 {
 	lanes := sum.NumLanes()
 	var i int
 	for i = 0; i+lanes <= len(v); i += lanes {
-		va := hwy.LoadFull(v[i:])
+		va := hwy.Load(v[i:])
 		sum = hwy.Add(sum, va)
 	}
 	result := hwy.ReduceSum(sum).Float32()
@@ -32,7 +32,7 @@ func BaseSum_fallback_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 	lanes := sum.NumLanes()
 	var i int
 	for i = 0; i+lanes <= len(v); i += lanes {
-		va := hwy.LoadFull(v[i:])
+		va := hwy.Load(v[i:])
 		sum = hwy.Add(sum, va)
 	}
 	result := hwy.ReduceSum(sum).Float32()
@@ -90,10 +90,10 @@ func BaseMin_fallback_Float16(v []hwy.Float16) hwy.Float16 {
 		}
 		return result
 	}
-	minVec := hwy.Load(v)
+	minVec := hwy.LoadSlice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
-		va := hwy.LoadFull(v[i:])
+		va := hwy.Load(v[i:])
 		minVec = hwy.Min(minVec, va)
 	}
 	result := hwy.ReduceMin(minVec).Float32()
@@ -119,10 +119,10 @@ func BaseMin_fallback_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 		}
 		return result
 	}
-	minVec := hwy.Load(v)
+	minVec := hwy.LoadSlice(v)
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
-		va := hwy.LoadFull(v[i:])
+		va := hwy.Load(v[i:])
 		minVec = hwy.Min(minVec, va)
 	}
 	result := hwy.ReduceMin(minVec).Float32()
@@ -376,11 +376,11 @@ func BaseMinMax_fallback_Float16(v []hwy.Float16) (minVal hwy.Float16, maxVal hw
 		}
 		return minVal, maxVal
 	}
-	minVec := hwy.Load(v)
+	minVec := hwy.LoadSlice(v)
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
-		va := hwy.LoadFull(v[i:])
+		va := hwy.Load(v[i:])
 		minVec = hwy.Min(minVec, va)
 		maxVec = hwy.Max(maxVec, va)
 	}
@@ -415,11 +415,11 @@ func BaseMinMax_fallback_BFloat16(v []hwy.BFloat16) (minVal hwy.BFloat16, maxVal
 		}
 		return minVal, maxVal
 	}
-	minVec := hwy.Load(v)
+	minVec := hwy.LoadSlice(v)
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes <= len(v); i += lanes {
-		va := hwy.LoadFull(v[i:])
+		va := hwy.Load(v[i:])
 		minVec = hwy.Min(minVec, va)
 		maxVec = hwy.Max(maxVec, va)
 	}

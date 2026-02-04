@@ -51,7 +51,7 @@ func transposeBlockSIMDStrided[T hwy.Floats](src, dst []T, startI, startJ, k, ds
 	// Load `lanes` rows from source
 	rows := make([]hwy.Vec[T], lanes)
 	for r := 0; r < lanes; r++ {
-		rows[r] = hwy.LoadFull(src[(startI+r)*k+startJ:])
+		rows[r] = hwy.Load(src[(startI+r)*k+startJ:])
 	}
 
 	// In-register transpose using butterfly pattern
@@ -69,7 +69,7 @@ func transposeBlockSIMDStrided[T hwy.Floats](src, dst []T, startI, startJ, k, ds
 
 	// Store transposed with dstM stride
 	for c := 0; c < lanes; c++ {
-		hwy.StoreFull(rows[c], dst[(startJ+c)*dstM+startI:])
+		hwy.Store(rows[c], dst[(startJ+c)*dstM+startI:])
 	}
 }
 
@@ -126,7 +126,7 @@ func transposeBlockSIMD[T hwy.Floats](src, dst []T, startI, startJ, m, k, lanes 
 	// Load `lanes` rows
 	rows := make([]hwy.Vec[T], lanes)
 	for r := 0; r < lanes; r++ {
-		rows[r] = hwy.LoadFull(src[(startI+r)*k+startJ:])
+		rows[r] = hwy.Load(src[(startI+r)*k+startJ:])
 	}
 
 	// In-register transpose using butterfly pattern with InterleaveLower/Upper
@@ -146,7 +146,7 @@ func transposeBlockSIMD[T hwy.Floats](src, dst []T, startI, startJ, m, k, lanes 
 
 	// Store transposed: column c of input -> row c of output
 	for c := 0; c < lanes; c++ {
-		hwy.StoreFull(rows[c], dst[(startJ+c)*m+startI:])
+		hwy.Store(rows[c], dst[(startJ+c)*m+startI:])
 	}
 }
 

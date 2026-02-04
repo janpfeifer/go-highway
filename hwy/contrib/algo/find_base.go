@@ -32,7 +32,7 @@ func BaseFind[T hwy.Lanes](slice []T, value T) int {
 
 	// Process full vectors - compare lanes elements at once
 	for ; i+lanes <= n; i += lanes {
-		v := hwy.LoadFull(slice[i:])
+		v := hwy.Load(slice[i:])
 		mask := hwy.Equal(v, target)
 		if idx := hwy.FindFirstTrue(mask); idx >= 0 {
 			return i + idx
@@ -64,7 +64,7 @@ func BaseCount[T hwy.Lanes](slice []T, value T) int {
 
 	// Process full vectors
 	for ; i+lanes <= n; i += lanes {
-		v := hwy.LoadFull(slice[i:])
+		v := hwy.Load(slice[i:])
 		mask := hwy.Equal(v, target)
 		count += hwy.CountTrue(mask)
 	}
@@ -99,7 +99,7 @@ func BaseAll[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 
 	// Process full vectors
 	for ; i+lanes <= n; i += lanes {
-		v := hwy.LoadFull(slice[i:])
+		v := hwy.Load(slice[i:])
 		mask := pred.Apply(v)
 		if !hwy.AllTrue(mask) {
 			return false
@@ -110,7 +110,7 @@ func BaseAll[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 	if remaining := n - i; remaining > 0 {
 		buf := make([]T, lanes)
 		copy(buf, slice[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred.Apply(v)
 
 		// Check only valid elements in the tail
@@ -141,7 +141,7 @@ func BaseAny[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 
 	// Process full vectors
 	for ; i+lanes <= n; i += lanes {
-		v := hwy.LoadFull(slice[i:])
+		v := hwy.Load(slice[i:])
 		mask := pred.Apply(v)
 		if idx := hwy.FindFirstTrue(mask); idx >= 0 {
 			return true
@@ -152,7 +152,7 @@ func BaseAny[T hwy.Lanes, P Predicate[T]](slice []T, pred P) bool {
 	if remaining := n - i; remaining > 0 {
 		buf := make([]T, lanes)
 		copy(buf, slice[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred.Apply(v)
 
 		tailMask := hwy.FirstN[T](remaining)
@@ -186,7 +186,7 @@ func BaseFindIf[T hwy.Lanes, P Predicate[T]](slice []T, pred P) int {
 
 	// Process full vectors
 	for ; i+lanes <= n; i += lanes {
-		v := hwy.LoadFull(slice[i:])
+		v := hwy.Load(slice[i:])
 		mask := pred.Apply(v)
 		if idx := hwy.FindFirstTrue(mask); idx >= 0 {
 			return i + idx
@@ -197,7 +197,7 @@ func BaseFindIf[T hwy.Lanes, P Predicate[T]](slice []T, pred P) int {
 	if remaining := n - i; remaining > 0 {
 		buf := make([]T, lanes)
 		copy(buf, slice[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred.Apply(v)
 
 		// Only check valid indices in the tail
@@ -223,7 +223,7 @@ func BaseCountIf[T hwy.Lanes, P Predicate[T]](slice []T, pred P) int {
 
 	// Process full vectors
 	for ; i+lanes <= n; i += lanes {
-		v := hwy.LoadFull(slice[i:])
+		v := hwy.Load(slice[i:])
 		mask := pred.Apply(v)
 		count += hwy.CountTrue(mask)
 	}
@@ -232,7 +232,7 @@ func BaseCountIf[T hwy.Lanes, P Predicate[T]](slice []T, pred P) int {
 	if remaining := n - i; remaining > 0 {
 		buf := make([]T, lanes)
 		copy(buf, slice[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred.Apply(v)
 
 		// Only count valid elements in the tail

@@ -31,10 +31,10 @@ func BaseBlockMulAdd_avx512_Float16(aT []hwy.Float16, b []hwy.Float16, c []hwy.F
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -62,10 +62,10 @@ func BaseBlockMulAdd_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat16, c []hw
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToBFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -159,13 +159,13 @@ func BaseBlockMulAdd2_avx512_Float16(aT []hwy.Float16, b []hwy.Float16, c []hwy.
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0Start+j]))
+				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0Start+j:][0]))
 				vC0 = vA0.MulAdd(vB, vC0)
-				vC0.StorePtr(unsafe.Pointer(&c[cRow0Start+j]))
-				vC1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1Start+j]))
+				vC0.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0Start+j:]))), len(c[cRow0Start+j:])))
+				vC1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1Start+j:][0]))
 				vC1 = vA1.MulAdd(vB, vC1)
-				vC1.StorePtr(unsafe.Pointer(&c[cRow1Start+j]))
+				vC1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1Start+j:]))), len(c[cRow1Start+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRow0Start+j] = hwy.Float32ToFloat16(c[cRow0Start+j].Float32() + a0k.Float32()*b[bRowStart+j].Float32())
@@ -181,10 +181,10 @@ func BaseBlockMulAdd2_avx512_Float16(aT []hwy.Float16, b []hwy.Float16, c []hwy.
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -216,13 +216,13 @@ func BaseBlockMulAdd2_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat16, c []h
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0Start+j]))
+				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0Start+j:][0]))
 				vC0 = vA0.MulAdd(vB, vC0)
-				vC0.StorePtr(unsafe.Pointer(&c[cRow0Start+j]))
-				vC1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1Start+j]))
+				vC0.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0Start+j:]))), len(c[cRow0Start+j:])))
+				vC1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1Start+j:][0]))
 				vC1 = vA1.MulAdd(vB, vC1)
-				vC1.StorePtr(unsafe.Pointer(&c[cRow1Start+j]))
+				vC1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1Start+j:]))), len(c[cRow1Start+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRow0Start+j] = hwy.Float32ToBFloat16(c[cRow0Start+j].Float32() + a0k.Float32()*b[bRowStart+j].Float32())
@@ -238,10 +238,10 @@ func BaseBlockMulAdd2_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat16, c []h
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToBFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -404,8 +404,8 @@ func BaseBlockMulAddRegBlocked_avx512_Float16(aT []hwy.Float16, b []hwy.Float16,
 				vA2 := asm.BroadcastFloat16x16AVX512(uint16(a2k))
 				vA3 := asm.BroadcastFloat16x16AVX512(uint16(a3k))
 				bRowStart := k * blockDim
-				vB0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vB1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j+lanes]))
+				vB0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vB1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j+lanes:][0]))
 				acc00 = vA0.MulAdd(vB0, acc00)
 				acc01 = vA0.MulAdd(vB1, acc01)
 				acc10 = vA1.MulAdd(vB0, acc10)
@@ -415,30 +415,30 @@ func BaseBlockMulAddRegBlocked_avx512_Float16(aT []hwy.Float16, b []hwy.Float16,
 				acc30 = vA3.MulAdd(vB0, acc30)
 				acc31 = vA3.MulAdd(vB1, acc31)
 			}
-			vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j]))
+			vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j:][0]))
 			vC = vC.Add(acc00)
-			vC.StorePtr(unsafe.Pointer(&c[cRow0+j]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j:]))), len(c[cRow0+j:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j+lanes:][0]))
 			vC = vC.Add(acc01)
-			vC.StorePtr(unsafe.Pointer(&c[cRow0+j+lanes]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j+lanes:]))), len(c[cRow0+j+lanes:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j:][0]))
 			vC = vC.Add(acc10)
-			vC.StorePtr(unsafe.Pointer(&c[cRow1+j]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j:]))), len(c[cRow1+j:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j+lanes:][0]))
 			vC = vC.Add(acc11)
-			vC.StorePtr(unsafe.Pointer(&c[cRow1+j+lanes]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j+lanes:]))), len(c[cRow1+j+lanes:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j:][0]))
 			vC = vC.Add(acc20)
-			vC.StorePtr(unsafe.Pointer(&c[cRow2+j]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j:]))), len(c[cRow2+j:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j+lanes:][0]))
 			vC = vC.Add(acc21)
-			vC.StorePtr(unsafe.Pointer(&c[cRow2+j+lanes]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j+lanes:]))), len(c[cRow2+j+lanes:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j:][0]))
 			vC = vC.Add(acc30)
-			vC.StorePtr(unsafe.Pointer(&c[cRow3+j]))
-			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j:]))), len(c[cRow3+j:])))
+			vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j+lanes:][0]))
 			vC = vC.Add(acc31)
-			vC.StorePtr(unsafe.Pointer(&c[cRow3+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j+lanes:]))), len(c[cRow3+j+lanes:])))
 		}
 		for ; j < blockDim; j += lanes {
 			acc0 := asm.ZeroFloat16x16AVX512()
@@ -453,24 +453,24 @@ func BaseBlockMulAddRegBlocked_avx512_Float16(aT []hwy.Float16, b []hwy.Float16,
 					vA1 := asm.BroadcastFloat16x16AVX512(uint16(aT[aTRowK+i+1]))
 					vA2 := asm.BroadcastFloat16x16AVX512(uint16(aT[aTRowK+i+2]))
 					vA3 := asm.BroadcastFloat16x16AVX512(uint16(aT[aTRowK+i+3]))
-					vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[k*blockDim+j]))
+					vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[k*blockDim+j:][0]))
 					acc0 = vA0.MulAdd(vB, acc0)
 					acc1 = vA1.MulAdd(vB, acc1)
 					acc2 = vA2.MulAdd(vB, acc2)
 					acc3 = vA3.MulAdd(vB, acc3)
 				}
-				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j]))
+				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j:][0]))
 				vC = vC.Add(acc0)
-				vC.StorePtr(unsafe.Pointer(&c[cRow0+j]))
-				vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j:]))), len(c[cRow0+j:])))
+				vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j:][0]))
 				vC = vC.Add(acc1)
-				vC.StorePtr(unsafe.Pointer(&c[cRow1+j]))
-				vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j:]))), len(c[cRow1+j:])))
+				vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j:][0]))
 				vC = vC.Add(acc2)
-				vC.StorePtr(unsafe.Pointer(&c[cRow2+j]))
-				vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j:]))), len(c[cRow2+j:])))
+				vC = asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j:][0]))
 				vC = vC.Add(acc3)
-				vC.StorePtr(unsafe.Pointer(&c[cRow3+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j:]))), len(c[cRow3+j:])))
 			} else {
 				for jj := j; jj < blockDim; jj++ {
 					for k := range blockDim {
@@ -494,10 +494,10 @@ func BaseBlockMulAddRegBlocked_avx512_Float16(aT []hwy.Float16, b []hwy.Float16,
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -546,8 +546,8 @@ func BaseBlockMulAddRegBlocked_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat
 				vA2 := asm.BroadcastBFloat16x16AVX512(uint16(a2k))
 				vA3 := asm.BroadcastBFloat16x16AVX512(uint16(a3k))
 				bRowStart := k * blockDim
-				vB0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vB1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j+lanes]))
+				vB0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vB1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j+lanes:][0]))
 				acc00 = vA0.MulAdd(vB0, acc00)
 				acc01 = vA0.MulAdd(vB1, acc01)
 				acc10 = vA1.MulAdd(vB0, acc10)
@@ -557,30 +557,30 @@ func BaseBlockMulAddRegBlocked_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat
 				acc30 = vA3.MulAdd(vB0, acc30)
 				acc31 = vA3.MulAdd(vB1, acc31)
 			}
-			vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j]))
+			vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j:][0]))
 			vC = vC.Add(acc00)
-			vC.StorePtr(unsafe.Pointer(&c[cRow0+j]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j:]))), len(c[cRow0+j:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j+lanes:][0]))
 			vC = vC.Add(acc01)
-			vC.StorePtr(unsafe.Pointer(&c[cRow0+j+lanes]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j+lanes:]))), len(c[cRow0+j+lanes:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j:][0]))
 			vC = vC.Add(acc10)
-			vC.StorePtr(unsafe.Pointer(&c[cRow1+j]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j:]))), len(c[cRow1+j:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j+lanes:][0]))
 			vC = vC.Add(acc11)
-			vC.StorePtr(unsafe.Pointer(&c[cRow1+j+lanes]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j+lanes:]))), len(c[cRow1+j+lanes:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j:][0]))
 			vC = vC.Add(acc20)
-			vC.StorePtr(unsafe.Pointer(&c[cRow2+j]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j:]))), len(c[cRow2+j:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j+lanes:][0]))
 			vC = vC.Add(acc21)
-			vC.StorePtr(unsafe.Pointer(&c[cRow2+j+lanes]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j+lanes:]))), len(c[cRow2+j+lanes:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j:][0]))
 			vC = vC.Add(acc30)
-			vC.StorePtr(unsafe.Pointer(&c[cRow3+j]))
-			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j:]))), len(c[cRow3+j:])))
+			vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j+lanes:][0]))
 			vC = vC.Add(acc31)
-			vC.StorePtr(unsafe.Pointer(&c[cRow3+j+lanes]))
+			vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j+lanes:]))), len(c[cRow3+j+lanes:])))
 		}
 		for ; j < blockDim; j += lanes {
 			acc0 := asm.ZeroBFloat16x16AVX512()
@@ -595,24 +595,24 @@ func BaseBlockMulAddRegBlocked_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat
 					vA1 := asm.BroadcastBFloat16x16AVX512(uint16(aT[aTRowK+i+1]))
 					vA2 := asm.BroadcastBFloat16x16AVX512(uint16(aT[aTRowK+i+2]))
 					vA3 := asm.BroadcastBFloat16x16AVX512(uint16(aT[aTRowK+i+3]))
-					vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[k*blockDim+j]))
+					vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[k*blockDim+j:][0]))
 					acc0 = vA0.MulAdd(vB, acc0)
 					acc1 = vA1.MulAdd(vB, acc1)
 					acc2 = vA2.MulAdd(vB, acc2)
 					acc3 = vA3.MulAdd(vB, acc3)
 				}
-				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j]))
+				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j:][0]))
 				vC = vC.Add(acc0)
-				vC.StorePtr(unsafe.Pointer(&c[cRow0+j]))
-				vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j:]))), len(c[cRow0+j:])))
+				vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j:][0]))
 				vC = vC.Add(acc1)
-				vC.StorePtr(unsafe.Pointer(&c[cRow1+j]))
-				vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j:]))), len(c[cRow1+j:])))
+				vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j:][0]))
 				vC = vC.Add(acc2)
-				vC.StorePtr(unsafe.Pointer(&c[cRow2+j]))
-				vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j:]))), len(c[cRow2+j:])))
+				vC = asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j:][0]))
 				vC = vC.Add(acc3)
-				vC.StorePtr(unsafe.Pointer(&c[cRow3+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j:]))), len(c[cRow3+j:])))
 			} else {
 				for jj := j; jj < blockDim; jj++ {
 					for k := range blockDim {
@@ -636,10 +636,10 @@ func BaseBlockMulAddRegBlocked_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToBFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -962,19 +962,19 @@ func BaseBlockMulAdd4_avx512_Float16(aT []hwy.Float16, b []hwy.Float16, c []hwy.
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j]))
+				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j:][0]))
 				vC0 = vA0.MulAdd(vB, vC0)
-				vC0.StorePtr(unsafe.Pointer(&c[cRow0+j]))
-				vC1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j]))
+				vC0.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j:]))), len(c[cRow0+j:])))
+				vC1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j:][0]))
 				vC1 = vA1.MulAdd(vB, vC1)
-				vC1.StorePtr(unsafe.Pointer(&c[cRow1+j]))
-				vC2 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j]))
+				vC1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j:]))), len(c[cRow1+j:])))
+				vC2 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j:][0]))
 				vC2 = vA2.MulAdd(vB, vC2)
-				vC2.StorePtr(unsafe.Pointer(&c[cRow2+j]))
-				vC3 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j]))
+				vC2.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j:]))), len(c[cRow2+j:])))
+				vC3 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j:][0]))
 				vC3 = vA3.MulAdd(vB, vC3)
-				vC3.StorePtr(unsafe.Pointer(&c[cRow3+j]))
+				vC3.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j:]))), len(c[cRow3+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRow0+j] = hwy.Float32ToFloat16(c[cRow0+j].Float32() + a0k.Float32()*b[bRowStart+j].Float32())
@@ -992,10 +992,10 @@ func BaseBlockMulAdd4_avx512_Float16(aT []hwy.Float16, b []hwy.Float16, c []hwy.
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())
@@ -1034,19 +1034,19 @@ func BaseBlockMulAdd4_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat16, c []h
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j]))
+				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow0+j:][0]))
 				vC0 = vA0.MulAdd(vB, vC0)
-				vC0.StorePtr(unsafe.Pointer(&c[cRow0+j]))
-				vC1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j]))
+				vC0.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow0+j:]))), len(c[cRow0+j:])))
+				vC1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow1+j:][0]))
 				vC1 = vA1.MulAdd(vB, vC1)
-				vC1.StorePtr(unsafe.Pointer(&c[cRow1+j]))
-				vC2 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j]))
+				vC1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow1+j:]))), len(c[cRow1+j:])))
+				vC2 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow2+j:][0]))
 				vC2 = vA2.MulAdd(vB, vC2)
-				vC2.StorePtr(unsafe.Pointer(&c[cRow2+j]))
-				vC3 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j]))
+				vC2.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow2+j:]))), len(c[cRow2+j:])))
+				vC3 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRow3+j:][0]))
 				vC3 = vA3.MulAdd(vB, vC3)
-				vC3.StorePtr(unsafe.Pointer(&c[cRow3+j]))
+				vC3.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRow3+j:]))), len(c[cRow3+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRow0+j] = hwy.Float32ToBFloat16(c[cRow0+j].Float32() + a0k.Float32()*b[bRowStart+j].Float32())
@@ -1064,10 +1064,10 @@ func BaseBlockMulAdd4_avx512_BFloat16(aT []hwy.BFloat16, b []hwy.BFloat16, c []h
 			bRowStart := k * blockDim
 			var j int
 			for j = 0; j+lanes <= blockDim; j += lanes {
-				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j]))
-				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j]))
+				vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+				vC := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&c[cRowStart+j:][0]))
 				vC = vA.MulAdd(vB, vC)
-				vC.StorePtr(unsafe.Pointer(&c[cRowStart+j]))
+				vC.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
 			}
 			for ; j < blockDim; j++ {
 				c[cRowStart+j] = hwy.Float32ToBFloat16(c[cRowStart+j].Float32() + aik.Float32()*b[bRowStart+j].Float32())

@@ -457,7 +457,7 @@ func BaseSinVec_fallback_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -465,7 +465,7 @@ func BaseSinVec_fallback_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseSinVec_fallback_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
@@ -511,7 +511,7 @@ func BaseSinVec_fallback_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16]
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -519,7 +519,7 @@ func BaseSinVec_fallback_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16]
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseSinVec_fallback(x hwy.Vec[float32]) hwy.Vec[float32] {
@@ -565,7 +565,7 @@ func BaseSinVec_fallback(x hwy.Vec[float32]) hwy.Vec[float32] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -573,7 +573,7 @@ func BaseSinVec_fallback(x hwy.Vec[float32]) hwy.Vec[float32] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseSinVec_fallback_Float64(x hwy.Vec[float64]) hwy.Vec[float64] {
@@ -619,7 +619,7 @@ func BaseSinVec_fallback_Float64(x hwy.Vec[float64]) hwy.Vec[float64] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -627,7 +627,7 @@ func BaseSinVec_fallback_Float64(x hwy.Vec[float64]) hwy.Vec[float64] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseCosVec_fallback_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
@@ -673,7 +673,7 @@ func BaseCosVec_fallback_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -681,7 +681,7 @@ func BaseCosVec_fallback_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseCosVec_fallback_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
@@ -727,7 +727,7 @@ func BaseCosVec_fallback_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16]
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -735,7 +735,7 @@ func BaseCosVec_fallback_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16]
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseCosVec_fallback(x hwy.Vec[float32]) hwy.Vec[float32] {
@@ -781,7 +781,7 @@ func BaseCosVec_fallback(x hwy.Vec[float32]) hwy.Vec[float32] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -789,7 +789,7 @@ func BaseCosVec_fallback(x hwy.Vec[float32]) hwy.Vec[float32] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseCosVec_fallback_Float64(x hwy.Vec[float64]) hwy.Vec[float64] {
@@ -835,7 +835,7 @@ func BaseCosVec_fallback_Float64(x hwy.Vec[float64]) hwy.Vec[float64] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.Neg(result)
 	negResultData := negResult.Data()
 	for i := range resultData {
@@ -843,7 +843,7 @@ func BaseCosVec_fallback_Float64(x hwy.Vec[float64]) hwy.Vec[float64] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseErfVec_fallback_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {

@@ -64,8 +64,8 @@ func BaseMatVec[T hwy.Floats](m []T, rows, cols int, v, result []T) {
 
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := hwy.Load(row[j:])
-			vb := hwy.Load(v[j:])
+			va := hwy.LoadSlice(row[j:])
+			vb := hwy.LoadSlice(v[j:])
 			prod := hwy.Mul(va, vb)
 			sum = hwy.Add(sum, prod)
 		}

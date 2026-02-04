@@ -54,7 +54,7 @@ func TestConvertToInt32_Float32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := Load(tt.input)
+			v := LoadSlice(tt.input)
 			result := ConvertToInt32(v)
 
 			for i := 0; i < result.NumLanes() && i < len(tt.want); i++ {
@@ -86,7 +86,7 @@ func TestConvertToInt32_Float64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := Load(tt.input)
+			v := LoadSlice(tt.input)
 			result := ConvertToInt32(v)
 
 			for i := 0; i < result.NumLanes() && i < len(tt.want); i++ {
@@ -123,7 +123,7 @@ func TestConvertToFloat32_Int32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := Load(tt.input)
+			v := LoadSlice(tt.input)
 			result := ConvertToFloat32(v)
 
 			for i := 0; i < result.NumLanes() && i < len(tt.want); i++ {
@@ -155,7 +155,7 @@ func TestConvertToFloat32_Int64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := Load(tt.input)
+			v := LoadSlice(tt.input)
 			result := ConvertToFloat32(v)
 
 			for i := 0; i < result.NumLanes() && i < len(tt.want); i++ {
@@ -187,7 +187,7 @@ func TestConvertToInt64_Float64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := Load(tt.input)
+			v := LoadSlice(tt.input)
 			result := ConvertToInt64(v)
 
 			for i := 0; i < result.NumLanes() && i < len(tt.want); i++ {
@@ -202,7 +202,7 @@ func TestConvertToInt64_Float64(t *testing.T) {
 func TestConvertToFloat64(t *testing.T) {
 	t.Run("from int32", func(t *testing.T) {
 		input := []int32{1, -2, 100, -1000}
-		v := Load(input)
+		v := LoadSlice(input)
 		result := ConvertToFloat64(v)
 
 		for i := 0; i < result.NumLanes() && i < len(input); i++ {
@@ -215,7 +215,7 @@ func TestConvertToFloat64(t *testing.T) {
 
 	t.Run("from int64", func(t *testing.T) {
 		input := []int64{1, -2, 100, -1000}
-		v := Load(input)
+		v := LoadSlice(input)
 		result := ConvertToFloat64(v)
 
 		for i := 0; i < result.NumLanes() && i < len(input); i++ {

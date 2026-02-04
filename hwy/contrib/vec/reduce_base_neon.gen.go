@@ -105,7 +105,7 @@ func BaseMin_neon_Float16(v []hwy.Float16) hwy.Float16 {
 		}
 		return result
 	}
-	minVec := asm.LoadFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	minVec := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
 		va := asm.LoadFloat16x8Ptr(unsafe.Pointer(&v[i:][0]))
@@ -136,7 +136,7 @@ func BaseMin_neon_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 		}
 		return result
 	}
-	minVec := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	minVec := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
 		va := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&v[i:][0]))
@@ -419,7 +419,7 @@ func BaseMinMax_neon_Float16(v []hwy.Float16) (minVal hwy.Float16, maxVal hwy.Fl
 		}
 		return minVal, maxVal
 	}
-	minVec := asm.LoadFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	minVec := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
@@ -461,7 +461,7 @@ func BaseMinMax_neon_BFloat16(v []hwy.BFloat16) (minVal hwy.BFloat16, maxVal hwy
 		}
 		return minVal, maxVal
 	}
-	minVec := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	minVec := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {

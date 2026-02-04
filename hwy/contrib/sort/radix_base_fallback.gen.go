@@ -17,11 +17,11 @@ func BaseRadixPass_fallback_Int32(src []int32, dst []int32, shift int) {
 	var count [256]int
 	i := 0
 	for i+lanes <= n {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		shifted := hwy.ShiftRight(v, shift)
 		digits := hwy.And(shifted, maskVec)
 		var buf [16]int32
-		hwy.Store(digits, buf[:])
+		hwy.StoreSlice(digits, buf[:])
 		for j := range lanes {
 			digit := int(buf[j]) & 0xFF
 			count[digit]++
@@ -56,11 +56,11 @@ func BaseRadixPass_fallback_Int64(src []int64, dst []int64, shift int) {
 	var count [256]int
 	i := 0
 	for i+lanes <= n {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		shifted := hwy.ShiftRight(v, shift)
 		digits := hwy.And(shifted, maskVec)
 		var buf [16]int64
-		hwy.Store(digits, buf[:])
+		hwy.StoreSlice(digits, buf[:])
 		for j := range lanes {
 			digit := int(buf[j]) & 0xFF
 			count[digit]++
@@ -201,11 +201,11 @@ func BaseRadixPassSigned_fallback_Int32(src []int32, dst []int32, shift int) {
 	var count [256]int
 	i := 0
 	for i+lanes <= n {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		shifted := hwy.ShiftRight(v, shift)
 		digits := hwy.And(shifted, maskVec)
 		var buf [16]int32
-		hwy.Store(digits, buf[:])
+		hwy.StoreSlice(digits, buf[:])
 		for j := range lanes {
 			digit := int(buf[j]) & 0xFF
 			count[digit]++
@@ -245,11 +245,11 @@ func BaseRadixPassSigned_fallback_Int64(src []int64, dst []int64, shift int) {
 	var count [256]int
 	i := 0
 	for i+lanes <= n {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		shifted := hwy.ShiftRight(v, shift)
 		digits := hwy.And(shifted, maskVec)
 		var buf [16]int64
-		hwy.Store(digits, buf[:])
+		hwy.StoreSlice(digits, buf[:])
 		for j := range lanes {
 			digit := int(buf[j]) & 0xFF
 			count[digit]++

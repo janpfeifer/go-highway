@@ -22,8 +22,8 @@ func BasePackRHSFast_avx2_Float16(b []hwy.Float16, packed []hwy.Float16, n int, 
 			for kk := 0; kk < panelK; kk++ {
 				srcIdx := (rowStart+kk)*n + baseCol
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[srcIdx+c]))
-					v.StorePtr(unsafe.Pointer(&packed[dstIdx+c]))
+					v := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[srcIdx+c:][0]))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[dstIdx+c:]))), len(packed[dstIdx+c:])))
 				}
 				dstIdx += nr
 			}
@@ -53,8 +53,8 @@ func BasePackRHSFast_avx2_BFloat16(b []hwy.BFloat16, packed []hwy.BFloat16, n in
 			for kk := 0; kk < panelK; kk++ {
 				srcIdx := (rowStart+kk)*n + baseCol
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[srcIdx+c]))
-					v.StorePtr(unsafe.Pointer(&packed[dstIdx+c]))
+					v := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[srcIdx+c:][0]))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[dstIdx+c:]))), len(packed[dstIdx+c:])))
 				}
 				dstIdx += nr
 			}
@@ -145,11 +145,11 @@ func BaseApplyPackedOutput_avx2_Float16(packedOutput []hwy.Float16, output []hwy
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c]))
-			outputVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c]))
+			packedVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c:][0]))
+			outputVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c:][0]))
 			scaledOutput := outputVal.Mul(betaVec)
 			newVal := packedVal.MulAdd(alphaVec, scaledOutput)
-			newVal.StorePtr(unsafe.Pointer(&output[outputIdx+c]))
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			val := packedOutput[packedIdx+c]
@@ -167,11 +167,11 @@ func BaseApplyPackedOutput_avx2_BFloat16(packedOutput []hwy.BFloat16, output []h
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c]))
-			outputVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c]))
+			packedVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c:][0]))
+			outputVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c:][0]))
 			scaledOutput := outputVal.Mul(betaVec)
 			newVal := packedVal.MulAdd(alphaVec, scaledOutput)
-			newVal.StorePtr(unsafe.Pointer(&output[outputIdx+c]))
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			val := packedOutput[packedIdx+c]
@@ -231,8 +231,8 @@ func BaseApplyPackedOutputSimple_avx2_Float16(packedOutput []hwy.Float16, output
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			v := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c]))
-			v.StorePtr(unsafe.Pointer(&output[outputIdx+c]))
+			v := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c:][0]))
+			v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToFloat16(packedOutput[packedIdx+c].Float32())
@@ -247,8 +247,8 @@ func BaseApplyPackedOutputSimple_avx2_BFloat16(packedOutput []hwy.BFloat16, outp
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			v := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c]))
-			v.StorePtr(unsafe.Pointer(&output[outputIdx+c]))
+			v := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c:][0]))
+			v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToBFloat16(packedOutput[packedIdx+c].Float32())
@@ -295,10 +295,10 @@ func BaseApplyPackedOutputAccum_avx2_Float16(packedOutput []hwy.Float16, output 
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c]))
-			outputVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c]))
+			packedVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c:][0]))
+			outputVal := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c:][0]))
 			newVal := outputVal.Add(packedVal)
-			newVal.StorePtr(unsafe.Pointer(&output[outputIdx+c]))
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToFloat16(output[outputIdx+c].Float32() + packedOutput[packedIdx+c].Float32())
@@ -313,10 +313,10 @@ func BaseApplyPackedOutputAccum_avx2_BFloat16(packedOutput []hwy.BFloat16, outpu
 		outputIdx := (outputRowOffset+r)*outputStride + outputColOffset
 		c := 0
 		for ; c+lanes <= width; c += lanes {
-			packedVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c]))
-			outputVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c]))
+			packedVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&packedOutput[packedIdx+c:][0]))
+			outputVal := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&output[outputIdx+c:][0]))
 			newVal := outputVal.Add(packedVal)
-			newVal.StorePtr(unsafe.Pointer(&output[outputIdx+c]))
+			newVal.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[outputIdx+c:]))), len(output[outputIdx+c:])))
 		}
 		for ; c < width; c++ {
 			output[outputIdx+c] = hwy.Float32ToBFloat16(output[outputIdx+c].Float32() + packedOutput[packedIdx+c].Float32())

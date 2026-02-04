@@ -28,10 +28,10 @@ func BaseNormalize_avx2_Float16(dst []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= len(dst); i += lanes * 2 {
-		vec := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vec := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&dst[i:][0]))
 		result := vec.Mul(scaleVec)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
-		vec1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vec1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&dst[i+8:][0]))
 		result1 := vec1.Mul(scaleVec)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
@@ -55,10 +55,10 @@ func BaseNormalize_avx2_BFloat16(dst []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= len(dst); i += lanes * 2 {
-		vec := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
+		vec := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&dst[i:][0]))
 		result := vec.Mul(scaleVec)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
-		vec1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
+		vec1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&dst[i+8:][0]))
 		result1 := vec1.Mul(scaleVec)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
@@ -138,10 +138,10 @@ func BaseNormalizeTo_avx2_Float16(dst []hwy.Float16, src []hwy.Float16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vec := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[i:]))), len(src[i:])))
+		vec := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&src[i:][0]))
 		result := vec.Mul(scaleVec)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
-		vec1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[i+8:]))), len(src[i+8:])))
+		vec1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&src[i+8:][0]))
 		result1 := vec1.Mul(scaleVec)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}
@@ -167,10 +167,10 @@ func BaseNormalizeTo_avx2_BFloat16(dst []hwy.BFloat16, src []hwy.BFloat16) {
 	var i int
 	i = 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		vec := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[i:]))), len(src[i:])))
+		vec := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&src[i:][0]))
 		result := vec.Mul(scaleVec)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i:]))), len(dst[i:])))
-		vec1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(src[i+8:]))), len(src[i+8:])))
+		vec1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&src[i+8:][0]))
 		result1 := vec1.Mul(scaleVec)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(dst[i+8:]))), len(dst[i+8:])))
 	}

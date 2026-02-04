@@ -20,8 +20,8 @@ import (
 )
 
 func TestSaturatedAddUint8(t *testing.T) {
-	a := Load([]uint8{250, 100, 0, 255})
-	b := Load([]uint8{10, 50, 100, 1})
+	a := LoadSlice([]uint8{250, 100, 0, 255})
+	b := LoadSlice([]uint8{10, 50, 100, 1})
 	result := SaturatedAdd(a, b)
 
 	expected := []uint8{255, 150, 100, 255} // 250+10 saturates to 255
@@ -33,8 +33,8 @@ func TestSaturatedAddUint8(t *testing.T) {
 }
 
 func TestSaturatedAddInt8(t *testing.T) {
-	a := Load([]int8{120, -120, 50, -50})
-	b := Load([]int8{10, -10, 50, -50})
+	a := LoadSlice([]int8{120, -120, 50, -50})
+	b := LoadSlice([]int8{10, -10, 50, -50})
 	result := SaturatedAdd(a, b)
 
 	expected := []int8{127, -128, 100, -100} // 120+10=130 saturates to 127
@@ -46,8 +46,8 @@ func TestSaturatedAddInt8(t *testing.T) {
 }
 
 func TestSaturatedAddUint16(t *testing.T) {
-	a := Load([]uint16{65530, 100, 0, 65535})
-	b := Load([]uint16{10, 50, 100, 1})
+	a := LoadSlice([]uint16{65530, 100, 0, 65535})
+	b := LoadSlice([]uint16{10, 50, 100, 1})
 	result := SaturatedAdd(a, b)
 
 	expected := []uint16{65535, 150, 100, 65535}
@@ -59,8 +59,8 @@ func TestSaturatedAddUint16(t *testing.T) {
 }
 
 func TestSaturatedSubUint8(t *testing.T) {
-	a := Load([]uint8{10, 100, 0, 255})
-	b := Load([]uint8{20, 50, 100, 1})
+	a := LoadSlice([]uint8{10, 100, 0, 255})
+	b := LoadSlice([]uint8{20, 50, 100, 1})
 	result := SaturatedSub(a, b)
 
 	expected := []uint8{0, 50, 0, 254} // 10-20 saturates to 0
@@ -72,8 +72,8 @@ func TestSaturatedSubUint8(t *testing.T) {
 }
 
 func TestSaturatedSubInt8(t *testing.T) {
-	a := Load([]int8{-120, 120, 50, -50})
-	b := Load([]int8{10, -10, 50, -50})
+	a := LoadSlice([]int8{-120, 120, 50, -50})
+	b := LoadSlice([]int8{10, -10, 50, -50})
 	result := SaturatedSub(a, b)
 
 	expected := []int8{-128, 127, 0, 0} // -120-10=-130 saturates to -128
@@ -85,9 +85,9 @@ func TestSaturatedSubInt8(t *testing.T) {
 }
 
 func TestClamp(t *testing.T) {
-	v := Load([]float32{-5, 0, 5, 15, 25})
-	lo := Load([]float32{0, 0, 0, 0, 0})
-	hi := Load([]float32{10, 10, 10, 10, 10})
+	v := LoadSlice([]float32{-5, 0, 5, 15, 25})
+	lo := LoadSlice([]float32{0, 0, 0, 0, 0})
+	hi := LoadSlice([]float32{10, 10, 10, 10, 10})
 	result := Clamp(v, lo, hi)
 
 	expected := []float32{0, 0, 5, 10, 10}
@@ -99,9 +99,9 @@ func TestClamp(t *testing.T) {
 }
 
 func TestClampInt(t *testing.T) {
-	v := Load([]int32{-100, -50, 0, 50, 100})
-	lo := Load([]int32{-25, -25, -25, -25, -25})
-	hi := Load([]int32{25, 25, 25, 25, 25})
+	v := LoadSlice([]int32{-100, -50, 0, 50, 100})
+	lo := LoadSlice([]int32{-25, -25, -25, -25, -25})
+	hi := LoadSlice([]int32{25, 25, 25, 25, 25})
 	result := Clamp(v, lo, hi)
 
 	expected := []int32{-25, -25, 0, 25, 25}
@@ -113,8 +113,8 @@ func TestClampInt(t *testing.T) {
 }
 
 func TestAbsDiff(t *testing.T) {
-	a := Load([]float32{10, 5, -10, -5})
-	b := Load([]float32{5, 10, -5, -10})
+	a := LoadSlice([]float32{10, 5, -10, -5})
+	b := LoadSlice([]float32{5, 10, -5, -10})
 	result := AbsDiff(a, b)
 
 	expected := []float32{5, 5, 5, 5}
@@ -126,8 +126,8 @@ func TestAbsDiff(t *testing.T) {
 }
 
 func TestAbsDiffUint(t *testing.T) {
-	a := Load([]uint32{10, 5, 100, 50})
-	b := Load([]uint32{5, 10, 50, 100})
+	a := LoadSlice([]uint32{10, 5, 100, 50})
+	b := LoadSlice([]uint32{5, 10, 50, 100})
 	result := AbsDiff(a, b)
 
 	expected := []uint32{5, 5, 50, 50}
@@ -139,8 +139,8 @@ func TestAbsDiffUint(t *testing.T) {
 }
 
 func TestAvg(t *testing.T) {
-	a := Load([]uint8{10, 20, 255, 0})
-	b := Load([]uint8{20, 30, 255, 1})
+	a := LoadSlice([]uint8{10, 20, 255, 0})
+	b := LoadSlice([]uint8{20, 30, 255, 1})
 	result := Avg(a, b)
 
 	// (a + b + 1) / 2, rounded
@@ -153,8 +153,8 @@ func TestAvg(t *testing.T) {
 }
 
 func TestAvgInt(t *testing.T) {
-	a := Load([]int32{-10, 10, -5, 5})
-	b := Load([]int32{-20, 20, 6, -4})
+	a := LoadSlice([]int32{-10, 10, -5, 5})
+	b := LoadSlice([]int32{-20, 20, 6, -4})
 	result := Avg(a, b)
 
 	// (a + b + 1) / 2 with integer division
@@ -171,8 +171,8 @@ func TestAvgInt(t *testing.T) {
 }
 
 func TestMulHigh(t *testing.T) {
-	a := Load([]uint16{0x8000, 0x4000, 0x1000, 0x0100})
-	b := Load([]uint16{0x8000, 0x4000, 0x1000, 0x0100})
+	a := LoadSlice([]uint16{0x8000, 0x4000, 0x1000, 0x0100})
+	b := LoadSlice([]uint16{0x8000, 0x4000, 0x1000, 0x0100})
 	result := MulHigh(a, b)
 
 	// High 16 bits of product
@@ -185,8 +185,8 @@ func TestMulHigh(t *testing.T) {
 }
 
 func TestMulHighSigned(t *testing.T) {
-	a := Load([]int16{0x4000, -0x4000, 0x1000, -0x1000})
-	b := Load([]int16{0x4000, 0x4000, 0x1000, -0x1000})
+	a := LoadSlice([]int16{0x4000, -0x4000, 0x1000, -0x1000})
+	b := LoadSlice([]int16{0x4000, 0x4000, 0x1000, -0x1000})
 	result := MulHigh(a, b)
 
 	// 0x4000 * 0x4000 = 0x10000000, high 16 bits = 0x1000
@@ -200,8 +200,8 @@ func TestMulHighSigned(t *testing.T) {
 }
 
 func TestNotEqual(t *testing.T) {
-	a := Load([]float32{1, 2, 3, 4})
-	b := Load([]float32{1, 5, 3, 7})
+	a := LoadSlice([]float32{1, 2, 3, 4})
+	b := LoadSlice([]float32{1, 5, 3, 7})
 	mask := NotEqual(a, b)
 
 	if mask.GetBit(0) {
@@ -221,7 +221,7 @@ func TestNotEqual(t *testing.T) {
 func TestIsNaN(t *testing.T) {
 	nan := float32(math.NaN())
 	inf := float32(math.Inf(1))
-	v := Load([]float32{1.0, nan, inf, 0.0})
+	v := LoadSlice([]float32{1.0, nan, inf, 0.0})
 	mask := IsNaN(v)
 
 	if mask.GetBit(0) {
@@ -242,7 +242,7 @@ func TestIsInf(t *testing.T) {
 	posInf := float32(math.Inf(1))
 	negInf := float32(math.Inf(-1))
 	nan := float32(math.NaN())
-	v := Load([]float32{posInf, negInf, nan, 1.0})
+	v := LoadSlice([]float32{posInf, negInf, nan, 1.0})
 
 	// Test for any infinity
 	maskAny := IsInf(v, 0)
@@ -282,7 +282,7 @@ func TestIsFinite(t *testing.T) {
 	posInf := float32(math.Inf(1))
 	negInf := float32(math.Inf(-1))
 	nan := float32(math.NaN())
-	v := Load([]float32{1.0, posInf, negInf, nan})
+	v := LoadSlice([]float32{1.0, posInf, negInf, nan})
 	mask := IsFinite(v)
 
 	if !mask.GetBit(0) {
@@ -300,7 +300,7 @@ func TestIsFinite(t *testing.T) {
 }
 
 func TestTestBit(t *testing.T) {
-	v := Load([]uint32{0x01, 0x02, 0x04, 0x08})
+	v := LoadSlice([]uint32{0x01, 0x02, 0x04, 0x08})
 
 	// Test bit 0
 	mask0 := TestBit(v, 0)
@@ -335,8 +335,8 @@ func TestTestBit(t *testing.T) {
 
 func TestIfThenElseZero(t *testing.T) {
 	mask := Equal(
-		Load([]float32{1, 2, 3, 4}),
-		Load([]float32{1, 0, 3, 0}),
+		LoadSlice([]float32{1, 2, 3, 4}),
+		LoadSlice([]float32{1, 0, 3, 0}),
 	)
 	a := Set[float32](100.0)
 	result := IfThenElseZero(mask, a)
@@ -357,8 +357,8 @@ func TestIfThenElseZero(t *testing.T) {
 
 func TestIfThenZeroElse(t *testing.T) {
 	mask := Equal(
-		Load([]float32{1, 2, 3, 4}),
-		Load([]float32{1, 0, 3, 0}),
+		LoadSlice([]float32{1, 2, 3, 4}),
+		LoadSlice([]float32{1, 0, 3, 0}),
 	)
 	b := Set[float32](200.0)
 	result := IfThenZeroElse(mask, b)
@@ -378,7 +378,7 @@ func TestIfThenZeroElse(t *testing.T) {
 }
 
 func TestZeroIfNegative(t *testing.T) {
-	v := Load([]float32{-5, 0, 5, -10})
+	v := LoadSlice([]float32{-5, 0, 5, -10})
 	result := ZeroIfNegative(v)
 
 	expected := []float32{0, 0, 5, 0}
@@ -390,7 +390,7 @@ func TestZeroIfNegative(t *testing.T) {
 }
 
 func TestZeroIfNegativeInt(t *testing.T) {
-	v := Load([]int32{-100, 0, 100, -1})
+	v := LoadSlice([]int32{-100, 0, 100, -1})
 	result := ZeroIfNegative(v)
 
 	expected := []int32{0, 0, 100, 0}

@@ -22,7 +22,7 @@ func BaseMatMul_fallback_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Float
 		lanes := vZero.NumLanes()
 		var j int
 		for j = 0; j+lanes <= n; j += lanes {
-			hwy.StoreFull(vZero, cRow[j:])
+			hwy.Store(vZero, cRow[j:])
 		}
 		for ; j < n; j++ {
 			cRow[j] = hwy.Float32ToFloat16(0)
@@ -32,10 +32,10 @@ func BaseMatMul_fallback_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Float
 			vA := hwy.Set(aip)
 			bRow := b[p*n : (p+1)*n]
 			for j = 0; j+lanes <= n; j += lanes {
-				vB := hwy.LoadFull(bRow[j:])
-				vC := hwy.LoadFull(cRow[j:])
+				vB := hwy.Load(bRow[j:])
+				vC := hwy.Load(cRow[j:])
 				vC = hwy.MulAdd(vA, vB, vC)
-				hwy.StoreFull(vC, cRow[j:])
+				hwy.Store(vC, cRow[j:])
 			}
 			for ; j < n; j++ {
 				cRow[j] = hwy.Float32ToFloat16(cRow[j].Float32() + aip.Float32()*bRow[j].Float32())
@@ -60,7 +60,7 @@ func BaseMatMul_fallback_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.BF
 		lanes := vZero.NumLanes()
 		var j int
 		for j = 0; j+lanes <= n; j += lanes {
-			hwy.StoreFull(vZero, cRow[j:])
+			hwy.Store(vZero, cRow[j:])
 		}
 		for ; j < n; j++ {
 			cRow[j] = hwy.Float32ToBFloat16(0)
@@ -70,10 +70,10 @@ func BaseMatMul_fallback_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.BF
 			vA := hwy.Set(aip)
 			bRow := b[p*n : (p+1)*n]
 			for j = 0; j+lanes <= n; j += lanes {
-				vB := hwy.LoadFull(bRow[j:])
-				vC := hwy.LoadFull(cRow[j:])
+				vB := hwy.Load(bRow[j:])
+				vC := hwy.Load(cRow[j:])
 				vC = hwy.MulAdd(vA, vB, vC)
-				hwy.StoreFull(vC, cRow[j:])
+				hwy.Store(vC, cRow[j:])
 			}
 			for ; j < n; j++ {
 				cRow[j] = hwy.Float32ToBFloat16(cRow[j].Float32() + aip.Float32()*bRow[j].Float32())

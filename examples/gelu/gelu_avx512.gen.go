@@ -54,7 +54,7 @@ func BaseGELU_avx512_Float16(input []hwy.Float16, output []hwy.Float16) {
 	for ; ii+32 <= size; ii += 32 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_avx512_Float16(xScaled)
 			onePlusErf := vOne.Add(erfX)
@@ -69,7 +69,7 @@ func BaseGELU_avx512_Float16(input []hwy.Float16, output []hwy.Float16) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 16 {
-			x1 := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+16:]))), len(input[ii+16:])))
+			x1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii+16:][0]))
 			xScaled1 := x1.Mul(vInvSqrt2)
 			erfX1 := math.BaseErfVec_avx512_Float16(xScaled1)
 			onePlusErf1 := vOne.Add(erfX1)
@@ -86,7 +86,7 @@ func BaseGELU_avx512_Float16(input []hwy.Float16, output []hwy.Float16) {
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_avx512_Float16(xScaled)
 			onePlusErf := vOne.Add(erfX)
@@ -115,7 +115,7 @@ func BaseGELU_avx512_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	for ; ii+32 <= size; ii += 32 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_avx512_BFloat16(xScaled)
 			onePlusErf := vOne.Add(erfX)
@@ -130,7 +130,7 @@ func BaseGELU_avx512_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 16 {
-			x1 := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+16:]))), len(input[ii+16:])))
+			x1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii+16:][0]))
 			xScaled1 := x1.Mul(vInvSqrt2)
 			erfX1 := math.BaseErfVec_avx512_BFloat16(xScaled1)
 			onePlusErf1 := vOne.Add(erfX1)
@@ -147,7 +147,7 @@ func BaseGELU_avx512_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vInvSqrt2)
 			erfX := math.BaseErfVec_avx512_BFloat16(xScaled)
 			onePlusErf := vOne.Add(erfX)
@@ -296,7 +296,7 @@ func BaseGELUApprox_avx512_Float16(input []hwy.Float16, output []hwy.Float16) {
 	for ; ii+32 <= size; ii += 32 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx512_Float16(xScaled)
 			result := x.Mul(sigmoidX)
@@ -310,7 +310,7 @@ func BaseGELUApprox_avx512_Float16(input []hwy.Float16, output []hwy.Float16) {
 		}
 		remaining1 := size - ii
 		if remaining1 >= 16 {
-			x1 := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+16:]))), len(input[ii+16:])))
+			x1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii+16:][0]))
 			xScaled1 := x1.Mul(vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_avx512_Float16(xScaled1)
 			result1 := x1.Mul(sigmoidX1)
@@ -326,7 +326,7 @@ func BaseGELUApprox_avx512_Float16(input []hwy.Float16, output []hwy.Float16) {
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx512_Float16(xScaled)
 			result := x.Mul(sigmoidX)
@@ -352,7 +352,7 @@ func BaseGELUApprox_avx512_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16)
 	for ; ii+32 <= size; ii += 32 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx512_BFloat16(xScaled)
 			result := x.Mul(sigmoidX)
@@ -366,7 +366,7 @@ func BaseGELUApprox_avx512_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16)
 		}
 		remaining1 := size - ii
 		if remaining1 >= 16 {
-			x1 := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+16:]))), len(input[ii+16:])))
+			x1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii+16:][0]))
 			xScaled1 := x1.Mul(vCoeff)
 			sigmoidX1 := math.BaseSigmoidVec_avx512_BFloat16(xScaled1)
 			result1 := x1.Mul(sigmoidX1)
@@ -382,7 +382,7 @@ func BaseGELUApprox_avx512_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16)
 	for ; ii+16 <= size; ii += 16 {
 		remaining := size - ii
 		if remaining >= 16 {
-			x := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+			x := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&input[ii:][0]))
 			xScaled := x.Mul(vCoeff)
 			sigmoidX := math.BaseSigmoidVec_avx512_BFloat16(xScaled)
 			result := x.Mul(sigmoidX)

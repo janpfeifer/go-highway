@@ -188,12 +188,12 @@ func BaseDecodeStreamVByte32GroupSIMD(ctrl byte, data []uint8, dst []uint32) int
 	}
 
 	// Load data bytes into vector (up to 16 bytes)
-	// Explicit uint8 slice to ensure hwygen uses byte-level operations
-	dataVec := hwy.Load[uint8](data[:16])
+	// Use LoadSlice since we're explicitly working with 16-byte chunks
+	dataVec := hwy.LoadSlice[uint8](data[:16])
 
 	// Load shuffle mask for this control byte
 	maskSlice := streamVByte32ShuffleMasks[ctrl][:]
-	maskVec := hwy.Load[uint8](maskSlice)
+	maskVec := hwy.LoadSlice[uint8](maskSlice)
 
 	// Shuffle: rearrange bytes according to mask
 	// Index 255 (>= 16) produces zero in TableLookupBytes
@@ -201,7 +201,7 @@ func BaseDecodeStreamVByte32GroupSIMD(ctrl byte, data []uint8, dst []uint32) int
 
 	// Store shuffled bytes
 	var result [16]uint8
-	hwy.Store(shuffled, result[:])
+	hwy.StoreSlice(shuffled, result[:])
 
 	// Convert 16 bytes to 4 uint32 (little-endian)
 	dst[0] = uint32(result[0]) | uint32(result[1])<<8 | uint32(result[2])<<16 | uint32(result[3])<<24
@@ -389,12 +389,12 @@ func BaseEncodeStreamVByte32GroupSIMD(values []uint32) (ctrl byte, data []byte) 
 	inputBytes := unsafe.Slice((*uint8)(unsafe.Pointer(&values[0])), 16)
 
 	// Use SIMD shuffle to compact bytes
-	// Inline slice expressions with [:16] bounds tell hwygen to use 128-bit operations
-	inputVec := hwy.Load[uint8](inputBytes[:16])
-	maskVec := hwy.Load[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
+	// Use LoadSlice since we're explicitly working with 16-byte chunks
+	inputVec := hwy.LoadSlice[uint8](inputBytes[:16])
+	maskVec := hwy.LoadSlice[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
 	shuffled := hwy.TableLookupBytes(inputVec, maskVec)
 	var outputBytes [16]uint8
-	hwy.Store(shuffled, outputBytes[:16])
+	hwy.StoreSlice(shuffled, outputBytes[:16])
 	copy(data, outputBytes[:dataLen])
 
 	return ctrl, data
@@ -435,11 +435,11 @@ func BaseEncodeStreamVByte32GroupSIMDInto(values []uint32, dst []uint8) (ctrl by
 	inputBytes := unsafe.Slice((*uint8)(unsafe.Pointer(&values[0])), 16)
 
 	// Use SIMD shuffle to compact bytes directly into dst
-	// Inline slice expressions with [:16] bounds tell hwygen to use 128-bit operations
-	inputVec := hwy.Load[uint8](inputBytes[:16])
-	maskVec := hwy.Load[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
+	// Use LoadSlice since we're explicitly working with 16-byte chunks
+	inputVec := hwy.LoadSlice[uint8](inputBytes[:16])
+	maskVec := hwy.LoadSlice[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
 	shuffled := hwy.TableLookupBytes(inputVec, maskVec)
-	hwy.Store(shuffled, dst[:16])
+	hwy.StoreSlice(shuffled, dst[:16])
 
 	return ctrl, n
 }

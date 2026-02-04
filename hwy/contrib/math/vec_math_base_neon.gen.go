@@ -658,7 +658,7 @@ func BaseSinVec_neon_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.NegF16(result)
 	negResultData := func() []hwy.Float16 {
 		var _simd_tmp [8]hwy.Float16
@@ -670,7 +670,7 @@ func BaseSinVec_neon_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseSinVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
@@ -724,7 +724,7 @@ func BaseSinVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.NegBF16(result)
 	negResultData := func() []hwy.BFloat16 {
 		var _simd_tmp [8]hwy.BFloat16
@@ -736,7 +736,7 @@ func BaseSinVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseSinVec_neon(x asm.Float32x4) asm.Float32x4 {
@@ -950,7 +950,7 @@ func BaseCosVec_neon_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.NegF16(result)
 	negResultData := func() []hwy.Float16 {
 		var _simd_tmp [8]hwy.Float16
@@ -962,7 +962,7 @@ func BaseCosVec_neon_Float16(x hwy.Vec[hwy.Float16]) hwy.Vec[hwy.Float16] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseCosVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
@@ -1016,7 +1016,7 @@ func BaseCosVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 	negResult := hwy.NegBF16(result)
 	negResultData := func() []hwy.BFloat16 {
 		var _simd_tmp [8]hwy.BFloat16
@@ -1028,7 +1028,7 @@ func BaseCosVec_neon_BFloat16(x hwy.Vec[hwy.BFloat16]) hwy.Vec[hwy.BFloat16] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 func BaseCosVec_neon(x asm.Float32x4) asm.Float32x4 {

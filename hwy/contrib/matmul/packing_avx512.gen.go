@@ -315,8 +315,8 @@ func BasePackRHSVec_avx512_Float16(b []hwy.Float16, packed []hwy.Float16, k int,
 			for kk := 0; kk < panelK; kk++ {
 				bRowStart := (rowStart + kk) * n
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+baseCol+c]))
-					v.StorePtr(unsafe.Pointer(&packed[packIdx+c]))
+					v := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+baseCol+c:][0]))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[packIdx+c:]))), len(packed[packIdx+c:])))
 				}
 				packIdx += nr
 			}
@@ -355,8 +355,8 @@ func BasePackRHSVec_avx512_BFloat16(b []hwy.BFloat16, packed []hwy.BFloat16, k i
 			for kk := 0; kk < panelK; kk++ {
 				bRowStart := (rowStart + kk) * n
 				for c := 0; c < nr; c += lanes {
-					v := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+baseCol+c]))
-					v.StorePtr(unsafe.Pointer(&packed[packIdx+c]))
+					v := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+baseCol+c:][0]))
+					v.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(packed[packIdx+c:]))), len(packed[packIdx+c:])))
 				}
 				packIdx += nr
 			}

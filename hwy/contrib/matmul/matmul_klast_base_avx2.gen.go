@@ -41,11 +41,11 @@ func BaseMatMulKLast_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Floa
 			acc3 := asm.ZeroFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vB := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p]))
-				vA0 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow0+p]))
-				vA1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow1+p]))
-				vA2 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow2+p]))
-				vA3 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow3+p]))
+				vB := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p:][0]))
+				vA0 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow0+p:][0]))
+				vA1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow1+p:][0]))
+				vA2 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow2+p:][0]))
+				vA3 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow3+p:][0]))
 				acc0 = vA0.MulAdd(vB, acc0)
 				acc1 = vA1.MulAdd(vB, acc1)
 				acc2 = vA2.MulAdd(vB, acc2)
@@ -75,8 +75,8 @@ func BaseMatMulKLast_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Floa
 			acc := asm.ZeroFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vA := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p]))
-				vB := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p]))
+				vA := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p:][0]))
+				vB := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p:][0]))
 				acc = vA.MulAdd(vB, acc)
 			}
 			sum := acc.ReduceSum()
@@ -117,11 +117,11 @@ func BaseMatMulKLast_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.B
 			acc3 := asm.ZeroBFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vB := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p]))
-				vA0 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow0+p]))
-				vA1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow1+p]))
-				vA2 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow2+p]))
-				vA3 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow3+p]))
+				vB := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p:][0]))
+				vA0 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow0+p:][0]))
+				vA1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow1+p:][0]))
+				vA2 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow2+p:][0]))
+				vA3 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow3+p:][0]))
 				acc0 = vA0.MulAdd(vB, acc0)
 				acc1 = vA1.MulAdd(vB, acc1)
 				acc2 = vA2.MulAdd(vB, acc2)
@@ -151,8 +151,8 @@ func BaseMatMulKLast_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy.B
 			acc := asm.ZeroBFloat16x8AVX2()
 			var p int
 			for p = 0; p+lanes <= k; p += lanes {
-				vA := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p]))
-				vB := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p]))
+				vA := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p:][0]))
+				vB := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p:][0]))
 				acc = vA.MulAdd(vB, acc)
 			}
 			sum := acc.ReduceSum()
@@ -347,8 +347,8 @@ func BaseMatMulKLastBlocked_avx2_Float16(a []hwy.Float16, b []hwy.Float16, c []h
 						acc := asm.ZeroFloat16x8AVX2()
 						var p int
 						for p = kk; p+lanes <= kEnd; p += lanes {
-							vA := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p]))
-							vB := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p]))
+							vA := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p:][0]))
+							vB := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p:][0]))
 							acc = vA.MulAdd(vB, acc)
 						}
 						sum := acc.ReduceSum()
@@ -394,8 +394,8 @@ func BaseMatMulKLastBlocked_avx2_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c 
 						acc := asm.ZeroBFloat16x8AVX2()
 						var p int
 						for p = kk; p+lanes <= kEnd; p += lanes {
-							vA := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p]))
-							vB := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p]))
+							vA := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&a[aRow+p:][0]))
+							vB := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&b[bRow+p:][0]))
 							acc = vA.MulAdd(vB, acc)
 						}
 						sum := acc.ReduceSum()

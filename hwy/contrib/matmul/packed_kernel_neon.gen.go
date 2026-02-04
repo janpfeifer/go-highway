@@ -347,12 +347,12 @@ func basePackedMicroKernelGeneral_neon(packedA []float32, packedB []float32, c [
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat32x4(aVal)
-				vB := asm.LoadFloat32x4Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat32x4Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < nr; col++ {
 			var sum float32
@@ -374,12 +374,12 @@ func basePackedMicroKernelGeneral_neon_Float64(packedA []float64, packedB []floa
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat64x2(aVal)
-				vB := asm.LoadFloat64x2Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat64x2Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < nr; col++ {
 			var sum float64
@@ -455,12 +455,12 @@ func BasePackedMicroKernelPartial_neon(packedA []float32, packedB []float32, c [
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat32x4(aVal)
-				vB := asm.LoadFloat32x4Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat32x4Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < activeCols; col++ {
 			var sum float32
@@ -482,12 +482,12 @@ func BasePackedMicroKernelPartial_neon_Float64(packedA []float64, packedB []floa
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat64x2(aVal)
-				vB := asm.LoadFloat64x2Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat64x2Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < activeCols; col++ {
 			var sum float64

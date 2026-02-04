@@ -17,19 +17,19 @@ func BaseApply_neon_Float16(in []hwy.Float16, out []hwy.Float16, fn func(hwy.Vec
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
 		x := hwy.Load(in[i:])
-		hwy.StoreFull(fn(x), out[i:])
+		hwy.Store(fn(x), out[i:])
 		x1 := hwy.Load(in[i+8:])
-		hwy.StoreFull(fn(x1), out[i+8:])
+		hwy.Store(fn(x1), out[i+8:])
 	}
 	for ; i+lanes <= n; i += lanes {
 		x := hwy.Load(in[i:])
-		hwy.StoreFull(fn(x), out[i:])
+		hwy.Store(fn(x), out[i:])
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]hwy.Float16{}
 		copy(buf[:], in[i:i+remaining])
-		x := hwy.Load(buf[:])
-		hwy.Store(fn(x), buf[:])
+		x := hwy.LoadSlice(buf[:])
+		hwy.StoreSlice(fn(x), buf[:])
 		copy(out[i:i+remaining], buf[:remaining])
 	}
 }
@@ -40,19 +40,19 @@ func BaseApply_neon_BFloat16(in []hwy.BFloat16, out []hwy.BFloat16, fn func(hwy.
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
 		x := hwy.Load(in[i:])
-		hwy.StoreFull(fn(x), out[i:])
+		hwy.Store(fn(x), out[i:])
 		x1 := hwy.Load(in[i+8:])
-		hwy.StoreFull(fn(x1), out[i+8:])
+		hwy.Store(fn(x1), out[i+8:])
 	}
 	for ; i+lanes <= n; i += lanes {
 		x := hwy.Load(in[i:])
-		hwy.StoreFull(fn(x), out[i:])
+		hwy.Store(fn(x), out[i:])
 	}
 	if remaining := n - i; remaining > 0 {
 		buf := [8]hwy.BFloat16{}
 		copy(buf[:], in[i:i+remaining])
-		x := hwy.Load(buf[:])
-		hwy.Store(fn(x), buf[:])
+		x := hwy.LoadSlice(buf[:])
+		hwy.StoreSlice(fn(x), buf[:])
 		copy(out[i:i+remaining], buf[:remaining])
 	}
 }

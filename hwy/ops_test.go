@@ -20,7 +20,8 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	data := []float32{1, 2, 3, 4, 5, 6, 7, 8}
+	// Need at least 16 elements for AVX-512
+	data := []float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	v := Load(data)
 
 	if v.NumLanes() == 0 {
@@ -181,7 +182,8 @@ func TestFMA(t *testing.T) {
 }
 
 func TestReduceSum(t *testing.T) {
-	data := []float32{1, 2, 3, 4}
+	// Need at least 16 elements for AVX-512
+	data := []float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	v := Load(data)
 	sum := ReduceSum(v)
 
@@ -197,8 +199,9 @@ func TestReduceSum(t *testing.T) {
 }
 
 func TestEqual(t *testing.T) {
-	a := Load([]float32{1, 2, 3, 4})
-	b := Load([]float32{1, 5, 3, 7})
+	// Use LoadSlice since we only care about first 4 lanes
+	a := LoadSlice([]float32{1, 2, 3, 4})
+	b := LoadSlice([]float32{1, 5, 3, 7})
 	mask := Equal(a, b)
 
 	if !mask.GetBit(0) {
@@ -216,8 +219,8 @@ func TestEqual(t *testing.T) {
 }
 
 func TestLessThan(t *testing.T) {
-	a := Load([]float32{1, 5, 3, 7})
-	b := Load([]float32{2, 4, 4, 6})
+	a := LoadSlice([]float32{1, 5, 3, 7})
+	b := LoadSlice([]float32{2, 4, 4, 6})
 	mask := LessThan(a, b)
 
 	if !mask.GetBit(0) {
@@ -229,8 +232,8 @@ func TestLessThan(t *testing.T) {
 }
 
 func TestGreaterThan(t *testing.T) {
-	a := Load([]float32{3, 5, 2, 8})
-	b := Load([]float32{2, 6, 3, 7})
+	a := LoadSlice([]float32{3, 5, 2, 8})
+	b := LoadSlice([]float32{2, 6, 3, 7})
 	mask := GreaterThan(a, b)
 
 	if !mask.GetBit(0) {
@@ -242,9 +245,10 @@ func TestGreaterThan(t *testing.T) {
 }
 
 func TestIfThenElse(t *testing.T) {
+	// Use LoadSlice since we only care about first 4 lanes
 	mask := Equal(
-		Load([]float32{1, 2, 3, 4}),
-		Load([]float32{1, 0, 3, 0}),
+		LoadSlice([]float32{1, 2, 3, 4}),
+		LoadSlice([]float32{1, 0, 3, 0}),
 	)
 	a := Set[float32](100.0)
 	b := Set[float32](200.0)
@@ -262,7 +266,8 @@ func TestIfThenElse(t *testing.T) {
 }
 
 func TestMaskLoad(t *testing.T) {
-	data := []float32{1, 2, 3, 4, 5, 6, 7, 8}
+	// Need at least 16 elements for AVX-512
+	data := []float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 	mask := TailMask[float32](3) // First 3 lanes active
 	v := MaskLoad(mask, data)
 
@@ -284,8 +289,9 @@ func TestMaskLoad(t *testing.T) {
 }
 
 func TestMaskStore(t *testing.T) {
-	v := Load([]float32{1, 2, 3, 4, 5, 6, 7, 8})
-	dst := make([]float32, 8)
+	// Need at least 16 elements for AVX-512
+	v := LoadSlice([]float32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	dst := make([]float32, 16)
 	mask := TailMask[float32](3) // First 3 lanes active
 	MaskStore(mask, v, dst)
 
@@ -459,8 +465,8 @@ func TestIsAligned(t *testing.T) {
 
 func TestAnd(t *testing.T) {
 	// Test with integers
-	a := Load([]uint32{0xFF00FF00, 0xAAAAAAAA, 0x12345678, 0xFFFFFFFF})
-	b := Load([]uint32{0x00FF00FF, 0x55555555, 0x87654321, 0x0F0F0F0F})
+	a := LoadSlice([]uint32{0xFF00FF00, 0xAAAAAAAA, 0x12345678, 0xFFFFFFFF})
+	b := LoadSlice([]uint32{0x00FF00FF, 0x55555555, 0x87654321, 0x0F0F0F0F})
 	result := And(a, b)
 
 	expected := []uint32{0x00000000, 0x00000000, 0x02244220, 0x0F0F0F0F}
@@ -477,8 +483,8 @@ func TestAnd(t *testing.T) {
 }
 
 func TestOr(t *testing.T) {
-	a := Load([]uint32{0xFF00FF00, 0xAAAAAAAA, 0x12345678, 0x00000000})
-	b := Load([]uint32{0x00FF00FF, 0x55555555, 0x87654321, 0x0F0F0F0F})
+	a := LoadSlice([]uint32{0xFF00FF00, 0xAAAAAAAA, 0x12345678, 0x00000000})
+	b := LoadSlice([]uint32{0x00FF00FF, 0x55555555, 0x87654321, 0x0F0F0F0F})
 	result := Or(a, b)
 
 	expected := []uint32{0xFFFFFFFF, 0xFFFFFFFF, 0x97755779, 0x0F0F0F0F}
@@ -490,8 +496,8 @@ func TestOr(t *testing.T) {
 }
 
 func TestXor(t *testing.T) {
-	a := Load([]uint32{0xFF00FF00, 0xAAAAAAAA, 0x12345678, 0xFFFFFFFF})
-	b := Load([]uint32{0x00FF00FF, 0x55555555, 0x12345678, 0xFFFFFFFF})
+	a := LoadSlice([]uint32{0xFF00FF00, 0xAAAAAAAA, 0x12345678, 0xFFFFFFFF})
+	b := LoadSlice([]uint32{0x00FF00FF, 0x55555555, 0x12345678, 0xFFFFFFFF})
 	result := Xor(a, b)
 
 	expected := []uint32{0xFFFFFFFF, 0xFFFFFFFF, 0x00000000, 0x00000000}
@@ -503,7 +509,7 @@ func TestXor(t *testing.T) {
 }
 
 func TestNot(t *testing.T) {
-	a := Load([]uint32{0x00000000, 0xFFFFFFFF, 0xAAAAAAAA, 0x55555555})
+	a := LoadSlice([]uint32{0x00000000, 0xFFFFFFFF, 0xAAAAAAAA, 0x55555555})
 	result := Not(a)
 
 	expected := []uint32{0xFFFFFFFF, 0x00000000, 0x55555555, 0xAAAAAAAA}
@@ -515,8 +521,8 @@ func TestNot(t *testing.T) {
 }
 
 func TestAndNot(t *testing.T) {
-	a := Load([]uint32{0xFF00FF00, 0xAAAAAAAA, 0xFFFFFFFF, 0x00000000})
-	b := Load([]uint32{0xFFFFFFFF, 0xFFFFFFFF, 0x0F0F0F0F, 0x0F0F0F0F})
+	a := LoadSlice([]uint32{0xFF00FF00, 0xAAAAAAAA, 0xFFFFFFFF, 0x00000000})
+	b := LoadSlice([]uint32{0xFFFFFFFF, 0xFFFFFFFF, 0x0F0F0F0F, 0x0F0F0F0F})
 	result := AndNot(a, b)
 
 	// (~a) & b
@@ -529,7 +535,7 @@ func TestAndNot(t *testing.T) {
 }
 
 func TestShiftLeft(t *testing.T) {
-	a := Load([]uint32{1, 2, 3, 4})
+	a := LoadSlice([]uint32{1, 2, 3, 4})
 	result := ShiftLeft(a, 2)
 
 	expected := []uint32{4, 8, 12, 16}
@@ -540,7 +546,7 @@ func TestShiftLeft(t *testing.T) {
 	}
 
 	// Test with signed integers
-	b := Load([]int32{-1, -2, -3, -4})
+	b := LoadSlice([]int32{-1, -2, -3, -4})
 	result2 := ShiftLeft(b, 1)
 
 	expected2 := []int32{-2, -4, -6, -8}
@@ -553,7 +559,7 @@ func TestShiftLeft(t *testing.T) {
 
 func TestShiftRight(t *testing.T) {
 	// Unsigned shift (logical)
-	a := Load([]uint32{16, 8, 4, 2})
+	a := LoadSlice([]uint32{16, 8, 4, 2})
 	result := ShiftRight(a, 2)
 
 	expected := []uint32{4, 2, 1, 0}
@@ -564,7 +570,7 @@ func TestShiftRight(t *testing.T) {
 	}
 
 	// Signed shift (arithmetic)
-	b := Load([]int32{-16, -8, 8, 4})
+	b := LoadSlice([]int32{-16, -8, 8, 4})
 	result2 := ShiftRight(b, 2)
 
 	expected2 := []int32{-4, -2, 2, 1}
@@ -632,7 +638,7 @@ func TestSignBit(t *testing.T) {
 }
 
 func TestReverse(t *testing.T) {
-	a := Load([]int32{1, 2, 3, 4, 5, 6, 7, 8})
+	a := LoadSlice([]int32{1, 2, 3, 4, 5, 6, 7, 8})
 	result := Reverse(a)
 
 	n := result.NumLanes()
@@ -648,7 +654,7 @@ func TestReverse(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	a := Load([]float32{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0})
+	a := LoadSlice([]float32{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0})
 
 	// Broadcast lane 2 (value 3.0)
 	result := Broadcast(a, 2)
@@ -670,7 +676,7 @@ func TestBroadcast(t *testing.T) {
 
 func TestRSqrt(t *testing.T) {
 	// Test with perfect squares for easy verification
-	v := Load([]float32{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0})
+	v := LoadSlice([]float32{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0})
 	result := RSqrt(v)
 
 	// RSqrt is approximate, allow ~0.2% relative error
@@ -688,7 +694,7 @@ func TestRSqrt(t *testing.T) {
 
 func TestRSqrtNewtonRaphson(t *testing.T) {
 	// Test with perfect squares
-	v := Load([]float32{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0})
+	v := LoadSlice([]float32{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0})
 	result := RSqrtNewtonRaphson(v)
 
 	// Newton-Raphson refinement should give ~0.01% relative error
@@ -706,7 +712,7 @@ func TestRSqrtNewtonRaphson(t *testing.T) {
 
 func TestRSqrtPrecise(t *testing.T) {
 	// Test with perfect squares
-	v := Load([]float32{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0})
+	v := LoadSlice([]float32{1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0})
 	result := RSqrtPrecise(v)
 
 	// Precise version uses sqrt + div, should be exact within float32 precision
@@ -724,7 +730,7 @@ func TestRSqrtPrecise(t *testing.T) {
 
 func TestRSqrtFloat64(t *testing.T) {
 	// Test with float64 values
-	v := Load([]float64{1.0, 4.0, 9.0, 16.0})
+	v := LoadSlice([]float64{1.0, 4.0, 9.0, 16.0})
 	result := RSqrt(v)
 
 	// RSqrt is approximate, allow ~0.2% relative error
@@ -741,7 +747,7 @@ func TestRSqrtFloat64(t *testing.T) {
 }
 
 func TestRSqrtNewtonRaphsonFloat64(t *testing.T) {
-	v := Load([]float64{1.0, 4.0, 9.0, 16.0})
+	v := LoadSlice([]float64{1.0, 4.0, 9.0, 16.0})
 	result := RSqrtNewtonRaphson(v)
 
 	// Newton-Raphson should give better precision
@@ -758,7 +764,7 @@ func TestRSqrtNewtonRaphsonFloat64(t *testing.T) {
 }
 
 func TestRSqrtPreciseFloat64(t *testing.T) {
-	v := Load([]float64{1.0, 4.0, 9.0, 16.0})
+	v := LoadSlice([]float64{1.0, 4.0, 9.0, 16.0})
 	result := RSqrtPrecise(v)
 
 	// Precise version should be very accurate
@@ -776,7 +782,7 @@ func TestRSqrtPreciseFloat64(t *testing.T) {
 
 func TestRSqrtNonPerfectSquares(t *testing.T) {
 	// Test with non-perfect squares to verify correctness
-	v := Load([]float32{2.0, 3.0, 5.0, 7.0, 11.0, 13.0, 17.0, 19.0})
+	v := LoadSlice([]float32{2.0, 3.0, 5.0, 7.0, 11.0, 13.0, 17.0, 19.0})
 	result := RSqrtPrecise(v)
 
 	tolerance := float64(1e-6)
@@ -793,7 +799,7 @@ func TestRSqrtNonPerfectSquares(t *testing.T) {
 
 func TestRSqrtLargeValues(t *testing.T) {
 	// Test with larger values to verify scaling behavior
-	v := Load([]float32{100.0, 1000.0, 10000.0, 100000.0, 1e6, 1e7, 1e8, 1e9})
+	v := LoadSlice([]float32{100.0, 1000.0, 10000.0, 100000.0, 1e6, 1e7, 1e8, 1e9})
 	result := RSqrtPrecise(v)
 
 	tolerance := float64(1e-6)
@@ -810,7 +816,7 @@ func TestRSqrtLargeValues(t *testing.T) {
 
 func TestRSqrtSmallValues(t *testing.T) {
 	// Test with small values
-	v := Load([]float32{0.1, 0.01, 0.001, 0.0001, 1e-5, 1e-6, 1e-7, 1e-8})
+	v := LoadSlice([]float32{0.1, 0.01, 0.001, 0.0001, 1e-5, 1e-6, 1e-7, 1e-8})
 	result := RSqrtPrecise(v)
 
 	tolerance := float64(1e-5) // slightly looser for very small values
@@ -843,7 +849,7 @@ func TestNumLanes(t *testing.T) {
 	}
 }
 
-func TestLoadFull(t *testing.T) {
+func TestLoadSlice(t *testing.T) {
 	// Create data with enough elements for a full vector
 	lanes := NumLanes[float32]()
 	data := make([]float32, lanes*2) // twice as many elements as needed
@@ -851,36 +857,36 @@ func TestLoadFull(t *testing.T) {
 		data[i] = float32(i + 1)
 	}
 
-	v := LoadFull(data)
+	v := LoadSlice(data)
 
 	if v.NumLanes() != lanes {
-		t.Errorf("LoadFull: got %d lanes, want %d", v.NumLanes(), lanes)
+		t.Errorf("LoadSlice: got %d lanes, want %d", v.NumLanes(), lanes)
 	}
 
 	for i := 0; i < v.NumLanes(); i++ {
 		if v.data[i] != data[i] {
-			t.Errorf("LoadFull: lane %d: got %v, want %v", i, v.data[i], data[i])
+			t.Errorf("LoadSlice: lane %d: got %v, want %v", i, v.data[i], data[i])
 		}
 	}
 }
 
-func TestStoreFull(t *testing.T) {
+func TestStoreSlice(t *testing.T) {
 	// Create a vector
 	lanes := NumLanes[float32]()
 	srcData := make([]float32, lanes)
 	for i := range srcData {
 		srcData[i] = float32(i + 1)
 	}
-	v := LoadFull(srcData)
+	v := LoadSlice(srcData)
 
 	// Create destination with enough space
 	dst := make([]float32, lanes*2)
 
-	StoreFull(v, dst)
+	StoreSlice(v, dst)
 
 	for i := 0; i < v.NumLanes(); i++ {
 		if dst[i] != srcData[i] {
-			t.Errorf("StoreFull: lane %d: got %v, want %v", i, dst[i], srcData[i])
+			t.Errorf("StoreSlice: lane %d: got %v, want %v", i, dst[i], srcData[i])
 		}
 	}
 }

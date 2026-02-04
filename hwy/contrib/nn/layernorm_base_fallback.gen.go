@@ -21,7 +21,7 @@ func BaseLayerNorm_fallback_Float16(input []hwy.Float16, output []hwy.Float16, n
 		sumAcc := hwy.Zero[hwy.Float16]()
 		ii := 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := hwy.LoadFull(input[off+ii:])
+			x := hwy.Load(input[off+ii:])
 			sumAcc = hwy.Add(sumAcc, x)
 		}
 		mean := hwy.ReduceSum(sumAcc).Float32()
@@ -33,7 +33,7 @@ func BaseLayerNorm_fallback_Float16(input []hwy.Float16, output []hwy.Float16, n
 		varAcc := hwy.Zero[hwy.Float16]()
 		ii = 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := hwy.LoadFull(input[off+ii:])
+			x := hwy.Load(input[off+ii:])
 			diff := hwy.Sub(x, vMean)
 			varAcc = hwy.MulAdd(diff, diff, varAcc)
 		}
@@ -48,13 +48,13 @@ func BaseLayerNorm_fallback_Float16(input []hwy.Float16, output []hwy.Float16, n
 		if gamma != nil && beta != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				normed := hwy.Mul(diff, vInvStd)
-				g := hwy.LoadFull(gamma[ii:])
-				b := hwy.LoadFull(beta[ii:])
+				g := hwy.Load(gamma[ii:])
+				b := hwy.Load(beta[ii:])
 				result := hwy.MulAdd(normed, g, b)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				normed := (input[off+i].Float32() - mean) * invStd
@@ -63,12 +63,12 @@ func BaseLayerNorm_fallback_Float16(input []hwy.Float16, output []hwy.Float16, n
 		} else if gamma != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				normed := hwy.Mul(diff, vInvStd)
-				g := hwy.LoadFull(gamma[ii:])
+				g := hwy.Load(gamma[ii:])
 				result := hwy.Mul(normed, g)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				normed := (input[off+i].Float32() - mean) * invStd
@@ -77,10 +77,10 @@ func BaseLayerNorm_fallback_Float16(input []hwy.Float16, output []hwy.Float16, n
 		} else {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				result := hwy.Mul(diff, vInvStd)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				output[off+i] = hwy.Float32ToFloat16((input[off+i].Float32() - mean) * invStd)
@@ -102,7 +102,7 @@ func BaseLayerNorm_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16
 		sumAcc := hwy.Zero[hwy.BFloat16]()
 		ii := 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := hwy.LoadFull(input[off+ii:])
+			x := hwy.Load(input[off+ii:])
 			sumAcc = hwy.Add(sumAcc, x)
 		}
 		mean := hwy.ReduceSum(sumAcc).Float32()
@@ -114,7 +114,7 @@ func BaseLayerNorm_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16
 		varAcc := hwy.Zero[hwy.BFloat16]()
 		ii = 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := hwy.LoadFull(input[off+ii:])
+			x := hwy.Load(input[off+ii:])
 			diff := hwy.Sub(x, vMean)
 			varAcc = hwy.MulAdd(diff, diff, varAcc)
 		}
@@ -129,13 +129,13 @@ func BaseLayerNorm_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16
 		if gamma != nil && beta != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				normed := hwy.Mul(diff, vInvStd)
-				g := hwy.LoadFull(gamma[ii:])
-				b := hwy.LoadFull(beta[ii:])
+				g := hwy.Load(gamma[ii:])
+				b := hwy.Load(beta[ii:])
 				result := hwy.MulAdd(normed, g, b)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				normed := (input[off+i].Float32() - mean) * invStd
@@ -144,12 +144,12 @@ func BaseLayerNorm_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16
 		} else if gamma != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				normed := hwy.Mul(diff, vInvStd)
-				g := hwy.LoadFull(gamma[ii:])
+				g := hwy.Load(gamma[ii:])
 				result := hwy.Mul(normed, g)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				normed := (input[off+i].Float32() - mean) * invStd
@@ -158,10 +158,10 @@ func BaseLayerNorm_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16
 		} else {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				result := hwy.Mul(diff, vInvStd)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				output[off+i] = hwy.Float32ToBFloat16((input[off+i].Float32() - mean) * invStd)

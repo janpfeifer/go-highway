@@ -27,8 +27,8 @@ func BaseMatVec_neon_Float16(m []hwy.Float16, rows int, cols int, v []hwy.Float1
 		lanes := 8
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := asm.LoadFloat16x8Ptr(unsafe.Pointer(&row[j:][0]))
-			vb := asm.LoadFloat16x8Ptr(unsafe.Pointer(&v[j:][0]))
+			va := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(row[j:]))), len(row[j:])))
+			vb := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[j:]))), len(v[j:])))
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}
@@ -56,8 +56,8 @@ func BaseMatVec_neon_BFloat16(m []hwy.BFloat16, rows int, cols int, v []hwy.BFlo
 		lanes := 8
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&row[j:][0]))
-			vb := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&v[j:][0]))
+			va := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(row[j:]))), len(row[j:])))
+			vb := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[j:]))), len(v[j:])))
 			prod := va.Mul(vb)
 			sum = sum.Add(prod)
 		}

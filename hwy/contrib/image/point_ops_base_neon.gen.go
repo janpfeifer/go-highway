@@ -80,16 +80,16 @@ func BaseBrightnessContrast_neon(img *Image[float32], out *Image[float32], scale
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := v.MulAdd(scaleVec, offsetVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := v.MulAdd(scaleVec, offsetVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -108,16 +108,16 @@ func BaseBrightnessContrast_neon_Float64(img *Image[float64], out *Image[float64
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := v.MulAdd(scaleVec, offsetVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := v.MulAdd(scaleVec, offsetVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -192,16 +192,16 @@ func BaseClampImage_neon(img *Image[float32], out *Image[float32], minVal float3
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := v.Min(maxVec).Max(minVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := v.Min(maxVec).Max(minVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -220,16 +220,16 @@ func BaseClampImage_neon_Float64(img *Image[float64], out *Image[float64], minVa
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := v.Min(maxVec).Max(minVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := v.Min(maxVec).Max(minVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -311,18 +311,18 @@ func BaseThreshold_neon(img *Image[float32], out *Image[float32], threshold floa
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			mask := v.GreaterEqual(threshVec)
 			result := asm.IfThenElse(mask, aboveVec, belowVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			mask := v.GreaterEqual(threshVec)
 			result := asm.IfThenElse(mask, aboveVec, belowVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -342,18 +342,18 @@ func BaseThreshold_neon_Float64(img *Image[float64], out *Image[float64], thresh
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			mask := v.GreaterEqual(threshVec)
 			result := asm.IfThenElseFloat64(mask, aboveVec, belowVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			mask := v.GreaterEqual(threshVec)
 			result := asm.IfThenElseFloat64(mask, aboveVec, belowVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -425,16 +425,16 @@ func BaseInvert_neon(img *Image[float32], out *Image[float32], maxVal float32) {
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := maxVec.Sub(v)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := maxVec.Sub(v)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -452,16 +452,16 @@ func BaseInvert_neon_Float64(img *Image[float64], out *Image[float64], maxVal fl
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := maxVec.Sub(v)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := maxVec.Sub(v)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -530,16 +530,16 @@ func BaseAbs_neon(img *Image[float32], out *Image[float32]) {
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := v.Abs()
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := v.Abs()
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -556,16 +556,16 @@ func BaseAbs_neon_Float64(img *Image[float64], out *Image[float64]) {
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := v.Abs()
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := v.Abs()
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -637,16 +637,16 @@ func BaseScale_neon(img *Image[float32], out *Image[float32], scale float32) {
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := v.Mul(scaleVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := v.Mul(scaleVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -664,16 +664,16 @@ func BaseScale_neon_Float64(img *Image[float64], out *Image[float64], scale floa
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := v.Mul(scaleVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := v.Mul(scaleVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -745,16 +745,16 @@ func BaseOffset_neon(img *Image[float32], out *Image[float32], offset float32) {
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := v.Add(offsetVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := v.Add(offsetVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -772,16 +772,16 @@ func BaseOffset_neon_Float64(img *Image[float64], out *Image[float64], offset fl
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := v.Add(offsetVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := v.Add(offsetVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -853,16 +853,16 @@ func BaseGamma_neon(img *Image[float32], out *Image[float32], gamma float32) {
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat32x4Slice(inRow[i:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&inRow[i])))
 			result := v.Pow(gammaVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [4]float32{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat32x4Slice(buf[:])
+			v := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&buf[0])))
 			result := v.Pow(gammaVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -880,16 +880,16 @@ func BaseGamma_neon_Float64(img *Image[float64], out *Image[float64], gamma floa
 		width := img.width
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			v := asm.LoadFloat64x2Slice(inRow[i:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&inRow[i])))
 			result := v.Pow(gammaVec)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			buf := [2]float64{}
 			copy(buf[:], inRow[i:i+remaining])
-			v := asm.LoadFloat64x2Slice(buf[:])
+			v := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&buf[0])))
 			result := v.Pow(gammaVec)
-			result.StoreSlice(buf[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&buf[0])))
 			copy(outRow[i:i+remaining], buf[:remaining])
 		}
 	}
@@ -974,10 +974,10 @@ func BaseMinImage_neon(a *Image[float32], b *Image[float32], out *Image[float32]
 		width := min(a.width, b.width)
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			va := asm.LoadFloat32x4Slice(aRow[i:])
-			vb := asm.LoadFloat32x4Slice(bRow[i:])
+			va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&aRow[i])))
+			vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&bRow[i])))
 			result := va.Min(vb)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			bufA := [4]float32{}
@@ -985,10 +985,10 @@ func BaseMinImage_neon(a *Image[float32], b *Image[float32], out *Image[float32]
 			bufOut := [4]float32{}
 			copy(bufA[:], aRow[i:i+remaining])
 			copy(bufB[:], bRow[i:i+remaining])
-			va := asm.LoadFloat32x4Slice(bufA[:])
-			vb := asm.LoadFloat32x4Slice(bufB[:])
+			va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&bufA[0])))
+			vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&bufB[0])))
 			result := va.Min(vb)
-			result.StoreSlice(bufOut[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&bufOut[0])))
 			copy(outRow[i:i+remaining], bufOut[:remaining])
 		}
 	}
@@ -1007,10 +1007,10 @@ func BaseMinImage_neon_Float64(a *Image[float64], b *Image[float64], out *Image[
 		width := min(a.width, b.width)
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			va := asm.LoadFloat64x2Slice(aRow[i:])
-			vb := asm.LoadFloat64x2Slice(bRow[i:])
+			va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&aRow[i])))
+			vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&bRow[i])))
 			result := va.Min(vb)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			bufA := [2]float64{}
@@ -1018,10 +1018,10 @@ func BaseMinImage_neon_Float64(a *Image[float64], b *Image[float64], out *Image[
 			bufOut := [2]float64{}
 			copy(bufA[:], aRow[i:i+remaining])
 			copy(bufB[:], bRow[i:i+remaining])
-			va := asm.LoadFloat64x2Slice(bufA[:])
-			vb := asm.LoadFloat64x2Slice(bufB[:])
+			va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&bufA[0])))
+			vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&bufB[0])))
 			result := va.Min(vb)
-			result.StoreSlice(bufOut[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&bufOut[0])))
 			copy(outRow[i:i+remaining], bufOut[:remaining])
 		}
 	}
@@ -1106,10 +1106,10 @@ func BaseMaxImage_neon(a *Image[float32], b *Image[float32], out *Image[float32]
 		width := min(a.width, b.width)
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			va := asm.LoadFloat32x4Slice(aRow[i:])
-			vb := asm.LoadFloat32x4Slice(bRow[i:])
+			va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&aRow[i])))
+			vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&bRow[i])))
 			result := va.Max(vb)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[4]float32)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			bufA := [4]float32{}
@@ -1117,10 +1117,10 @@ func BaseMaxImage_neon(a *Image[float32], b *Image[float32], out *Image[float32]
 			bufOut := [4]float32{}
 			copy(bufA[:], aRow[i:i+remaining])
 			copy(bufB[:], bRow[i:i+remaining])
-			va := asm.LoadFloat32x4Slice(bufA[:])
-			vb := asm.LoadFloat32x4Slice(bufB[:])
+			va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&bufA[0])))
+			vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&bufB[0])))
 			result := va.Max(vb)
-			result.StoreSlice(bufOut[:])
+			result.Store((*[4]float32)(unsafe.Pointer(&bufOut[0])))
 			copy(outRow[i:i+remaining], bufOut[:remaining])
 		}
 	}
@@ -1139,10 +1139,10 @@ func BaseMaxImage_neon_Float64(a *Image[float64], b *Image[float64], out *Image[
 		width := min(a.width, b.width)
 		i := 0
 		for ; i+lanes <= width; i += lanes {
-			va := asm.LoadFloat64x2Slice(aRow[i:])
-			vb := asm.LoadFloat64x2Slice(bRow[i:])
+			va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&aRow[i])))
+			vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&bRow[i])))
 			result := va.Max(vb)
-			result.StoreSlice(outRow[i:])
+			result.Store((*[2]float64)(unsafe.Pointer(&outRow[i])))
 		}
 		if remaining := width - i; remaining > 0 {
 			bufA := [2]float64{}
@@ -1150,10 +1150,10 @@ func BaseMaxImage_neon_Float64(a *Image[float64], b *Image[float64], out *Image[
 			bufOut := [2]float64{}
 			copy(bufA[:], aRow[i:i+remaining])
 			copy(bufB[:], bRow[i:i+remaining])
-			va := asm.LoadFloat64x2Slice(bufA[:])
-			vb := asm.LoadFloat64x2Slice(bufB[:])
+			va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&bufA[0])))
+			vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&bufB[0])))
 			result := va.Max(vb)
-			result.StoreSlice(bufOut[:])
+			result.Store((*[2]float64)(unsafe.Pointer(&bufOut[0])))
 			copy(outRow[i:i+remaining], bufOut[:remaining])
 		}
 	}

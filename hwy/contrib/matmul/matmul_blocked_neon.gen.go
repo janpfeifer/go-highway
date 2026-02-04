@@ -25,13 +25,11 @@ func BaseBlockedMatMul_neon_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Fl
 	lanes := 8
 	total := m * n
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= total; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= total; idx += lanes {
 		vZero.StorePtr(unsafe.Pointer(&c[idx:][0]))
-		vZero.StorePtr(unsafe.Pointer(&c[idx+8:][0]))
 	}
-	if idx < total {
-		BaseBlockedMatMul_fallback_Float16(a[idx:total], b[idx:total], c[idx:total], m, n, k)
+	for ; idx < total; idx++ {
+		c[idx] = hwy.Float32ToFloat16(0)
 	}
 	mr := 4
 	nr := lanes * 2
@@ -85,7 +83,7 @@ func BaseBlockedMatMul_neon_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.Fl
 					acc30.StorePtr(unsafe.Pointer(&c[cRow3+j:][0]))
 					acc31.StorePtr(unsafe.Pointer(&c[cRow3+j+lanes:][0]))
 				}
-				for ; j+8 <= jEnd; j += lanes {
+				for ; j < jEnd; j += lanes {
 					remaining := jEnd - j
 					if remaining >= lanes {
 						acc0 := asm.ZeroFloat16x8()
@@ -193,13 +191,11 @@ func BaseBlockedMatMul_neon_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy
 	lanes := 8
 	total := m * n
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= total; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= total; idx += lanes {
 		vZero.StorePtr(unsafe.Pointer(&c[idx:][0]))
-		vZero.StorePtr(unsafe.Pointer(&c[idx+8:][0]))
 	}
-	if idx < total {
-		BaseBlockedMatMul_fallback_BFloat16(a[idx:total], b[idx:total], c[idx:total], m, n, k)
+	for ; idx < total; idx++ {
+		c[idx] = hwy.Float32ToBFloat16(0)
 	}
 	mr := 4
 	nr := lanes * 2
@@ -253,7 +249,7 @@ func BaseBlockedMatMul_neon_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []hwy
 					acc30.StorePtr(unsafe.Pointer(&c[cRow3+j:][0]))
 					acc31.StorePtr(unsafe.Pointer(&c[cRow3+j+lanes:][0]))
 				}
-				for ; j+8 <= jEnd; j += lanes {
+				for ; j < jEnd; j += lanes {
 					remaining := jEnd - j
 					if remaining >= lanes {
 						acc0 := asm.ZeroBFloat16x8()
@@ -361,13 +357,11 @@ func BaseBlockedMatMul_neon(a []float32, b []float32, c []float32, m int, n int,
 	lanes := 4
 	total := m * n
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= total; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= total; idx += lanes {
 		vZero.Store((*[4]float32)(unsafe.Pointer(&c[idx])))
-		vZero.Store((*[4]float32)(unsafe.Pointer(&c[idx+4])))
 	}
-	if idx < total {
-		BaseBlockedMatMul_fallback(a[idx:total], b[idx:total], c[idx:total], m, n, k)
+	for ; idx < total; idx++ {
+		c[idx] = 0
 	}
 	mr := 4
 	nr := lanes * 2
@@ -421,7 +415,7 @@ func BaseBlockedMatMul_neon(a []float32, b []float32, c []float32, m int, n int,
 					acc30.Store((*[4]float32)(unsafe.Pointer(&c[cRow3+j])))
 					acc31.Store((*[4]float32)(unsafe.Pointer(&c[cRow3+j+lanes])))
 				}
-				for ; j+4 <= jEnd; j += lanes {
+				for ; j < jEnd; j += lanes {
 					remaining := jEnd - j
 					if remaining >= lanes {
 						acc0 := asm.ZeroFloat32x4()
@@ -529,13 +523,11 @@ func BaseBlockedMatMul_neon_Float64(a []float64, b []float64, c []float64, m int
 	lanes := 2
 	total := m * n
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= total; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= total; idx += lanes {
 		vZero.Store((*[2]float64)(unsafe.Pointer(&c[idx])))
-		vZero.Store((*[2]float64)(unsafe.Pointer(&c[idx+2])))
 	}
-	if idx < total {
-		BaseBlockedMatMul_fallback_Float64(a[idx:total], b[idx:total], c[idx:total], m, n, k)
+	for ; idx < total; idx++ {
+		c[idx] = 0
 	}
 	mr := 4
 	nr := lanes * 2
@@ -589,7 +581,7 @@ func BaseBlockedMatMul_neon_Float64(a []float64, b []float64, c []float64, m int
 					acc30.Store((*[2]float64)(unsafe.Pointer(&c[cRow3+j])))
 					acc31.Store((*[2]float64)(unsafe.Pointer(&c[cRow3+j+lanes])))
 				}
-				for ; j+2 <= jEnd; j += lanes {
+				for ; j < jEnd; j += lanes {
 					remaining := jEnd - j
 					if remaining >= lanes {
 						acc0 := asm.ZeroFloat64x2()

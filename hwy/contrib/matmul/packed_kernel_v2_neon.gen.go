@@ -447,13 +447,11 @@ func BaseZeroSlice_neon_Float16(s []hwy.Float16, n int) {
 	vZero := asm.ZeroFloat16x8()
 	lanes := 8
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= n; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= n; idx += lanes {
 		vZero.StorePtr(unsafe.Pointer(&s[idx:][0]))
-		vZero.StorePtr(unsafe.Pointer(&s[idx+8:][0]))
 	}
-	if idx < n {
-		BaseZeroSlice_fallback_Float16(s[idx:n], n)
+	for ; idx < n; idx++ {
+		s[idx] = hwy.Float32ToFloat16(0)
 	}
 }
 
@@ -461,13 +459,11 @@ func BaseZeroSlice_neon_BFloat16(s []hwy.BFloat16, n int) {
 	vZero := asm.ZeroBFloat16x8()
 	lanes := 8
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= n; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= n; idx += lanes {
 		vZero.StorePtr(unsafe.Pointer(&s[idx:][0]))
-		vZero.StorePtr(unsafe.Pointer(&s[idx+8:][0]))
 	}
-	if idx < n {
-		BaseZeroSlice_fallback_BFloat16(s[idx:n], n)
+	for ; idx < n; idx++ {
+		s[idx] = hwy.Float32ToBFloat16(0)
 	}
 }
 
@@ -475,13 +471,11 @@ func BaseZeroSlice_neon(s []float32, n int) {
 	vZero := asm.ZeroFloat32x4()
 	lanes := 4
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= n; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= n; idx += lanes {
 		vZero.Store((*[4]float32)(unsafe.Pointer(&s[idx])))
-		vZero.Store((*[4]float32)(unsafe.Pointer(&s[idx+4])))
 	}
-	if idx < n {
-		BaseZeroSlice_fallback(s[idx:n], n)
+	for ; idx < n; idx++ {
+		s[idx] = 0
 	}
 }
 
@@ -489,12 +483,10 @@ func BaseZeroSlice_neon_Float64(s []float64, n int) {
 	vZero := asm.ZeroFloat64x2()
 	lanes := 2
 	var idx int
-	idx = 0
-	for ; idx+lanes*2 <= n; idx += lanes * 2 {
+	for idx = 0; idx+lanes <= n; idx += lanes {
 		vZero.Store((*[2]float64)(unsafe.Pointer(&s[idx])))
-		vZero.Store((*[2]float64)(unsafe.Pointer(&s[idx+2])))
 	}
-	if idx < n {
-		BaseZeroSlice_fallback_Float64(s[idx:n], n)
+	for ; idx < n; idx++ {
+		s[idx] = 0
 	}
 }

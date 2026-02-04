@@ -102,14 +102,14 @@ func BaseFusedNF4MatMul(input []float32, packed []uint8, scales []float32, outpu
 				}
 
 				// Load dequantized weights into vector
-				weights := hwy.LoadFull(dequantBuf)
+				weights := hwy.Load(dequantBuf)
 
 				// FMA: acc += input * weight
 				acc = hwy.MulAdd(inputVal, weights, acc)
 			}
 
 			// Store result
-			hwy.StoreFull(acc, outputRow[n:])
+			hwy.Store(acc, outputRow[n:])
 		}
 
 		// Handle remaining columns (scalar tail)
@@ -198,14 +198,14 @@ func BaseFusedInt4MatMul(input []float32, packed []uint8, scales []float32, outp
 				}
 
 				// Load dequantized weights into vector
-				weights := hwy.LoadFull(dequantBuf)
+				weights := hwy.Load(dequantBuf)
 
 				// FMA: acc += input * weight
 				acc = hwy.MulAdd(inputVal, weights, acc)
 			}
 
 			// Store result
-			hwy.StoreFull(acc, outputRow[n:])
+			hwy.Store(acc, outputRow[n:])
 		}
 
 		// Handle remaining columns (scalar tail)

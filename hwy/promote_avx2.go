@@ -36,7 +36,7 @@ import (
 // so we take lower 4 float32 and produce 4 float64.
 func PromoteF32ToF64_AVX2_Lower(v archsimd.Float32x8) archsimd.Float64x4 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [4]float64
 	for i := 0; i < 4; i++ {
@@ -48,7 +48,7 @@ func PromoteF32ToF64_AVX2_Lower(v archsimd.Float32x8) archsimd.Float64x4 {
 // PromoteF32ToF64_AVX2_Upper promotes upper 4 float32 lanes to 4 float64 lanes.
 func PromoteF32ToF64_AVX2_Upper(v archsimd.Float32x8) archsimd.Float64x4 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [4]float64
 	for i := 0; i < 4; i++ {
@@ -61,7 +61,7 @@ func PromoteF32ToF64_AVX2_Upper(v archsimd.Float32x8) archsimd.Float64x4 {
 // The result occupies the lower 4 lanes of a Float32x8.
 func DemoteF64ToF32_AVX2(v archsimd.Float64x4) archsimd.Float32x8 {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [8]float32
 	for i := 0; i < 4; i++ {
@@ -74,10 +74,10 @@ func DemoteF64ToF32_AVX2(v archsimd.Float64x4) archsimd.Float32x8 {
 // DemoteTwoF64ToF32_AVX2 demotes two Float64x4 vectors to one Float32x8.
 func DemoteTwoF64ToF32_AVX2(lo, hi archsimd.Float64x4) archsimd.Float32x8 {
 	var loData [4]float64
-	lo.StoreSlice(loData[:])
+	lo.Store(&loData)
 
 	var hiData [4]float64
-	hi.StoreSlice(hiData[:])
+	hi.Store(&hiData)
 
 	var result [8]float32
 	for i := 0; i < 4; i++ {
@@ -94,7 +94,7 @@ func DemoteTwoF64ToF32_AVX2(lo, hi archsimd.Float64x4) archsimd.Float32x8 {
 func PromoteI16ToI32_AVX2_Lower(v archsimd.Int32x8) archsimd.Int32x8 {
 	// Interpret as 16 int16 values, promote lower 8 to int32
 	var data [8]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	// Reinterpret the int32 array as int16 values
 	int16Data := (*[16]int16)(unsafe.Pointer(&data))
@@ -109,7 +109,7 @@ func PromoteI16ToI32_AVX2_Lower(v archsimd.Int32x8) archsimd.Int32x8 {
 // PromoteI32ToI64_AVX2_Lower promotes lower 4 int32 lanes to 4 int64 lanes.
 func PromoteI32ToI64_AVX2_Lower(v archsimd.Int32x8) archsimd.Int64x4 {
 	var data [8]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [4]int64
 	for i := 0; i < 4; i++ {
@@ -121,7 +121,7 @@ func PromoteI32ToI64_AVX2_Lower(v archsimd.Int32x8) archsimd.Int64x4 {
 // PromoteI32ToI64_AVX2_Upper promotes upper 4 int32 lanes to 4 int64 lanes.
 func PromoteI32ToI64_AVX2_Upper(v archsimd.Int32x8) archsimd.Int64x4 {
 	var data [8]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [4]int64
 	for i := 0; i < 4; i++ {
@@ -133,7 +133,7 @@ func PromoteI32ToI64_AVX2_Upper(v archsimd.Int32x8) archsimd.Int64x4 {
 // DemoteI64ToI32_AVX2 demotes 4 int64 lanes to 4 int32 lanes (saturating).
 func DemoteI64ToI32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 	var data [4]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [8]int32
 	for i := 0; i < 4; i++ {
@@ -153,10 +153,10 @@ func DemoteI64ToI32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 // DemoteTwoI64ToI32_AVX2 demotes two Int64x4 vectors to one Int32x8 (saturating).
 func DemoteTwoI64ToI32_AVX2(lo, hi archsimd.Int64x4) archsimd.Int32x8 {
 	var loData [4]int64
-	lo.StoreSlice(loData[:])
+	lo.Store(&loData)
 
 	var hiData [4]int64
-	hi.StoreSlice(hiData[:])
+	hi.Store(&hiData)
 
 	var result [8]int32
 	for i := 0; i < 4; i++ {
@@ -185,7 +185,7 @@ func DemoteTwoI64ToI32_AVX2(lo, hi archsimd.Int64x4) archsimd.Int32x8 {
 // TruncateI64ToI32_AVX2 demotes 4 int64 lanes to 4 int32 lanes (truncating).
 func TruncateI64ToI32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 	var data [4]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [8]int32
 	for i := 0; i < 4; i++ {
@@ -197,7 +197,7 @@ func TruncateI64ToI32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 // PromoteU32ToU64_AVX2_Lower promotes lower 4 uint32 lanes to 4 uint64 lanes.
 func PromoteU32ToU64_AVX2_Lower(v archsimd.Int32x8) archsimd.Int64x4 {
 	var data [8]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [4]int64
 	for i := 0; i < 4; i++ {
@@ -210,7 +210,7 @@ func PromoteU32ToU64_AVX2_Lower(v archsimd.Int32x8) archsimd.Int64x4 {
 // PromoteU32ToU64_AVX2_Upper promotes upper 4 uint32 lanes to 4 uint64 lanes.
 func PromoteU32ToU64_AVX2_Upper(v archsimd.Int32x8) archsimd.Int64x4 {
 	var data [8]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [4]int64
 	for i := 0; i < 4; i++ {
@@ -222,7 +222,7 @@ func PromoteU32ToU64_AVX2_Upper(v archsimd.Int32x8) archsimd.Int64x4 {
 // DemoteU64ToU32_AVX2 demotes 4 uint64 lanes to 4 uint32 lanes (saturating).
 func DemoteU64ToU32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 	var data [4]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [8]int32
 	for i := 0; i < 4; i++ {
@@ -239,10 +239,10 @@ func DemoteU64ToU32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 // DemoteTwoU64ToU32_AVX2 demotes two vectors to one (saturating).
 func DemoteTwoU64ToU32_AVX2(lo, hi archsimd.Int64x4) archsimd.Int32x8 {
 	var loData [4]int64
-	lo.StoreSlice(loData[:])
+	lo.Store(&loData)
 
 	var hiData [4]int64
-	hi.StoreSlice(hiData[:])
+	hi.Store(&hiData)
 
 	var result [8]int32
 	for i := 0; i < 4; i++ {
@@ -267,7 +267,7 @@ func DemoteTwoU64ToU32_AVX2(lo, hi archsimd.Int64x4) archsimd.Int32x8 {
 // TruncateU64ToU32_AVX2 demotes 4 uint64 lanes to 4 uint32 lanes (truncating).
 func TruncateU64ToU32_AVX2(v archsimd.Int64x4) archsimd.Int32x8 {
 	var data [4]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var result [8]int32
 	for i := 0; i < 4; i++ {
