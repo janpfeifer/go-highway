@@ -43,14 +43,14 @@ func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vInvSqrt2)
 		erfX := math.BaseErfVec_avx2_Float16(xScaled)
 		onePlusErf := vOne.Add(erfX)
 		halfOnePlusErf := vHalf.Mul(onePlusErf)
 		result := x.Mul(halfOnePlusErf)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		xScaled1 := x1.Mul(vInvSqrt2)
 		erfX1 := math.BaseErfVec_avx2_Float16(xScaled1)
 		onePlusErf1 := vOne.Add(erfX1)
@@ -59,7 +59,7 @@ func BaseGELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vInvSqrt2)
 		erfX := math.BaseErfVec_avx2_Float16(xScaled)
 		onePlusErf := vOne.Add(erfX)
@@ -84,14 +84,14 @@ func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vInvSqrt2)
 		erfX := math.BaseErfVec_avx2_BFloat16(xScaled)
 		onePlusErf := vOne.Add(erfX)
 		halfOnePlusErf := vHalf.Mul(onePlusErf)
 		result := x.Mul(halfOnePlusErf)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		xScaled1 := x1.Mul(vInvSqrt2)
 		erfX1 := math.BaseErfVec_avx2_BFloat16(xScaled1)
 		onePlusErf1 := vOne.Add(erfX1)
@@ -100,7 +100,7 @@ func BaseGELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vInvSqrt2)
 		erfX := math.BaseErfVec_avx2_BFloat16(xScaled)
 		onePlusErf := vOne.Add(erfX)
@@ -205,19 +205,19 @@ func BaseGELUApprox_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vCoeff)
 		sigmoidX := math.BaseSigmoidVec_avx2_Float16(xScaled)
 		result := x.Mul(sigmoidX)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		xScaled1 := x1.Mul(vCoeff)
 		sigmoidX1 := math.BaseSigmoidVec_avx2_Float16(xScaled1)
 		result1 := x1.Mul(sigmoidX1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vCoeff)
 		sigmoidX := math.BaseSigmoidVec_avx2_Float16(xScaled)
 		result := x.Mul(sigmoidX)
@@ -239,19 +239,19 @@ func BaseGELUApprox_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vCoeff)
 		sigmoidX := math.BaseSigmoidVec_avx2_BFloat16(xScaled)
 		result := x.Mul(sigmoidX)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		xScaled1 := x1.Mul(vCoeff)
 		sigmoidX1 := math.BaseSigmoidVec_avx2_BFloat16(xScaled1)
 		result1 := x1.Mul(sigmoidX1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		xScaled := x.Mul(vCoeff)
 		sigmoidX := math.BaseSigmoidVec_avx2_BFloat16(xScaled)
 		result := x.Mul(sigmoidX)
@@ -341,15 +341,15 @@ func BaseReLU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := x.Max(vZero)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		result1 := x1.Max(vZero)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := x.Max(vZero)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
 	}
@@ -371,15 +371,15 @@ func BaseReLU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := x.Max(vZero)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		result1 := x1.Max(vZero)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := x.Max(vZero)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
 	}
@@ -460,17 +460,17 @@ func BaseSiLU_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		sigmoidX := math.BaseSigmoidVec_avx2_Float16(x)
 		result := x.Mul(sigmoidX)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		sigmoidX1 := math.BaseSigmoidVec_avx2_Float16(x1)
 		result1 := x1.Mul(sigmoidX1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		sigmoidX := math.BaseSigmoidVec_avx2_Float16(x)
 		result := x.Mul(sigmoidX)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
@@ -490,17 +490,17 @@ func BaseSiLU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		sigmoidX := math.BaseSigmoidVec_avx2_BFloat16(x)
 		result := x.Mul(sigmoidX)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		sigmoidX1 := math.BaseSigmoidVec_avx2_BFloat16(x1)
 		result1 := x1.Mul(sigmoidX1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		sigmoidX := math.BaseSigmoidVec_avx2_BFloat16(x)
 		result := x.Mul(sigmoidX)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
@@ -580,18 +580,26 @@ func BaseLeakyReLU_avx2_Float16(input []hwy.Float16, output []hwy.Float16, alpha
 	vAlpha := asm.BroadcastFloat16x8AVX2(uint16(alpha))
 	lanes := 8
 	ii := 0
-	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+	for ; ii+lanes*4 <= size; ii += lanes * 4 {
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		negPart := x.Mul(vAlpha)
 		result := x.Max(negPart)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		negPart1 := x1.Mul(vAlpha)
 		result1 := x1.Max(negPart1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
+		x2 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+16:][0]))
+		negPart2 := x2.Mul(vAlpha)
+		result2 := x2.Max(negPart2)
+		result2.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+16:]))), len(output[ii+16:])))
+		x3 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+24:][0]))
+		negPart3 := x3.Mul(vAlpha)
+		result3 := x3.Max(negPart3)
+		result3.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+24:]))), len(output[ii+24:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		negPart := x.Mul(vAlpha)
 		result := x.Max(negPart)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
@@ -613,18 +621,26 @@ func BaseLeakyReLU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, al
 	vAlpha := asm.BroadcastBFloat16x8AVX2(uint16(alpha))
 	lanes := 8
 	ii := 0
-	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+	for ; ii+lanes*4 <= size; ii += lanes * 4 {
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		negPart := x.Mul(vAlpha)
 		result := x.Max(negPart)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		negPart1 := x1.Mul(vAlpha)
 		result1 := x1.Max(negPart1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
+		x2 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+16:][0]))
+		negPart2 := x2.Mul(vAlpha)
+		result2 := x2.Max(negPart2)
+		result2.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+16:]))), len(output[ii+16:])))
+		x3 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+24:][0]))
+		negPart3 := x3.Mul(vAlpha)
+		result3 := x3.Max(negPart3)
+		result3.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+24:]))), len(output[ii+24:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		negPart := x.Mul(vAlpha)
 		result := x.Max(negPart)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
@@ -646,7 +662,7 @@ func BaseLeakyReLU_avx2(input []float32, output []float32, alpha float32) {
 	vAlpha := archsimd.BroadcastFloat32x8(alpha)
 	lanes := 8
 	ii := 0
-	for ; ii+lanes*2 <= size; ii += lanes * 2 {
+	for ; ii+lanes*4 <= size; ii += lanes * 4 {
 		x := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&input[ii])))
 		negPart := x.Mul(vAlpha)
 		result := x.Max(negPart)
@@ -655,6 +671,14 @@ func BaseLeakyReLU_avx2(input []float32, output []float32, alpha float32) {
 		negPart1 := x1.Mul(vAlpha)
 		result1 := x1.Max(negPart1)
 		result1.Store((*[8]float32)(unsafe.Pointer(&output[ii+8])))
+		x2 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&input[ii+16])))
+		negPart2 := x2.Mul(vAlpha)
+		result2 := x2.Max(negPart2)
+		result2.Store((*[8]float32)(unsafe.Pointer(&output[ii+16])))
+		x3 := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&input[ii+24])))
+		negPart3 := x3.Mul(vAlpha)
+		result3 := x3.Max(negPart3)
+		result3.Store((*[8]float32)(unsafe.Pointer(&output[ii+24])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
 		x := archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&input[ii])))
@@ -679,7 +703,7 @@ func BaseLeakyReLU_avx2_Float64(input []float64, output []float64, alpha float64
 	vAlpha := archsimd.BroadcastFloat64x4(alpha)
 	lanes := 4
 	ii := 0
-	for ; ii+lanes*2 <= size; ii += lanes * 2 {
+	for ; ii+lanes*4 <= size; ii += lanes * 4 {
 		x := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&input[ii])))
 		negPart := x.Mul(vAlpha)
 		result := x.Max(negPart)
@@ -688,6 +712,14 @@ func BaseLeakyReLU_avx2_Float64(input []float64, output []float64, alpha float64
 		negPart1 := x1.Mul(vAlpha)
 		result1 := x1.Max(negPart1)
 		result1.Store((*[4]float64)(unsafe.Pointer(&output[ii+4])))
+		x2 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&input[ii+8])))
+		negPart2 := x2.Mul(vAlpha)
+		result2 := x2.Max(negPart2)
+		result2.Store((*[4]float64)(unsafe.Pointer(&output[ii+8])))
+		x3 := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&input[ii+12])))
+		negPart3 := x3.Mul(vAlpha)
+		result3 := x3.Max(negPart3)
+		result3.Store((*[4]float64)(unsafe.Pointer(&output[ii+12])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
 		x := archsimd.LoadFloat64x4((*[4]float64)(unsafe.Pointer(&input[ii])))
@@ -712,15 +744,15 @@ func BaseTanh_avx2_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := math.BaseTanhVec_avx2_Float16(x)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		result1 := math.BaseTanhVec_avx2_Float16(x1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := math.BaseTanhVec_avx2_Float16(x)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
 	}
@@ -738,15 +770,15 @@ func BaseTanh_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := math.BaseTanhVec_avx2_BFloat16(x)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		result1 := math.BaseTanhVec_avx2_BFloat16(x1)
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		result := math.BaseTanhVec_avx2_BFloat16(x)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
 	}
@@ -819,14 +851,14 @@ func BaseELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16, alpha hwy.F
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		expX := math.BaseExpVec_avx2_Float16(x)
 		expM1 := expX.Sub(vOne)
 		negPart := vAlpha.Mul(expM1)
 		isPositive := x.Greater(vZero)
 		result := x.Merge(negPart, isPositive)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		expX1 := math.BaseExpVec_avx2_Float16(x1)
 		expM11 := expX1.Sub(vOne)
 		negPart1 := vAlpha.Mul(expM11)
@@ -835,7 +867,7 @@ func BaseELU_avx2_Float16(input []hwy.Float16, output []hwy.Float16, alpha hwy.F
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		expX := math.BaseExpVec_avx2_Float16(x)
 		expM1 := expX.Sub(vOne)
 		negPart := vAlpha.Mul(expM1)
@@ -864,14 +896,14 @@ func BaseELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, alpha hw
 	lanes := 8
 	ii := 0
 	for ; ii+lanes*2 <= size; ii += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		expX := math.BaseExpVec_avx2_BFloat16(x)
 		expM1 := expX.Sub(vOne)
 		negPart := vAlpha.Mul(expM1)
 		isPositive := x.Greater(vZero)
 		result := x.Merge(negPart, isPositive)
 		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii:]))), len(output[ii:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii+8:]))), len(input[ii+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii+8:][0]))
 		expX1 := math.BaseExpVec_avx2_BFloat16(x1)
 		expM11 := expX1.Sub(vOne)
 		negPart1 := vAlpha.Mul(expM11)
@@ -880,7 +912,7 @@ func BaseELU_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, alpha hw
 		result1.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[ii+8:]))), len(output[ii+8:])))
 	}
 	for ; ii+lanes <= size; ii += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[ii:]))), len(input[ii:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[ii:][0]))
 		expX := math.BaseExpVec_avx2_BFloat16(x)
 		expM1 := expX.Sub(vOne)
 		negPart := vAlpha.Mul(expM1)

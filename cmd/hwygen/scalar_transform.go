@@ -25,9 +25,9 @@ import (
 var scalarizableHwyOps = map[string]bool{
 	// Memory operations
 	"Load":      true,
-	"LoadFull":  true,
+	"LoadSlice": true,
 	"Store":     true,
-	"StoreFull": true,
+	"StoreSlice": true,
 
 	// Initialization
 	"Zero":  true,
@@ -533,8 +533,8 @@ func scalarizeStmt(stmt ast.Stmt, elemType string) []ast.Stmt {
 
 // scalarizeAssign transforms an assignment statement.
 func scalarizeAssign(s *ast.AssignStmt, elemType string) []ast.Stmt {
-	// Check if this is a Store/StoreFull call on the RHS
-	// Pattern: hwy.StoreFull(val, dst[i:]) should become dst[i] = val
+	// Check if this is a Store/StoreSlice call on the RHS
+	// Pattern: hwy.Store(val, dst[i:]) should become dst[i] = val
 	if len(s.Rhs) == 1 {
 		if call, ok := s.Rhs[0].(*ast.CallExpr); ok {
 			if isHwyStoreCall(call) {
@@ -589,7 +589,7 @@ func scalarizeDecl(s *ast.DeclStmt, elemType string) []ast.Stmt {
 
 // scalarizeExprStmt transforms an expression statement.
 func scalarizeExprStmt(s *ast.ExprStmt, elemType string) []ast.Stmt {
-	// Check if this is a Store/StoreFull call
+	// Check if this is a Store/StoreSlice call
 	if call, ok := s.X.(*ast.CallExpr); ok {
 		if isHwyStoreCall(call) {
 			return scalarizeStoreCall(call, elemType)
@@ -879,9 +879,9 @@ func scalarizeHwyCall(opName string, args []ast.Expr, elemType string) ast.Expr 
 				Args: []ast.Expr{args[0], args[1]},
 			}
 		}
-	case "LoadFull", "Load":
-		// LoadFull(src[i:]) -> src[i]
-		// Load(src) -> src[0]
+	case "Load", "LoadSlice":
+		// Load(src[i:]) -> src[i]
+		// LoadSlice(src) -> src[0]
 		if len(args) >= 1 {
 			return extractIndexFromSlice(args[0])
 		}
@@ -986,8 +986,8 @@ func scalarizeContribMathCall(stdlibFunc string, args []ast.Expr, elemType strin
 	}
 }
 
-// scalarizeStoreCall transforms a Store/StoreFull call to an assignment.
-// hwy.StoreFull(val, dst[i:]) -> dst[i] = val
+// scalarizeStoreCall transforms a Store/StoreSlice call to an assignment.
+// hwy.Store(val, dst[i:]) -> dst[i] = val
 func scalarizeStoreCall(call *ast.CallExpr, elemType string) []ast.Stmt {
 	if len(call.Args) < 2 {
 		return nil
@@ -1008,11 +1008,11 @@ func scalarizeStoreCall(call *ast.CallExpr, elemType string) []ast.Stmt {
 	}
 }
 
-// isHwyStoreCall checks if a call is hwy.Store or hwy.StoreFull.
+// isHwyStoreCall checks if a call is hwy.Store or hwy.StoreSlice.
 func isHwyStoreCall(call *ast.CallExpr) bool {
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "hwy" {
-			return sel.Sel.Name == "Store" || sel.Sel.Name == "StoreFull"
+			return sel.Sel.Name == "Store" || sel.Sel.Name == "StoreSlice"
 		}
 	}
 	return false

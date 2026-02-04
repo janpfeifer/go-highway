@@ -362,9 +362,11 @@ func TransformWithOptions(pf *ParsedFunc, target Target, elemType string, opts *
 	}
 
 	// Add function parameters to localVars to prevent them from being hoisted
-	// Also track half-precision slice and scalar parameters
+	// Also track half-precision slice and scalar parameters, and parameter types
 	for _, param := range pf.Params {
 		ctx.localVars[param.Name] = true
+		// Track parameter types for type inference (needed for inferring slice element types)
+		ctx.varTypes[param.Name] = param.Type
 		// Check if parameter is a slice of half-precision type
 		if isHalfPrecisionSliceType(param.Type, elemType) {
 			ctx.halfPrecisionSlices[param.Name] = true
@@ -501,7 +503,7 @@ var simpleOps = map[string]bool{
 	"FMA": true, "MulAdd": true, "MulSub": true,
 	"Neg": true, "Abs": true, "Min": true, "Max": true,
 	"And": true, "Or": true, "Xor": true, "AndNot": true, "Not": true,
-	"Load": true, "Store": true, "Set": true, "Zero": true,
+	"Load": true, "LoadSlice": true, "Store": true, "StoreSlice": true, "Set": true, "Zero": true,
 	// Meta-operations that don't affect complexity
 	"MaxLanes": true, "NumLanes": true, "Lanes": true,
 	"Vec": true, "Mask": true, // Type references
@@ -945,12 +947,12 @@ func inferVecLanesFromLoad(expr ast.Expr, ctx *transformContext) vecLoadInfo {
 		return vecLoadInfo{}
 	}
 
-	// Check for hwy.Load(...) or hwy.Load[T](...) call
+	// Check for hwy.LoadSlice(...) or hwy.Load[T](...) call
 	var funcName string
 	var explicitElemType string // Explicit type param from hwy.Load[uint8] style calls
 	switch fun := call.Fun.(type) {
 	case *ast.SelectorExpr:
-		// hwy.Load(...)
+		// hwy.LoadSlice(...)
 		pkgIdent, ok := fun.X.(*ast.Ident)
 		if !ok || pkgIdent.Name != "hwy" {
 			return vecLoadInfo{}
@@ -975,7 +977,7 @@ func inferVecLanesFromLoad(expr ast.Expr, ctx *transformContext) vecLoadInfo {
 		return vecLoadInfo{}
 	}
 
-	if funcName != "Load" {
+	if funcName != "LoadSlice" {
 		return vecLoadInfo{}
 	}
 
@@ -989,7 +991,7 @@ func inferVecLanesFromLoad(expr ast.Expr, ctx *transformContext) vecLoadInfo {
 		return vecLoadInfo{}
 	}
 
-	// Use explicit type param if present, otherwise fall back to function's elemType
+	// Determine element type: explicit type param > function's default
 	effectiveElemType := ctx.elemType
 	if explicitElemType != "" {
 		effectiveElemType = explicitElemType
@@ -1000,9 +1002,15 @@ func inferVecLanesFromLoad(expr ast.Expr, ctx *transformContext) vecLoadInfo {
 		return vecLoadInfo{}
 	}
 
+	// Return explicit element type if provided
+	returnElemType := ""
+	if explicitElemType != "" {
+		returnElemType = explicitElemType
+	}
+
 	return vecLoadInfo{
 		lanes:    sliceBytes / elemSize,
-		elemType: explicitElemType, // Only set if different from function's elemType
+		elemType: returnElemType,
 	}
 }
 
@@ -1350,7 +1358,7 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 
 	// Transform Vec method calls like .Store() -> .StoreSlice() for SIMD targets
 	// This handles cases like fn(x).Store(dst) where fn returns a Vec
-	// Skip this for package-level function calls like hwy.Store() which are handled later
+	// Skip this for package-level function calls like hwy.StoreSlice() which are handled later
 	if ctx.target.Name != "Fallback" {
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 			// Don't transform package-level function calls
@@ -1360,12 +1368,12 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 				switch sel.Sel.Name {
 				case "Store":
 					// Transform .Store(dst) -> .StoreSlice(dst)
-					// But skip if the argument is a pointer type (from StoreFull transformation)
-					// StoreFull produces v.Store((*[N]T)(unsafe.Pointer(...))) which should stay as Store
+					// But skip if the argument is a pointer type (from Store transformation)
+					// Store produces v.Store((*[N]T)(unsafe.Pointer(...))) which should stay as Store
 					isPointerArg := false
 					if len(call.Args) == 1 {
 						if _, isCall := call.Args[0].(*ast.CallExpr); isCall {
-							// Argument is a call expression like (*[N]T)(ptr) - likely from StoreFull
+							// Argument is a call expression like (*[N]T)(ptr) - likely from Store
 							isPointerArg = true
 						}
 					}
@@ -1731,10 +1739,10 @@ func transformDataMethod(call *ast.CallExpr, ctx *transformContext) {
 		},
 	}
 
-	// v.StoreSlice(tmp[:]) or hwy.Store(v, tmp[:]) for half-precision
+	// v.StoreSlice(tmp[:]) or hwy.StoreSlice(v, tmp[:]) for half-precision
 	var storeCall *ast.CallExpr
 	if isHalfPrecisionType(ctx.elemType) && !isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
-		// hwy.Store(v, tmp[:]) for half-precision types on Fallback
+		// hwy.StoreSlice(v, tmp[:]) for half-precision types on Fallback
 		storeFun := &ast.SelectorExpr{
 			X:   ast.NewIdent("hwy"),
 			Sel: ast.NewIdent("Store"),
@@ -2222,8 +2230,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "Not":
-			// For NEON/AVX promoted targets, convert to method call: hwy.Not(v) -> v.Not()
-			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			// For NEON/AVX promoted targets with half-precision types, convert to method call: hwy.Not(v) -> v.Not()
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 1 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -2239,8 +2247,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "Xor":
-			// For NEON/AVX promoted targets, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
-			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			// For NEON/AVX promoted targets with half-precision types, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -2256,8 +2264,8 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		case "And":
-			// For NEON/AVX promoted targets, convert to method call: hwy.And(a, b) -> a.And(b)
-			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			// For NEON/AVX promoted targets with half-precision types, convert to method call: hwy.And(a, b) -> a.And(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -2354,7 +2362,7 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 		case "Store":
 			// For NEON target, convert to method call with unsafe.Pointer
 			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
-				// hwy.Store(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
+				// hwy.StoreSlice(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
 				vecArg := call.Args[0]
 				sliceArg := call.Args[1]
 				call.Fun = &ast.SelectorExpr{
@@ -2380,17 +2388,35 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 				}
 				return
 			}
-			// For AVX promoted types, convert to method call: v.StoreSlice(dst)
+			// For AVX promoted types, convert to pointer-based method call: v.StorePtr(ptr)
 			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
 				call.Fun = &ast.SelectorExpr{
-					X:   call.Args[0],
-					Sel: ast.NewIdent("StoreSlice"),
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
 				}
-				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
-				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+				// unsafe.Pointer(&dst[0])
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
 				return
 			}
-			// For Fallback, keep hwy.Store(v, dst) as-is
+			// For Fallback, keep hwy.StoreSlice(v, dst) as-is
 			return
 		case "Pow2":
 			// For AVX promoted types: Pow2 operates on float32 internally
@@ -2615,18 +2641,28 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 
 	// For SIMD targets, convert to method calls on archsimd types
 	switch funcName {
-	case "Store":
-		// hwy.Store(v, dst) -> v.StoreSlice(dst)
+	case "StoreSlice":
+		// For half-precision types with skipHalfPrecNEON (generic hwy.Vec path),
+		// keep as hwy.StoreSlice(v, dst) - don't convert to method call
+		if isHalfPrecisionType(ctx.elemType) && ctx.skipHalfPrecNEON {
+			return
+		}
+		// hwy.StoreSlice(v, dst) -> v.StoreSlice(dst)
 		if len(call.Args) >= 2 {
 			call.Fun = &ast.SelectorExpr{
 				X:   call.Args[0],
 				Sel: ast.NewIdent("StoreSlice"),
 			}
-			call.Args = call.Args[1:]
+			sliceArg := call.Args[1]
+			// For NEON and AVX promoted half-precision: cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+			if (isHalfPrecisionType(ctx.elemType) && ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				sliceArg = halfPrecSliceToUint16(sliceArg)
+			}
+			call.Args = []ast.Expr{sliceArg}
 		}
 
-	case "StoreFull":
-		// For NEON half-precision: hwy.StoreFull(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
+	case "Store":
+		// For NEON half-precision: hwy.StoreSlice(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
 		if isHalfPrecisionType(ctx.elemType) && ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON {
 			if len(call.Args) >= 2 {
 				vecArg := call.Args[0]
@@ -2655,24 +2691,35 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 			}
 			return
 		}
-		// For AVX promoted half-precision: hwy.StoreFull(v, dst) -> v.StoreSlice(cast(dst))
+		// For AVX promoted half-precision: hwy.StoreSlice(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
 		if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 			if len(call.Args) >= 2 {
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
 				call.Fun = &ast.SelectorExpr{
-					X:   call.Args[0],
-					Sel: ast.NewIdent("StoreSlice"),
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
 				}
-				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
-				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+				// unsafe.Pointer(&dst[0])
+				addrExpr := optimizeSliceToPointer(sliceArg)
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{addrExpr},
+					},
+				}
 			}
 			return
 		}
-		// Keep hwy.StoreFull(v, dst) as-is for Fallback half-precision types
+		// Keep hwy.StoreSlice(v, dst) as-is for Fallback half-precision types
 		if isHalfPrecisionType(ctx.elemType) {
 			return
 		}
 
-		// hwy.StoreFull(v, dst) -> v.Store((*[8]float32)(unsafe.Pointer(&dst[0])))
+		// hwy.StoreSlice(v, dst) -> v.Store((*[8]float32)(unsafe.Pointer(&dst[0])))
 		if len(call.Args) >= 2 {
 			methodName := "Store"
 			lanes := ctx.target.LanesFor(ctx.elemType)
@@ -3327,7 +3374,7 @@ func transformToMethod(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *
 	}
 }
 
-// transformToFunction converts hwy.Load(src) to archsimd.LoadFloat32x8Slice(src).
+// transformToFunction converts hwy.LoadSlice(src) to archsimd.LoadFloat32x8Slice(src).
 func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx *transformContext) {
 	// Handle both SelectorExpr (hwy.Load) and IndexExpr (hwy.Zero[float32])
 	var selExpr *ast.SelectorExpr
@@ -3574,7 +3621,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		// For Load/Store/Set/Zero on F16/BF16, use asm types for NEON or generic hwy functions
 		switch funcName {
 		case "Load":
-			// For NEON target, use concrete asm load functions for better performance
+			// hwy.Load = fast pointer-based load
+			// For NEON target, use concrete asm load functions with pointer access
 			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
 				loadFuncName := "LoadFloat16x8Ptr"
 				if isBFloat16Type(ctx.elemType) {
@@ -3606,7 +3654,55 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
-			// For AVX promoted types, use concrete asm load functions
+			// For AVX promoted types, use pointer-based asm load
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
+				loadFuncName := "Load" + ctx.target.TypeMap[ctx.elemType] + "Ptr"
+				sliceArg := call.Args[0]
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				// unsafe.Pointer(&slice[0])
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = "Load"
+			return
+		case "LoadSlice":
+			// hwy.LoadSlice = safe slice-based load
+			// For NEON target, use slice-based asm load functions
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
+				loadFuncName := "LoadFloat16x8Slice"
+				if isBFloat16Type(ctx.elemType) {
+					loadFuncName = "LoadBFloat16x8Slice"
+				}
+				// Transform: hwy.LoadSlice(slice) -> asm.LoadFloat16x8Slice(uint16Slice)
+				call.Fun = &ast.SelectorExpr{
+					X:   ast.NewIdent("asm"),
+					Sel: ast.NewIdent(loadFuncName),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args[0] = halfPrecSliceToUint16(call.Args[0])
+				return
+			}
+			// For AVX promoted types, use slice-based asm load
 			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 1 {
 				loadFuncName := "Load" + ctx.target.TypeMap[ctx.elemType] + "Slice"
 				call.Fun = &ast.SelectorExpr{
@@ -3618,10 +3714,11 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				return
 			}
 			selExpr.X = ast.NewIdent("hwy")
-			selExpr.Sel.Name = "Load"
+			selExpr.Sel.Name = "LoadSlice"
 			return
 		case "Store":
-			// For NEON target, convert to method call on asm type
+			// hwy.Store = fast pointer-based store
+			// For NEON target, convert to method call with pointer access
 			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
 				// hwy.Store(v, dst) -> v.StorePtr(unsafe.Pointer(&dst[0]))
 				vecArg := call.Args[0]
@@ -3650,7 +3747,51 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
-			// For AVX promoted types, convert to method call: v.StoreSlice(dst)
+			// For AVX promoted types, convert to pointer-based method call: v.StorePtr(ptr)
+			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
+				vecArg := call.Args[0]
+				sliceArg := call.Args[1]
+				call.Fun = &ast.SelectorExpr{
+					X:   vecArg,
+					Sel: ast.NewIdent("StorePtr"),
+				}
+				// unsafe.Pointer(&dst[0])
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{
+							&ast.UnaryExpr{
+								Op: token.AND,
+								X: &ast.IndexExpr{
+									X:     sliceArg,
+									Index: &ast.BasicLit{Kind: token.INT, Value: "0"},
+								},
+							},
+						},
+					},
+				}
+				return
+			}
+			selExpr.X = ast.NewIdent("hwy")
+			selExpr.Sel.Name = "Store"
+			return
+		case "StoreSlice":
+			// hwy.StoreSlice = safe slice-based store
+			// For NEON target, convert to slice-based method call
+			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 2 {
+				// hwy.StoreSlice(v, dst) -> v.StoreSlice(uint16Slice)
+				call.Fun = &ast.SelectorExpr{
+					X:   call.Args[0],
+					Sel: ast.NewIdent("StoreSlice"),
+				}
+				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
+				call.Args = []ast.Expr{halfPrecSliceToUint16(call.Args[1])}
+				return
+			}
+			// For AVX promoted types, convert to slice-based method call: v.StoreSlice(dst)
 			if isAVXPromotedHalfPrec(ctx.target, ctx.elemType) && len(call.Args) >= 2 {
 				call.Fun = &ast.SelectorExpr{
 					X:   call.Args[0],
@@ -3661,7 +3802,7 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				return
 			}
 			selExpr.X = ast.NewIdent("hwy")
-			selExpr.Sel.Name = "Store"
+			selExpr.Sel.Name = "StoreSlice"
 			return
 		case "Set":
 			// For NEON target, use concrete asm broadcast functions
@@ -3879,8 +4020,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			// Keep hwy.Const[T] with type parameter for Fallback / skip targets
 			return
 		case "Not":
-			// For NEON/AVX promoted targets, convert to method call: hwy.Not(v) -> v.Not()
-			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			// For NEON/AVX promoted targets with half-precision types, convert to method call: hwy.Not(v) -> v.Not()
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 1 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -3894,8 +4035,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.Sel.Name = funcName
 			return
 		case "Xor":
-			// For NEON/AVX promoted targets, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
-			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			// For NEON/AVX promoted targets with half-precision types, convert to method call: hwy.Xor(a, b) -> a.Xor(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -3909,8 +4050,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			selExpr.Sel.Name = funcName
 			return
 		case "And":
-			// For NEON/AVX promoted targets, convert to method call: hwy.And(a, b) -> a.And(b)
-			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+			// For NEON/AVX promoted targets with half-precision types, convert to method call: hwy.And(a, b) -> a.And(b)
+			if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 				if len(call.Args) >= 2 {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
@@ -4005,9 +4146,9 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 			}
 			return
 		case "InterleaveLower", "InterleaveUpper":
-			// For NEON or AVX promoted: hwy.InterleaveLower(a, b) -> a.InterleaveLower(b)
+			// For NEON or AVX promoted with half-precision types: hwy.InterleaveLower(a, b) -> a.InterleaveLower(b)
 			if len(call.Args) >= 2 {
-				if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
+				if (ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && isHalfPrecisionType(ctx.elemType)) || isAVXPromotedHalfPrec(ctx.target, ctx.elemType) {
 					call.Fun = &ast.SelectorExpr{
 						X:   call.Args[0],
 						Sel: ast.NewIdent(funcName),
@@ -4095,7 +4236,7 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 
 	// For SIMD targets, transform to package calls (archsimd for AVX, asm for NEON)
 	var fullName string
-	// Use explicit type parameter if present (e.g., hwy.Load[uint8]), otherwise use function's elemType
+	// Determine element type: explicit type param > function's default
 	effectiveElemType := ctx.elemType
 	if explicitTypeParam != "" {
 		effectiveElemType = explicitTypeParam
@@ -4143,9 +4284,9 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 	}
 
 	switch funcName {
-	case "Load":
+	case "LoadSlice":
 		// Check if we can determine the slice size from the argument
-		// For example, hwy.Load(data[:16]) with uint8 should use Uint8x16, not Uint8x32
+		// For example, hwy.LoadSlice(data[:16]) with uint8 should use Uint8x16, not Uint8x32
 		loadVecTypeName := vecTypeName
 		if len(call.Args) > 0 {
 			sliceBytes := getSliceSize(call.Args[0])
@@ -4165,7 +4306,8 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 		}
 		fullName = fmt.Sprintf("Load%sSlice", loadVecTypeName)
 		selExpr.X = ast.NewIdent(pkgName)
-	case "LoadFull":
+	case "Load":
+		// hwy.LoadSlice(src) -> pointer-based load for performance (no bounds check)
 		// For half-precision types on SIMD targets
 		if isHalfPrecisionType(effectiveElemType) {
 			if ctx.target.Name == "NEON" && !ctx.skipHalfPrecNEON && len(call.Args) >= 1 {
@@ -4198,18 +4340,28 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				}
 				return
 			}
-			// AVX2/AVX512: use asm load functions
+			// AVX2/AVX512: use asm load functions with pointer-based access (no bounds check)
 			if isAVXPromotedHalfPrec(ctx.target, effectiveElemType) && len(call.Args) >= 1 {
-				loadFuncName := "Load" + ctx.target.TypeMap[effectiveElemType] + "Slice"
+				loadFuncName := "Load" + ctx.target.TypeMap[effectiveElemType] + "Ptr"
+				sliceArg := call.Args[0]
 				call.Fun = &ast.SelectorExpr{
 					X:   ast.NewIdent("asm"),
 					Sel: ast.NewIdent(loadFuncName),
 				}
-				// Cast []hwy.Float16/[]hwy.BFloat16 -> []uint16
-				call.Args[0] = halfPrecSliceToUint16(call.Args[0])
+				// unsafe.Pointer(&slice[0])
+				addrExpr := optimizeSliceToPointer(sliceArg)
+				call.Args = []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("unsafe"),
+							Sel: ast.NewIdent("Pointer"),
+						},
+						Args: []ast.Expr{addrExpr},
+					},
+				}
 				return
 			}
-			// Fallback: use hwy.Load()
+			// Fallback: keep hwy.LoadSlice() for half-precision
 			selExpr.X = ast.NewIdent("hwy")
 			selExpr.Sel.Name = "Load"
 			return
@@ -4281,15 +4433,15 @@ func transformToFunction(call *ast.CallExpr, funcName string, opInfo OpInfo, ctx
 				call.Args[0] = cast
 			}
 		} else {
-			// Fallback: keep generic hwy.LoadFull
+			// Fallback: keep generic hwy.Load
 			selExpr.X = ast.NewIdent("hwy")
-			selExpr.Sel.Name = "LoadFull"
+			selExpr.Sel.Name = "Load"
 		}
-	case "StoreFull":
-		// For Fallback (IsMethod: false), use generic hwy.StoreFull
+	case "Store":
+		// For Fallback (IsMethod: false), use generic hwy.Store
 		// NEON/AVX use IsMethod: true, handled in transformToMethod
 		selExpr.X = ast.NewIdent("hwy")
-		selExpr.Sel.Name = "StoreFull"
+		selExpr.Sel.Name = "Store"
 	case "Load4":
 		// For Vec types (Float16/BFloat16), use hwy wrapper or asm function
 		if strings.HasPrefix(vecTypeName, "Vec") || strings.HasPrefix(vecTypeName, "hwy.Vec") {
@@ -4935,7 +5087,7 @@ func findMaxLoadSizeForElemType(body *ast.BlockStmt, elemType string) int {
 			return true
 		}
 		ident, ok := selExpr.X.(*ast.Ident)
-		if !ok || ident.Name != "hwy" || selExpr.Sel.Name != "Load" {
+		if !ok || ident.Name != "hwy" || selExpr.Sel.Name != "LoadSlice" {
 			return true
 		}
 		// Check type parameter matches
@@ -8088,12 +8240,12 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 // they need half-precision arguments to produce half-precision vectors.
 var vectorOperations = map[string]bool{
 	// Vector creation and manipulation
-	"Set": true, "Load": true, "Store": true, "Zero": true, "Broadcast": true,
+	"Set": true, "Load": true, "LoadSlice": true, "Store": true, "StoreSlice": true, "Zero": true, "Broadcast": true,
 	// NEON asm half-precision types (need uint16 args, not float32)
 	"BroadcastFloat16x8": true, "BroadcastBFloat16x8": true,
 	"LoadFloat16x8Ptr": true, "LoadBFloat16x8Ptr": true,
 	"ZeroFloat16x8": true, "ZeroBFloat16x8": true,
-	"StorePtr": true, "StoreSlice": true,
+	"StorePtr": true,
 	// In-place operations (NEON)
 	"MulAddAcc": true, "MulAddInto": true, "AddInto": true, "SubInto": true,
 	"MulInto": true, "DivInto": true, "MinInto": true, "MaxInto": true,

@@ -141,7 +141,7 @@ func BaseMaskedVByteDecodeGroup(src []byte, dst []uint32) (decoded int, consumed
 	}
 
 	// Load 16 bytes and find terminators using SIMD comparison
-	srcVec := hwy.Load[uint8](src[:16])
+	srcVec := hwy.LoadSlice[uint8](src[:16])
 	threshold := hwy.Set[uint8](0x80)
 	terminatorMask := hwy.LessThan(srcVec, threshold)
 
@@ -161,12 +161,12 @@ func BaseMaskedVByteDecodeGroup(src []byte, dst []uint32) (decoded int, consumed
 
 	// Load shuffle mask and rearrange bytes using SIMD (srcVec already loaded above)
 	shuffleMask := maskedVByte12ShuffleMasks[pattern][:]
-	maskVec := hwy.Load[uint8](shuffleMask)
+	maskVec := hwy.LoadSlice[uint8](shuffleMask)
 	shuffled := hwy.TableLookupBytes(srcVec, maskVec)
 
 	// Store shuffled bytes
 	var result [16]uint8
-	hwy.Store(shuffled, result[:])
+	hwy.StoreSlice(shuffled, result[:])
 
 	// Combine bytes into uint32 values - always decode all 4 slots
 	// The shuffle already arranged bytes with zeros for padding

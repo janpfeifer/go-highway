@@ -60,11 +60,11 @@ func AVX2Target() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x8Slice
-			"LoadFull":  {Name: "LoadFull", IsMethod: false},                  // archsimd.LoadFloat32x8 (pointer based)
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX2_Float32 - 4 separate loads
-			"Store":     {Name: "Store", IsMethod: true},                      // v.StoreSlice
-			"StoreFull": {Name: "StoreFull", IsMethod: true},                  // v.Store (pointer based)
+			"Load":       {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x8 (pointer based, fast)
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},                 // archsimd.LoadFloat32x8Slice (slice based, safe)
+			"Load4":      {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX2_Float32 - 4 separate loads
+			"Store":      {Name: "Store", IsMethod: true},                      // v.Store (pointer based, fast)
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},                 // v.StoreSlice (slice based, safe)
 			"Set":       {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8
 			"Const":     {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8 (same as Set)
 			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
@@ -270,12 +270,12 @@ func AVX512Target() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},
-			"LoadFull":  {Name: "LoadFull", IsMethod: false},                  // archsimd.LoadFloat32x16 (pointer based)
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX512_Float32 - 4 separate loads
-			"Store":     {Name: "Store", IsMethod: true},
-			"StoreFull": {Name: "StoreFull", IsMethod: true},                  // v.Store (pointer based)
-			"Set":       {Name: "Broadcast", IsMethod: false},
+			"Load":       {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x16 (pointer based, fast)
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},                 // archsimd.LoadFloat32x16Slice (slice based, safe)
+			"Load4":      {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX512_Float32 - 4 separate loads
+			"Store":      {Name: "Store", IsMethod: true},                      // v.Store (pointer based, fast)
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},                 // v.StoreSlice (slice based, safe)
+			"Set":        {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
 			"MaskLoad":  {Name: "MaskLoad", IsMethod: false},
@@ -482,11 +482,11 @@ func FallbackTarget() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations - use hwy package =====
-			"Load":      {Package: "hwy", Name: "Load", IsMethod: false},
-			"LoadFull":  {Package: "hwy", Name: "LoadFull", IsMethod: false}, // hwy.LoadFull (no bounds checking)
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4 fallback (4 separate loads)
-			"Store":     {Package: "hwy", Name: "Store", IsMethod: false},
-			"StoreFull": {Package: "hwy", Name: "StoreFull", IsMethod: false}, // hwy.StoreFull (no bounds checking)
+			"Load":       {Package: "hwy", Name: "Load", IsMethod: false},      // hwy.Load (pointer based, fast)
+			"LoadSlice":  {Package: "hwy", Name: "LoadSlice", IsMethod: false}, // hwy.LoadSlice (slice based, safe)
+			"Load4":      {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4 fallback (4 separate loads)
+			"Store":      {Package: "hwy", Name: "Store", IsMethod: false},     // hwy.Store (pointer based, fast)
+			"StoreSlice": {Package: "hwy", Name: "StoreSlice", IsMethod: false}, // hwy.StoreSlice (slice based, safe)
 			"Set":       {Package: "hwy", Name: "Set", IsMethod: false},
 			"Zero":      {Package: "hwy", Name: "Zero", IsMethod: false},
 			"MaskLoad":  {Package: "hwy", Name: "MaskLoad", IsMethod: false},
@@ -682,11 +682,11 @@ func NEONTarget() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},
-			"LoadFull":  {Name: "LoadFull", IsMethod: false},  // asm.LoadFloat32x4 (pointer based)
-			"Load4":     {Name: "Load4", IsMethod: false},    // asm.Load4Float32x4Slice - single ld1 instruction
-			"Store":     {Name: "Store", IsMethod: true},
-			"StoreFull": {Name: "StoreFull", IsMethod: true}, // v.Store (pointer based)
+			"Load":       {Name: "Load", IsMethod: false},       // asm.LoadFloat32x4 (pointer based, fast)
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},  // asm.LoadFloat32x4Slice (slice based, safe)
+			"Load4":      {Name: "Load4", IsMethod: false},      // asm.Load4Float32x4Slice - single ld1 instruction
+			"Store":      {Name: "Store", IsMethod: true},       // v.Store (pointer based, fast)
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},  // v.StoreSlice (slice based, safe)
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Name: "Zero", IsMethod: false},

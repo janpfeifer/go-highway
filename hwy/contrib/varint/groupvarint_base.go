@@ -181,11 +181,12 @@ func BaseDecodeGroupVarint32(src []byte) (values [4]uint32, consumed int) {
 	// Use SIMD path if we have enough data for vector load (1 control + 16 data bytes)
 	if len(src) >= 17 {
 		// Load data bytes (after control byte) into vector
-		dataVec := hwy.Load[uint8](src[1:17])
+		// Use LoadSlice since we're explicitly working with 16-byte chunks
+		dataVec := hwy.LoadSlice[uint8](src[1:17])
 
 		// Load shuffle mask for this control byte
 		maskSlice := groupVarint32ShuffleMasks[control][:]
-		maskVec := hwy.Load[uint8](maskSlice)
+		maskVec := hwy.LoadSlice[uint8](maskSlice)
 
 		// Shuffle: rearrange bytes according to mask
 		// Index 255 (>= 16) produces zero in TableLookupBytes
@@ -193,7 +194,7 @@ func BaseDecodeGroupVarint32(src []byte) (values [4]uint32, consumed int) {
 
 		// Store shuffled bytes
 		var result [16]uint8
-		hwy.Store(shuffled, result[:])
+		hwy.StoreSlice(shuffled, result[:])
 
 		// Convert 16 bytes to 4 uint32 (little-endian)
 		values[0] = uint32(result[0]) | uint32(result[1])<<8 | uint32(result[2])<<16 | uint32(result[3])<<24

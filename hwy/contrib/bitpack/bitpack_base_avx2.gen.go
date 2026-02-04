@@ -249,7 +249,7 @@ func BaseDeltaEncode32_avx2(src []uint32, base uint32, dst []uint32) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*2 <= len(src); i += lanes * 2 {
+	for ; i+lanes*4 <= len(src); i += lanes * 4 {
 		curr := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i])))
 		prevVec := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
@@ -259,6 +259,16 @@ func BaseDeltaEncode32_avx2(src []uint32, base uint32, dst []uint32) {
 		prevVec1 := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i-1+8])))
 		delta1 := curr1.Sub(prevVec1)
 		delta1.Store((*[8]uint32)(unsafe.Pointer(&dst[i+8])))
+		prev = src[i+lanes-1]
+		curr2 := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i+16])))
+		prevVec2 := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i-1+16])))
+		delta2 := curr2.Sub(prevVec2)
+		delta2.Store((*[8]uint32)(unsafe.Pointer(&dst[i+16])))
+		prev = src[i+lanes-1]
+		curr3 := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i+24])))
+		prevVec3 := archsimd.LoadUint32x8((*[8]uint32)(unsafe.Pointer(&src[i-1+24])))
+		delta3 := curr3.Sub(prevVec3)
+		delta3.Store((*[8]uint32)(unsafe.Pointer(&dst[i+24])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {
@@ -279,7 +289,7 @@ func BaseDeltaEncode64_avx2(src []uint64, base uint64, dst []uint64) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*2 <= len(src); i += lanes * 2 {
+	for ; i+lanes*4 <= len(src); i += lanes * 4 {
 		curr := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i])))
 		prevVec := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
@@ -289,6 +299,16 @@ func BaseDeltaEncode64_avx2(src []uint64, base uint64, dst []uint64) {
 		prevVec1 := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i-1+4])))
 		delta1 := curr1.Sub(prevVec1)
 		delta1.Store((*[4]uint64)(unsafe.Pointer(&dst[i+4])))
+		prev = src[i+lanes-1]
+		curr2 := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i+8])))
+		prevVec2 := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i-1+8])))
+		delta2 := curr2.Sub(prevVec2)
+		delta2.Store((*[4]uint64)(unsafe.Pointer(&dst[i+8])))
+		prev = src[i+lanes-1]
+		curr3 := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i+12])))
+		prevVec3 := archsimd.LoadUint64x4((*[4]uint64)(unsafe.Pointer(&src[i-1+12])))
+		delta3 := curr3.Sub(prevVec3)
+		delta3.Store((*[4]uint64)(unsafe.Pointer(&dst[i+12])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {

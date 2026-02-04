@@ -48,7 +48,7 @@ func BaseLayerNorm[T hwy.Floats](input, output []T, normSize int, gamma, beta []
 		sumAcc := hwy.Zero[T]()
 		ii := 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := hwy.LoadFull(input[off+ii:])
+			x := hwy.Load(input[off+ii:])
 			sumAcc = hwy.Add(sumAcc, x)
 		}
 		mean := hwy.ReduceSum(sumAcc)
@@ -62,7 +62,7 @@ func BaseLayerNorm[T hwy.Floats](input, output []T, normSize int, gamma, beta []
 		varAcc := hwy.Zero[T]()
 		ii = 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := hwy.LoadFull(input[off+ii:])
+			x := hwy.Load(input[off+ii:])
 			diff := hwy.Sub(x, vMean)
 			varAcc = hwy.MulAdd(diff, diff, varAcc)
 		}
@@ -81,14 +81,14 @@ func BaseLayerNorm[T hwy.Floats](input, output []T, normSize int, gamma, beta []
 		if gamma != nil && beta != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				normed := hwy.Mul(diff, vInvStd)
 
-				g := hwy.LoadFull(gamma[ii:])
-				b := hwy.LoadFull(beta[ii:])
+				g := hwy.Load(gamma[ii:])
+				b := hwy.Load(beta[ii:])
 				result := hwy.MulAdd(normed, g, b)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				normed := (input[off+i] - mean) * invStd
@@ -97,13 +97,13 @@ func BaseLayerNorm[T hwy.Floats](input, output []T, normSize int, gamma, beta []
 		} else if gamma != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				normed := hwy.Mul(diff, vInvStd)
 
-				g := hwy.LoadFull(gamma[ii:])
+				g := hwy.Load(gamma[ii:])
 				result := hwy.Mul(normed, g)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				normed := (input[off+i] - mean) * invStd
@@ -112,10 +112,10 @@ func BaseLayerNorm[T hwy.Floats](input, output []T, normSize int, gamma, beta []
 		} else {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := hwy.LoadFull(input[off+ii:])
+				x := hwy.Load(input[off+ii:])
 				diff := hwy.Sub(x, vMean)
 				result := hwy.Mul(diff, vInvStd)
-				hwy.StoreFull(result, output[off+ii:])
+				hwy.Store(result, output[off+ii:])
 			}
 			for i := ii; i < normSize; i++ {
 				output[off+i] = (input[off+i] - mean) * invStd

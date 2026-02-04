@@ -21,27 +21,30 @@ import "math"
 // implementations via build tags. The scalar implementations serve as the fallback
 // and are also used when HWY_NO_SIMD is set.
 
-// Load creates a vector by loading data from a slice.
-func Load[T Lanes](src []T) Vec[T] {
+// LoadSlice creates a vector by loading data from a slice with bounds checking.
+// This is the safe variant that handles slices shorter than the vector width.
+// For performance-critical inner loops, use [Load] instead.
+func LoadSlice[T Lanes](src []T) Vec[T] {
 	n := min(len(src), MaxLanes[T]())
 	data := make([]T, n)
 	copy(data, src[:n])
 	return Vec[T]{data: data}
 }
 
-// LoadFull loads a full vector from a slice without bounds checking.
+// Load loads a full vector from a slice without bounds checking.
 // PRECONDITION: len(src) >= NumLanes[T](). This is NOT checked at runtime.
 //
 // This function is optimized for performance-critical inner loops where the
-// caller guarantees the slice has sufficient length. Using LoadFull avoids
-// the bounds checking overhead that LoadSlice variants in archsimd incur.
+// caller guarantees the slice has sufficient length. Using Load avoids
+// the bounds checking overhead that [LoadSlice] incurs.
 //
 // For SIMD targets, this translates to pointer-based loads:
 //
 //	archsimd.LoadFloat32x8((*[8]float32)(unsafe.Pointer(&src[0])))
 //
 // WARNING: Passing a slice with len(src) < NumLanes[T]() is undefined behavior.
-func LoadFull[T Lanes](src []T) Vec[T] {
+// Use [LoadSlice] for safe loading from slices of unknown length.
+func Load[T Lanes](src []T) Vec[T] {
 	n := NumLanes[T]()
 	data := make([]T, n)
 	// Use unsafe.Pointer to avoid bounds checking in inner loop
@@ -51,6 +54,8 @@ func LoadFull[T Lanes](src []T) Vec[T] {
 }
 
 // Load4 loads 4 consecutive vectors from a slice for 4x loop unrolling.
+// PRECONDITION: len(src) >= 4*NumLanes[T](). This is NOT checked at runtime.
+//
 // On ARM NEON, this maps to a single ld1 instruction with 4 registers,
 // which is more efficient than 4 separate Load calls.
 // On AVX2/AVX512, the code generator expands this to 4 separate loads
@@ -76,25 +81,28 @@ func Load4_Fallback_Vec[T Lanes](src []T) (Vec[T], Vec[T], Vec[T], Vec[T]) {
 	return Load4(src)
 }
 
-// Store writes a vector's data to a slice.
-func Store[T Lanes](v Vec[T], dst []T) {
+// StoreSlice writes a vector's data to a slice with bounds checking.
+// This is the safe variant that handles slices shorter than the vector width.
+// For performance-critical inner loops, use [Store] instead.
+func StoreSlice[T Lanes](v Vec[T], dst []T) {
 	n := min(len(dst), len(v.data))
 	copy(dst[:n], v.data[:n])
 }
 
-// StoreFull stores a full vector to a slice without bounds checking.
+// Store stores a full vector to a slice without bounds checking.
 // PRECONDITION: len(dst) >= NumLanes[T](). This is NOT checked at runtime.
 //
 // This function is optimized for performance-critical inner loops where the
-// caller guarantees the slice has sufficient length. Using StoreFull avoids
-// the bounds checking overhead that StoreSlice variants in archsimd incur.
+// caller guarantees the slice has sufficient length. Using Store avoids
+// the bounds checking overhead that [StoreSlice] incurs.
 //
 // For SIMD targets, this translates to pointer-based stores:
 //
 //	v.Store((*[8]float32)(unsafe.Pointer(&dst[0])))
 //
 // WARNING: Passing a slice with len(dst) < NumLanes[T]() is undefined behavior.
-func StoreFull[T Lanes](v Vec[T], dst []T) {
+// Use [StoreSlice] for safe storing to slices of unknown length.
+func Store[T Lanes](v Vec[T], dst []T) {
 	// The caller guarantees len(dst) >= len(v.data)
 	copy(dst[:len(v.data)], v.data)
 }

@@ -293,7 +293,7 @@ func BaseDeltaEncode32_avx512(src []uint32, base uint32, dst []uint32) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*3 <= len(src); i += lanes * 3 {
+	for ; i+lanes*4 <= len(src); i += lanes * 4 {
 		curr := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i])))
 		prevVec := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
@@ -308,6 +308,11 @@ func BaseDeltaEncode32_avx512(src []uint32, base uint32, dst []uint32) {
 		prevVec2 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i-1+32])))
 		delta2 := curr2.Sub(prevVec2)
 		delta2.Store((*[16]uint32)(unsafe.Pointer(&dst[i+32])))
+		prev = src[i+lanes-1]
+		curr3 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i+48])))
+		prevVec3 := archsimd.LoadUint32x16((*[16]uint32)(unsafe.Pointer(&src[i-1+48])))
+		delta3 := curr3.Sub(prevVec3)
+		delta3.Store((*[16]uint32)(unsafe.Pointer(&dst[i+48])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {
@@ -328,7 +333,7 @@ func BaseDeltaEncode64_avx512(src []uint64, base uint64, dst []uint64) {
 	prev := src[0]
 	var i int
 	i = 1
-	for ; i+lanes*3 <= len(src); i += lanes * 3 {
+	for ; i+lanes*4 <= len(src); i += lanes * 4 {
 		curr := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i])))
 		prevVec := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i-1])))
 		delta := curr.Sub(prevVec)
@@ -343,6 +348,11 @@ func BaseDeltaEncode64_avx512(src []uint64, base uint64, dst []uint64) {
 		prevVec2 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i-1+16])))
 		delta2 := curr2.Sub(prevVec2)
 		delta2.Store((*[8]uint64)(unsafe.Pointer(&dst[i+16])))
+		prev = src[i+lanes-1]
+		curr3 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i+24])))
+		prevVec3 := archsimd.LoadUint64x8((*[8]uint64)(unsafe.Pointer(&src[i-1+24])))
+		delta3 := curr3.Sub(prevVec3)
+		delta3.Store((*[8]uint64)(unsafe.Pointer(&dst[i+24])))
 		prev = src[i+lanes-1]
 	}
 	for ; i < len(src); i++ {

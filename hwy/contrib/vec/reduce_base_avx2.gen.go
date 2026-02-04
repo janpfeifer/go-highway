@@ -20,9 +20,9 @@ func BaseSum_avx2_Float16(v []hwy.Float16) hwy.Float16 {
 	lanes := 8
 	var i int
 	for i = 0; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i:]))), len(v[i:])))
+		va := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&v[i:][0]))
 		sum = sum.Add(va)
-		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i+8:]))), len(v[i+8:])))
+		va1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&v[i+8:][0]))
 		sum = sum.Add(va1)
 	}
 	result := sum.ReduceSum()
@@ -40,9 +40,9 @@ func BaseSum_avx2_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 	lanes := 8
 	var i int
 	for i = 0; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i:]))), len(v[i:])))
+		va := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&v[i:][0]))
 		sum = sum.Add(va)
-		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i+8:]))), len(v[i+8:])))
+		va1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&v[i+8:][0]))
 		sum = sum.Add(va1)
 	}
 	result := sum.ReduceSum()
@@ -109,9 +109,9 @@ func BaseMin_avx2_Float16(v []hwy.Float16) hwy.Float16 {
 	minVec := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i:]))), len(v[i:])))
+		va := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&v[i:][0]))
 		minVec = minVec.Min(va)
-		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i+8:]))), len(v[i+8:])))
+		va1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&v[i+8:][0]))
 		minVec = minVec.Min(va1)
 	}
 	result := minVec.ReduceMin()
@@ -140,9 +140,9 @@ func BaseMin_avx2_BFloat16(v []hwy.BFloat16) hwy.BFloat16 {
 	minVec := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i:]))), len(v[i:])))
+		va := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&v[i:][0]))
 		minVec = minVec.Min(va)
-		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i+8:]))), len(v[i+8:])))
+		va1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&v[i+8:][0]))
 		minVec = minVec.Min(va1)
 	}
 	result := minVec.ReduceMin()
@@ -424,10 +424,10 @@ func BaseMinMax_avx2_Float16(v []hwy.Float16) (minVal hwy.Float16, maxVal hwy.Fl
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i:]))), len(v[i:])))
+		va := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&v[i:][0]))
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i+8:]))), len(v[i+8:])))
+		va1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&v[i+8:][0]))
 		minVec = minVec.Min(va1)
 		maxVec = maxVec.Max(va1)
 	}
@@ -466,10 +466,10 @@ func BaseMinMax_avx2_BFloat16(v []hwy.BFloat16) (minVal hwy.BFloat16, maxVal hwy
 	maxVec := minVec
 	var i int
 	for i = lanes; i+lanes*2 <= len(v); i += lanes * 2 {
-		va := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i:]))), len(v[i:])))
+		va := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&v[i:][0]))
 		minVec = minVec.Min(va)
 		maxVec = maxVec.Max(va)
-		va1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v[i+8:]))), len(v[i+8:])))
+		va1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&v[i+8:][0]))
 		minVec = minVec.Min(va1)
 		maxVec = maxVec.Max(va1)
 	}

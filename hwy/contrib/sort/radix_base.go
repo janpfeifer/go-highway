@@ -37,13 +37,13 @@ func BaseRadixPass[T hwy.SignedInts](src, dst []T, shift int) {
 	// SIMD accelerated histogram counting
 	i := 0
 	for i+lanes <= n {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		shifted := hwy.ShiftRight(v, shift)
 		digits := hwy.And(shifted, maskVec)
 
 		// Extract digits and count
 		var buf [16]T // Max AVX-512 lanes
-		hwy.Store(digits, buf[:])
+		hwy.StoreSlice(digits, buf[:])
 		for j := range lanes {
 			digit := int(buf[j]) & 0xFF
 			count[digit]++
@@ -165,12 +165,12 @@ func BaseRadixPassSigned[T hwy.SignedInts](src, dst []T, shift int) {
 	// SIMD histogram counting
 	i := 0
 	for i+lanes <= n {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		shifted := hwy.ShiftRight(v, shift)
 		digits := hwy.And(shifted, maskVec)
 
 		var buf [16]T
-		hwy.Store(digits, buf[:])
+		hwy.StoreSlice(digits, buf[:])
 		for j := range lanes {
 			digit := int(buf[j]) & 0xFF
 			count[digit]++

@@ -45,13 +45,13 @@ func BaseArgmax[T hwy.Floats](v []T) int {
 	}
 
 	// Initialize with first vector
-	maxVals := hwy.Load(v)
+	maxVals := hwy.LoadSlice(v)
 	maxIdxs := hwy.Iota[T]() // [0, 1, 2, ...]
 
 	// Process remaining full vectors
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		// Current indices: base + iota
 		curIdxs := hwy.Add(hwy.Set(T(i)), hwy.Iota[T]())
 
@@ -123,13 +123,13 @@ func BaseArgmin[T hwy.Floats](v []T) int {
 	}
 
 	// Initialize with first vector
-	minVals := hwy.Load(v)
+	minVals := hwy.LoadSlice(v)
 	minIdxs := hwy.Iota[T]() // [0, 1, 2, ...]
 
 	// Process remaining full vectors
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		// Current indices: base + iota
 		curIdxs := hwy.Add(hwy.Set(T(i)), hwy.Iota[T]())
 

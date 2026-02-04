@@ -82,6 +82,7 @@ func BasePackedMicroKernel[T hwy.Floats](packedA, packedB []T, c []T, n, ir, jr,
 		vA3 := hwy.Set(a3)
 
 		// Load Nr values from packed B (2 vectors, contiguous)
+		// Use Load for pointer-based access without bounds checking
 		vB0 := hwy.Load(packedB[bIdx:])
 		vB1 := hwy.Load(packedB[bIdx+lanes:])
 		bIdx += nr
@@ -104,6 +105,7 @@ func BasePackedMicroKernel[T hwy.Floats](packedA, packedB []T, c []T, n, ir, jr,
 	cRow3 := (ir + 3) * n
 
 	// Load existing C values, add accumulators, store back
+	// Use Load/Store for pointer-based access without bounds checking
 	vC := hwy.Load(c[cRow0+jr:])
 	vC = hwy.Add(vC, acc00)
 	hwy.Store(vC, c[cRow0+jr:])

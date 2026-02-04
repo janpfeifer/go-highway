@@ -781,7 +781,7 @@ func EmitTarget(funcs []*ast.FuncDecl, target Target, pkgName, baseName, outPath
 		}
 	}
 
-	// Always add "unsafe" if it's used in the generated code (e.g. by LoadFull),
+	// Always add "unsafe" if it's used in the generated code (e.g. by Load),
 	// even if it wasn't in the source file.
 	if usedPkgs["unsafe"] {
 		alreadyImported := false

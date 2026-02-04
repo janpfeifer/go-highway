@@ -257,7 +257,7 @@ func BaseSinVec[T hwy.Floats](x hwy.Vec[T]) hwy.Vec[T] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 
 	// Negate if needed
 	negResult := hwy.Neg(result)
@@ -267,7 +267,7 @@ func BaseSinVec[T hwy.Floats](x hwy.Vec[T]) hwy.Vec[T] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 // BaseCosVec computes cos(x) for a single vector.
@@ -326,7 +326,7 @@ func BaseCosVec[T hwy.Floats](x hwy.Vec[T]) hwy.Vec[T] {
 			resultData[i] = sinRData[i]
 		}
 	}
-	result := hwy.Load(resultData)
+	result := hwy.LoadSlice(resultData)
 
 	// Negate if needed
 	negResult := hwy.Neg(result)
@@ -336,7 +336,7 @@ func BaseCosVec[T hwy.Floats](x hwy.Vec[T]) hwy.Vec[T] {
 			resultData[i] = negResultData[i]
 		}
 	}
-	return hwy.Load(resultData)
+	return hwy.LoadSlice(resultData)
 }
 
 // BaseErfVec computes erf(x) for a single vector.

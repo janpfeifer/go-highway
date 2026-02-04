@@ -17,7 +17,7 @@ func BaseTranspose2DStrided_fallback_Float16(src []hwy.Float16, rowStart int, ro
 			{
 				rows_1 := make([]hwy.Vec[hwy.Float16], lanes)
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.LoadFull(src[(i+r_1)*k+j:])
+					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
@@ -31,7 +31,7 @@ func BaseTranspose2DStrided_fallback_Float16(src []hwy.Float16, rowStart int, ro
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*dstM+i:])
+					hwy.Store(rows_1[c_1], dst[(j+c_1)*dstM+i:])
 				}
 			}
 		}
@@ -70,7 +70,7 @@ func BaseTranspose2DStrided_fallback_BFloat16(src []hwy.BFloat16, rowStart int, 
 			{
 				rows_1 := make([]hwy.Vec[hwy.BFloat16], lanes)
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.LoadFull(src[(i+r_1)*k+j:])
+					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
@@ -84,7 +84,7 @@ func BaseTranspose2DStrided_fallback_BFloat16(src []hwy.BFloat16, rowStart int, 
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*dstM+i:])
+					hwy.Store(rows_1[c_1], dst[(j+c_1)*dstM+i:])
 				}
 			}
 		}
@@ -226,7 +226,7 @@ func BaseTranspose2D_fallback_Float16(src []hwy.Float16, m int, k int, dst []hwy
 			{
 				rows_1 := make([]hwy.Vec[hwy.Float16], lanes)
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.LoadFull(src[(i+r_1)*k+j:])
+					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
@@ -240,7 +240,7 @@ func BaseTranspose2D_fallback_Float16(src []hwy.Float16, m int, k int, dst []hwy
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+					hwy.Store(rows_1[c_1], dst[(j+c_1)*m+i:])
 				}
 			}
 		}
@@ -271,7 +271,7 @@ func BaseTranspose2D_fallback_BFloat16(src []hwy.BFloat16, m int, k int, dst []h
 			{
 				rows_1 := make([]hwy.Vec[hwy.BFloat16], lanes)
 				for r_1 := 0; r_1 < lanes; r_1++ {
-					rows_1[r_1] = hwy.LoadFull(src[(i+r_1)*k+j:])
+					rows_1[r_1] = hwy.Load(src[(i+r_1)*k+j:])
 				}
 				for level_1 := 0; (1 << level_1) < lanes; level_1++ {
 					stride_1 := 1 << level_1
@@ -285,7 +285,7 @@ func BaseTranspose2D_fallback_BFloat16(src []hwy.BFloat16, m int, k int, dst []h
 					rows_1 = newRows_1
 				}
 				for c_1 := 0; c_1 < lanes; c_1++ {
-					hwy.StoreFull(rows_1[c_1], dst[(j+c_1)*m+i:])
+					hwy.Store(rows_1[c_1], dst[(j+c_1)*m+i:])
 				}
 			}
 		}

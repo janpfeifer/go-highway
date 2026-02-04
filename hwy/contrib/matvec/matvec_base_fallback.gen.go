@@ -22,8 +22,8 @@ func BaseMatVec_fallback_Float16(m []hwy.Float16, rows int, cols int, v []hwy.Fl
 		lanes := sum.NumLanes()
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := hwy.Load(row[j:])
-			vb := hwy.Load(v[j:])
+			va := hwy.LoadSlice(row[j:])
+			vb := hwy.LoadSlice(v[j:])
 			prod := hwy.Mul(va, vb)
 			sum = hwy.Add(sum, prod)
 		}
@@ -51,8 +51,8 @@ func BaseMatVec_fallback_BFloat16(m []hwy.BFloat16, rows int, cols int, v []hwy.
 		lanes := sum.NumLanes()
 		var j int
 		for j = 0; j+lanes <= cols; j += lanes {
-			va := hwy.Load(row[j:])
-			vb := hwy.Load(v[j:])
+			va := hwy.LoadSlice(row[j:])
+			vb := hwy.LoadSlice(v[j:])
 			prod := hwy.Mul(va, vb)
 			sum = hwy.Add(sum, prod)
 		}

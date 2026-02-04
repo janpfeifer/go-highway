@@ -14,11 +14,11 @@ func BaseArgmax_fallback_Float16(v []hwy.Float16) int {
 	if len(v) < lanes {
 		return scalarArgmax(v)
 	}
-	maxVals := hwy.Load(v)
+	maxVals := hwy.LoadSlice(v)
 	maxIdxs := hwy.Iota[hwy.Float16]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(hwy.Float16(i)), hwy.Iota[hwy.Float16]())
 		mask := hwy.GreaterThan(vals, maxVals)
 		maxVals = hwy.IfThenElse(mask, vals, maxVals)
@@ -62,11 +62,11 @@ func BaseArgmax_fallback_BFloat16(v []hwy.BFloat16) int {
 	if len(v) < lanes {
 		return scalarArgmax(v)
 	}
-	maxVals := hwy.Load(v)
+	maxVals := hwy.LoadSlice(v)
 	maxIdxs := hwy.Iota[hwy.BFloat16]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(hwy.BFloat16(i)), hwy.Iota[hwy.BFloat16]())
 		mask := hwy.GreaterThan(vals, maxVals)
 		maxVals = hwy.IfThenElse(mask, vals, maxVals)
@@ -110,11 +110,11 @@ func BaseArgmax_fallback(v []float32) int {
 	if len(v) < lanes {
 		return scalarArgmax(v)
 	}
-	maxVals := hwy.Load(v)
+	maxVals := hwy.LoadSlice(v)
 	maxIdxs := hwy.Iota[float32]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(float32(i)), hwy.Iota[float32]())
 		mask := hwy.GreaterThan(vals, maxVals)
 		maxVals = hwy.IfThenElse(mask, vals, maxVals)
@@ -158,11 +158,11 @@ func BaseArgmax_fallback_Float64(v []float64) int {
 	if len(v) < lanes {
 		return scalarArgmax(v)
 	}
-	maxVals := hwy.Load(v)
+	maxVals := hwy.LoadSlice(v)
 	maxIdxs := hwy.Iota[float64]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(float64(i)), hwy.Iota[float64]())
 		mask := hwy.GreaterThan(vals, maxVals)
 		maxVals = hwy.IfThenElse(mask, vals, maxVals)
@@ -206,11 +206,11 @@ func BaseArgmin_fallback_Float16(v []hwy.Float16) int {
 	if len(v) < lanes {
 		return scalarArgmin(v)
 	}
-	minVals := hwy.Load(v)
+	minVals := hwy.LoadSlice(v)
 	minIdxs := hwy.Iota[hwy.Float16]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(hwy.Float16(i)), hwy.Iota[hwy.Float16]())
 		mask := hwy.LessThan(vals, minVals)
 		minVals = hwy.IfThenElse(mask, vals, minVals)
@@ -254,11 +254,11 @@ func BaseArgmin_fallback_BFloat16(v []hwy.BFloat16) int {
 	if len(v) < lanes {
 		return scalarArgmin(v)
 	}
-	minVals := hwy.Load(v)
+	minVals := hwy.LoadSlice(v)
 	minIdxs := hwy.Iota[hwy.BFloat16]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(hwy.BFloat16(i)), hwy.Iota[hwy.BFloat16]())
 		mask := hwy.LessThan(vals, minVals)
 		minVals = hwy.IfThenElse(mask, vals, minVals)
@@ -302,11 +302,11 @@ func BaseArgmin_fallback(v []float32) int {
 	if len(v) < lanes {
 		return scalarArgmin(v)
 	}
-	minVals := hwy.Load(v)
+	minVals := hwy.LoadSlice(v)
 	minIdxs := hwy.Iota[float32]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(float32(i)), hwy.Iota[float32]())
 		mask := hwy.LessThan(vals, minVals)
 		minVals = hwy.IfThenElse(mask, vals, minVals)
@@ -350,11 +350,11 @@ func BaseArgmin_fallback_Float64(v []float64) int {
 	if len(v) < lanes {
 		return scalarArgmin(v)
 	}
-	minVals := hwy.Load(v)
+	minVals := hwy.LoadSlice(v)
 	minIdxs := hwy.Iota[float64]()
 	i := lanes
 	for ; i+lanes <= len(v); i += lanes {
-		vals := hwy.LoadFull(v[i:])
+		vals := hwy.Load(v[i:])
 		curIdxs := hwy.Add(hwy.Set(float64(i)), hwy.Iota[float64]())
 		mask := hwy.LessThan(vals, minVals)
 		minVals = hwy.IfThenElse(mask, vals, minVals)

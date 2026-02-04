@@ -17,13 +17,13 @@ func BaseApply_avx2_Float16(in []hwy.Float16, out []hwy.Float16, fn func(asm.Flo
 	lanes := 8
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&in[i:][0]))
 		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
-		x1 := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i+8:]))), len(in[i+8:])))
+		x1 := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&in[i+8:][0]))
 		fn(x1).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i+8:]))), len(out[i+8:])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&in[i:][0]))
 		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
 	}
 	if remaining := n - i; remaining > 0 {
@@ -40,13 +40,13 @@ func BaseApply_avx2_BFloat16(in []hwy.BFloat16, out []hwy.BFloat16, fn func(asm.
 	lanes := 8
 	i := 0
 	for ; i+lanes*2 <= n; i += lanes * 2 {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&in[i:][0]))
 		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
-		x1 := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i+8:]))), len(in[i+8:])))
+		x1 := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&in[i+8:][0]))
 		fn(x1).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i+8:]))), len(out[i+8:])))
 	}
 	for ; i+lanes <= n; i += lanes {
-		x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(in[i:]))), len(in[i:])))
+		x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&in[i:][0]))
 		fn(x).StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(out[i:]))), len(out[i:])))
 	}
 	if remaining := n - i; remaining > 0 {

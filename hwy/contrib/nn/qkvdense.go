@@ -97,9 +97,9 @@ func scatterWithBias[T hwy.Floats](src, dst, bias []T, dim, lanes int) {
 	if bias != nil {
 		j := 0
 		for ; j+lanes <= dim; j += lanes {
-			s := hwy.LoadFull(src[j:])
-			b := hwy.LoadFull(bias[j:])
-			hwy.StoreFull(hwy.Add(s, b), dst[j:])
+			s := hwy.Load(src[j:])
+			b := hwy.Load(bias[j:])
+			hwy.Store(hwy.Add(s, b), dst[j:])
 		}
 		for ; j < dim; j++ {
 			dst[j] = src[j] + bias[j]

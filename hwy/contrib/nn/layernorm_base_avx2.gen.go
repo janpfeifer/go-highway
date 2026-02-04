@@ -26,7 +26,7 @@ func BaseLayerNorm_avx2_Float16(input []hwy.Float16, output []hwy.Float16, normS
 		sumAcc := asm.ZeroFloat16x8AVX2()
 		ii := 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+			x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 			sumAcc = sumAcc.Add(x)
 		}
 		mean := sumAcc.ReduceSum()
@@ -38,7 +38,7 @@ func BaseLayerNorm_avx2_Float16(input []hwy.Float16, output []hwy.Float16, normS
 		varAcc := asm.ZeroFloat16x8AVX2()
 		ii = 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+			x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 			diff := x.Sub(vMean)
 			varAcc = diff.MulAdd(diff, varAcc)
 		}
@@ -53,11 +53,11 @@ func BaseLayerNorm_avx2_Float16(input []hwy.Float16, output []hwy.Float16, normS
 		if gamma != nil && beta != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+				x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 				diff := x.Sub(vMean)
 				normed := diff.Mul(vInvStd)
-				g := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(gamma[ii:]))), len(gamma[ii:])))
-				b := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(beta[ii:]))), len(beta[ii:])))
+				g := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&gamma[ii:][0]))
+				b := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&beta[ii:][0]))
 				result := normed.MulAdd(g, b)
 				result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[off+ii:]))), len(output[off+ii:])))
 			}
@@ -68,10 +68,10 @@ func BaseLayerNorm_avx2_Float16(input []hwy.Float16, output []hwy.Float16, normS
 		} else if gamma != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+				x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 				diff := x.Sub(vMean)
 				normed := diff.Mul(vInvStd)
-				g := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(gamma[ii:]))), len(gamma[ii:])))
+				g := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&gamma[ii:][0]))
 				result := normed.Mul(g)
 				result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[off+ii:]))), len(output[off+ii:])))
 			}
@@ -82,7 +82,7 @@ func BaseLayerNorm_avx2_Float16(input []hwy.Float16, output []hwy.Float16, normS
 		} else {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := asm.LoadFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+				x := asm.LoadFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 				diff := x.Sub(vMean)
 				result := diff.Mul(vInvStd)
 				result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[off+ii:]))), len(output[off+ii:])))
@@ -107,7 +107,7 @@ func BaseLayerNorm_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, no
 		sumAcc := asm.ZeroBFloat16x8AVX2()
 		ii := 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+			x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 			sumAcc = sumAcc.Add(x)
 		}
 		mean := sumAcc.ReduceSum()
@@ -119,7 +119,7 @@ func BaseLayerNorm_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, no
 		varAcc := asm.ZeroBFloat16x8AVX2()
 		ii = 0
 		for ; ii+lanes <= normSize; ii += lanes {
-			x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+			x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 			diff := x.Sub(vMean)
 			varAcc = diff.MulAdd(diff, varAcc)
 		}
@@ -134,11 +134,11 @@ func BaseLayerNorm_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, no
 		if gamma != nil && beta != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+				x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 				diff := x.Sub(vMean)
 				normed := diff.Mul(vInvStd)
-				g := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(gamma[ii:]))), len(gamma[ii:])))
-				b := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(beta[ii:]))), len(beta[ii:])))
+				g := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&gamma[ii:][0]))
+				b := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&beta[ii:][0]))
 				result := normed.MulAdd(g, b)
 				result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[off+ii:]))), len(output[off+ii:])))
 			}
@@ -149,10 +149,10 @@ func BaseLayerNorm_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, no
 		} else if gamma != nil {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+				x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 				diff := x.Sub(vMean)
 				normed := diff.Mul(vInvStd)
-				g := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(gamma[ii:]))), len(gamma[ii:])))
+				g := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&gamma[ii:][0]))
 				result := normed.Mul(g)
 				result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[off+ii:]))), len(output[off+ii:])))
 			}
@@ -163,7 +163,7 @@ func BaseLayerNorm_avx2_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, no
 		} else {
 			ii = 0
 			for ; ii+lanes <= normSize; ii += lanes {
-				x := asm.LoadBFloat16x8AVX2Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(input[off+ii:]))), len(input[off+ii:])))
+				x := asm.LoadBFloat16x8AVX2Ptr(unsafe.Pointer(&input[off+ii:][0]))
 				diff := x.Sub(vMean)
 				result := diff.Mul(vInvStd)
 				result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(output[off+ii:]))), len(output[off+ii:])))

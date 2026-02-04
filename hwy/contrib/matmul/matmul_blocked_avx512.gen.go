@@ -60,8 +60,8 @@ func BaseBlockedMatMul_avx512_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.
 						vA2 := asm.BroadcastFloat16x16AVX512(uint16(a2p))
 						vA3 := asm.BroadcastFloat16x16AVX512(uint16(a3p))
 						bRowStart := p * n
-						vB0 := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+j:]))), len(b[bRowStart+j:])))
-						vB1 := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+j+lanes:]))), len(b[bRowStart+j+lanes:])))
+						vB0 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+						vB1 := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j+lanes:][0]))
 						acc00 = vA0.MulAdd(vB0, acc00)
 						acc01 = vA0.MulAdd(vB1, acc01)
 						acc10 = vA1.MulAdd(vB0, acc10)
@@ -96,7 +96,7 @@ func BaseBlockedMatMul_avx512_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.
 							vA1 := asm.BroadcastFloat16x16AVX512(uint16(a[(i+1)*k+p]))
 							vA2 := asm.BroadcastFloat16x16AVX512(uint16(a[(i+2)*k+p]))
 							vA3 := asm.BroadcastFloat16x16AVX512(uint16(a[(i+3)*k+p]))
-							vB := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[p*n+j:]))), len(b[p*n+j:])))
+							vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[p*n+j:][0]))
 							acc0 = vA0.MulAdd(vB, acc0)
 							acc1 = vA1.MulAdd(vB, acc1)
 							acc2 = vA2.MulAdd(vB, acc2)
@@ -135,7 +135,7 @@ func BaseBlockedMatMul_avx512_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.
 					for p := 0; p < k; p++ {
 						vA0 := asm.BroadcastFloat16x16AVX512(uint16(a[i*k+p]))
 						vA1 := asm.BroadcastFloat16x16AVX512(uint16(a[(i+1)*k+p]))
-						vB := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[p*n+j:]))), len(b[p*n+j:])))
+						vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[p*n+j:][0]))
 						acc0 = vA0.MulAdd(vB, acc0)
 						acc1 = vA1.MulAdd(vB, acc1)
 					}
@@ -161,7 +161,7 @@ func BaseBlockedMatMul_avx512_Float16(a []hwy.Float16, b []hwy.Float16, c []hwy.
 					acc := asm.ZeroFloat16x16AVX512()
 					for p := 0; p < k; p++ {
 						vA := asm.BroadcastFloat16x16AVX512(uint16(a[i*k+p]))
-						vB := asm.LoadFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[p*n+j:]))), len(b[p*n+j:])))
+						vB := asm.LoadFloat16x16AVX512Ptr(unsafe.Pointer(&b[p*n+j:][0]))
 						acc = vA.MulAdd(vB, acc)
 					}
 					acc.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
@@ -226,8 +226,8 @@ func BaseBlockedMatMul_avx512_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []h
 						vA2 := asm.BroadcastBFloat16x16AVX512(uint16(a2p))
 						vA3 := asm.BroadcastBFloat16x16AVX512(uint16(a3p))
 						bRowStart := p * n
-						vB0 := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+j:]))), len(b[bRowStart+j:])))
-						vB1 := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[bRowStart+j+lanes:]))), len(b[bRowStart+j+lanes:])))
+						vB0 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j:][0]))
+						vB1 := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[bRowStart+j+lanes:][0]))
 						acc00 = vA0.MulAdd(vB0, acc00)
 						acc01 = vA0.MulAdd(vB1, acc01)
 						acc10 = vA1.MulAdd(vB0, acc10)
@@ -262,7 +262,7 @@ func BaseBlockedMatMul_avx512_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []h
 							vA1 := asm.BroadcastBFloat16x16AVX512(uint16(a[(i+1)*k+p]))
 							vA2 := asm.BroadcastBFloat16x16AVX512(uint16(a[(i+2)*k+p]))
 							vA3 := asm.BroadcastBFloat16x16AVX512(uint16(a[(i+3)*k+p]))
-							vB := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[p*n+j:]))), len(b[p*n+j:])))
+							vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[p*n+j:][0]))
 							acc0 = vA0.MulAdd(vB, acc0)
 							acc1 = vA1.MulAdd(vB, acc1)
 							acc2 = vA2.MulAdd(vB, acc2)
@@ -301,7 +301,7 @@ func BaseBlockedMatMul_avx512_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []h
 					for p := 0; p < k; p++ {
 						vA0 := asm.BroadcastBFloat16x16AVX512(uint16(a[i*k+p]))
 						vA1 := asm.BroadcastBFloat16x16AVX512(uint16(a[(i+1)*k+p]))
-						vB := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[p*n+j:]))), len(b[p*n+j:])))
+						vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[p*n+j:][0]))
 						acc0 = vA0.MulAdd(vB, acc0)
 						acc1 = vA1.MulAdd(vB, acc1)
 					}
@@ -327,7 +327,7 @@ func BaseBlockedMatMul_avx512_BFloat16(a []hwy.BFloat16, b []hwy.BFloat16, c []h
 					acc := asm.ZeroBFloat16x16AVX512()
 					for p := 0; p < k; p++ {
 						vA := asm.BroadcastBFloat16x16AVX512(uint16(a[i*k+p]))
-						vB := asm.LoadBFloat16x16AVX512Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(b[p*n+j:]))), len(b[p*n+j:])))
+						vB := asm.LoadBFloat16x16AVX512Ptr(unsafe.Pointer(&b[p*n+j:][0]))
 						acc = vA.MulAdd(vB, acc)
 					}
 					acc.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(c[cRowStart+j:]))), len(c[cRowStart+j:])))
@@ -359,7 +359,7 @@ func BaseBlockedMatMul_avx512(a []float32, b []float32, c []float32, m int, n in
 	total := m * n
 	var idx int
 	for idx = 0; idx+lanes <= total; idx += lanes {
-		vZero.StoreSlice(c[idx:])
+		vZero.Store((*[16]float32)(unsafe.Pointer(&c[idx])))
 	}
 	for ; idx < total; idx++ {
 		c[idx] = 0
@@ -392,8 +392,8 @@ func BaseBlockedMatMul_avx512(a []float32, b []float32, c []float32, m int, n in
 						vA2 := archsimd.BroadcastFloat32x16(a2p)
 						vA3 := archsimd.BroadcastFloat32x16(a3p)
 						bRowStart := p * n
-						vB0 := archsimd.LoadFloat32x16Slice(b[bRowStart+j:])
-						vB1 := archsimd.LoadFloat32x16Slice(b[bRowStart+j+lanes:])
+						vB0 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&b[bRowStart+j])))
+						vB1 := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&b[bRowStart+j+lanes])))
 						acc00 = vA0.MulAdd(vB0, acc00)
 						acc01 = vA0.MulAdd(vB1, acc01)
 						acc10 = vA1.MulAdd(vB0, acc10)
@@ -407,14 +407,14 @@ func BaseBlockedMatMul_avx512(a []float32, b []float32, c []float32, m int, n in
 					cRow1 := (i + 1) * n
 					cRow2 := (i + 2) * n
 					cRow3 := (i + 3) * n
-					acc00.StoreSlice(c[cRow0+j:])
-					acc01.StoreSlice(c[cRow0+j+lanes:])
-					acc10.StoreSlice(c[cRow1+j:])
-					acc11.StoreSlice(c[cRow1+j+lanes:])
-					acc20.StoreSlice(c[cRow2+j:])
-					acc21.StoreSlice(c[cRow2+j+lanes:])
-					acc30.StoreSlice(c[cRow3+j:])
-					acc31.StoreSlice(c[cRow3+j+lanes:])
+					acc00.Store((*[16]float32)(unsafe.Pointer(&c[cRow0+j])))
+					acc01.Store((*[16]float32)(unsafe.Pointer(&c[cRow0+j+lanes])))
+					acc10.Store((*[16]float32)(unsafe.Pointer(&c[cRow1+j])))
+					acc11.Store((*[16]float32)(unsafe.Pointer(&c[cRow1+j+lanes])))
+					acc20.Store((*[16]float32)(unsafe.Pointer(&c[cRow2+j])))
+					acc21.Store((*[16]float32)(unsafe.Pointer(&c[cRow2+j+lanes])))
+					acc30.Store((*[16]float32)(unsafe.Pointer(&c[cRow3+j])))
+					acc31.Store((*[16]float32)(unsafe.Pointer(&c[cRow3+j+lanes])))
 				}
 				for ; j < jEnd; j += lanes {
 					remaining := jEnd - j
@@ -428,16 +428,16 @@ func BaseBlockedMatMul_avx512(a []float32, b []float32, c []float32, m int, n in
 							vA1 := archsimd.BroadcastFloat32x16(a[(i+1)*k+p])
 							vA2 := archsimd.BroadcastFloat32x16(a[(i+2)*k+p])
 							vA3 := archsimd.BroadcastFloat32x16(a[(i+3)*k+p])
-							vB := archsimd.LoadFloat32x16Slice(b[p*n+j:])
+							vB := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&b[p*n+j])))
 							acc0 = vA0.MulAdd(vB, acc0)
 							acc1 = vA1.MulAdd(vB, acc1)
 							acc2 = vA2.MulAdd(vB, acc2)
 							acc3 = vA3.MulAdd(vB, acc3)
 						}
-						acc0.StoreSlice(c[i*n+j:])
-						acc1.StoreSlice(c[(i+1)*n+j:])
-						acc2.StoreSlice(c[(i+2)*n+j:])
-						acc3.StoreSlice(c[(i+3)*n+j:])
+						acc0.Store((*[16]float32)(unsafe.Pointer(&c[i*n+j])))
+						acc1.Store((*[16]float32)(unsafe.Pointer(&c[(i+1)*n+j])))
+						acc2.Store((*[16]float32)(unsafe.Pointer(&c[(i+2)*n+j])))
+						acc3.Store((*[16]float32)(unsafe.Pointer(&c[(i+3)*n+j])))
 					} else {
 						for jj := j; jj < jEnd; jj++ {
 							var sum0, sum1, sum2, sum3 float32
@@ -467,12 +467,12 @@ func BaseBlockedMatMul_avx512(a []float32, b []float32, c []float32, m int, n in
 					for p := 0; p < k; p++ {
 						vA0 := archsimd.BroadcastFloat32x16(a[i*k+p])
 						vA1 := archsimd.BroadcastFloat32x16(a[(i+1)*k+p])
-						vB := archsimd.LoadFloat32x16Slice(b[p*n+j:])
+						vB := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&b[p*n+j])))
 						acc0 = vA0.MulAdd(vB, acc0)
 						acc1 = vA1.MulAdd(vB, acc1)
 					}
-					acc0.StoreSlice(c[cRow0+j:])
-					acc1.StoreSlice(c[cRow1+j:])
+					acc0.Store((*[16]float32)(unsafe.Pointer(&c[cRow0+j])))
+					acc1.Store((*[16]float32)(unsafe.Pointer(&c[cRow1+j])))
 				}
 				for ; j < jEnd; j++ {
 					var sum0, sum1 float32
@@ -493,10 +493,10 @@ func BaseBlockedMatMul_avx512(a []float32, b []float32, c []float32, m int, n in
 					acc := archsimd.BroadcastFloat32x16(0)
 					for p := 0; p < k; p++ {
 						vA := archsimd.BroadcastFloat32x16(a[i*k+p])
-						vB := archsimd.LoadFloat32x16Slice(b[p*n+j:])
+						vB := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&b[p*n+j])))
 						acc = vA.MulAdd(vB, acc)
 					}
-					acc.StoreSlice(c[cRowStart+j:])
+					acc.Store((*[16]float32)(unsafe.Pointer(&c[cRowStart+j])))
 				}
 				for ; j < jEnd; j++ {
 					var sum float32
@@ -525,7 +525,7 @@ func BaseBlockedMatMul_avx512_Float64(a []float64, b []float64, c []float64, m i
 	total := m * n
 	var idx int
 	for idx = 0; idx+lanes <= total; idx += lanes {
-		vZero.StoreSlice(c[idx:])
+		vZero.Store((*[8]float64)(unsafe.Pointer(&c[idx])))
 	}
 	for ; idx < total; idx++ {
 		c[idx] = 0
@@ -558,8 +558,8 @@ func BaseBlockedMatMul_avx512_Float64(a []float64, b []float64, c []float64, m i
 						vA2 := archsimd.BroadcastFloat64x8(a2p)
 						vA3 := archsimd.BroadcastFloat64x8(a3p)
 						bRowStart := p * n
-						vB0 := archsimd.LoadFloat64x8Slice(b[bRowStart+j:])
-						vB1 := archsimd.LoadFloat64x8Slice(b[bRowStart+j+lanes:])
+						vB0 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&b[bRowStart+j])))
+						vB1 := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&b[bRowStart+j+lanes])))
 						acc00 = vA0.MulAdd(vB0, acc00)
 						acc01 = vA0.MulAdd(vB1, acc01)
 						acc10 = vA1.MulAdd(vB0, acc10)
@@ -573,14 +573,14 @@ func BaseBlockedMatMul_avx512_Float64(a []float64, b []float64, c []float64, m i
 					cRow1 := (i + 1) * n
 					cRow2 := (i + 2) * n
 					cRow3 := (i + 3) * n
-					acc00.StoreSlice(c[cRow0+j:])
-					acc01.StoreSlice(c[cRow0+j+lanes:])
-					acc10.StoreSlice(c[cRow1+j:])
-					acc11.StoreSlice(c[cRow1+j+lanes:])
-					acc20.StoreSlice(c[cRow2+j:])
-					acc21.StoreSlice(c[cRow2+j+lanes:])
-					acc30.StoreSlice(c[cRow3+j:])
-					acc31.StoreSlice(c[cRow3+j+lanes:])
+					acc00.Store((*[8]float64)(unsafe.Pointer(&c[cRow0+j])))
+					acc01.Store((*[8]float64)(unsafe.Pointer(&c[cRow0+j+lanes])))
+					acc10.Store((*[8]float64)(unsafe.Pointer(&c[cRow1+j])))
+					acc11.Store((*[8]float64)(unsafe.Pointer(&c[cRow1+j+lanes])))
+					acc20.Store((*[8]float64)(unsafe.Pointer(&c[cRow2+j])))
+					acc21.Store((*[8]float64)(unsafe.Pointer(&c[cRow2+j+lanes])))
+					acc30.Store((*[8]float64)(unsafe.Pointer(&c[cRow3+j])))
+					acc31.Store((*[8]float64)(unsafe.Pointer(&c[cRow3+j+lanes])))
 				}
 				for ; j < jEnd; j += lanes {
 					remaining := jEnd - j
@@ -594,16 +594,16 @@ func BaseBlockedMatMul_avx512_Float64(a []float64, b []float64, c []float64, m i
 							vA1 := archsimd.BroadcastFloat64x8(a[(i+1)*k+p])
 							vA2 := archsimd.BroadcastFloat64x8(a[(i+2)*k+p])
 							vA3 := archsimd.BroadcastFloat64x8(a[(i+3)*k+p])
-							vB := archsimd.LoadFloat64x8Slice(b[p*n+j:])
+							vB := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&b[p*n+j])))
 							acc0 = vA0.MulAdd(vB, acc0)
 							acc1 = vA1.MulAdd(vB, acc1)
 							acc2 = vA2.MulAdd(vB, acc2)
 							acc3 = vA3.MulAdd(vB, acc3)
 						}
-						acc0.StoreSlice(c[i*n+j:])
-						acc1.StoreSlice(c[(i+1)*n+j:])
-						acc2.StoreSlice(c[(i+2)*n+j:])
-						acc3.StoreSlice(c[(i+3)*n+j:])
+						acc0.Store((*[8]float64)(unsafe.Pointer(&c[i*n+j])))
+						acc1.Store((*[8]float64)(unsafe.Pointer(&c[(i+1)*n+j])))
+						acc2.Store((*[8]float64)(unsafe.Pointer(&c[(i+2)*n+j])))
+						acc3.Store((*[8]float64)(unsafe.Pointer(&c[(i+3)*n+j])))
 					} else {
 						for jj := j; jj < jEnd; jj++ {
 							var sum0, sum1, sum2, sum3 float64
@@ -633,12 +633,12 @@ func BaseBlockedMatMul_avx512_Float64(a []float64, b []float64, c []float64, m i
 					for p := 0; p < k; p++ {
 						vA0 := archsimd.BroadcastFloat64x8(a[i*k+p])
 						vA1 := archsimd.BroadcastFloat64x8(a[(i+1)*k+p])
-						vB := archsimd.LoadFloat64x8Slice(b[p*n+j:])
+						vB := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&b[p*n+j])))
 						acc0 = vA0.MulAdd(vB, acc0)
 						acc1 = vA1.MulAdd(vB, acc1)
 					}
-					acc0.StoreSlice(c[cRow0+j:])
-					acc1.StoreSlice(c[cRow1+j:])
+					acc0.Store((*[8]float64)(unsafe.Pointer(&c[cRow0+j])))
+					acc1.Store((*[8]float64)(unsafe.Pointer(&c[cRow1+j])))
 				}
 				for ; j < jEnd; j++ {
 					var sum0, sum1 float64
@@ -659,10 +659,10 @@ func BaseBlockedMatMul_avx512_Float64(a []float64, b []float64, c []float64, m i
 					acc := archsimd.BroadcastFloat64x8(0)
 					for p := 0; p < k; p++ {
 						vA := archsimd.BroadcastFloat64x8(a[i*k+p])
-						vB := archsimd.LoadFloat64x8Slice(b[p*n+j:])
+						vB := archsimd.LoadFloat64x8((*[8]float64)(unsafe.Pointer(&b[p*n+j])))
 						acc = vA.MulAdd(vB, acc)
 					}
-					acc.StoreSlice(c[cRowStart+j:])
+					acc.Store((*[8]float64)(unsafe.Pointer(&c[cRowStart+j])))
 				}
 				for ; j < jEnd; j++ {
 					var sum float64

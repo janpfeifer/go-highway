@@ -19,7 +19,7 @@ func BaseAdd_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Add(vs)
@@ -28,6 +28,14 @@ func BaseAdd_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		vs1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Add(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Add(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Add(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseAdd_fallback_Float16(dst[i:n], s[i:n])
@@ -42,7 +50,7 @@ func BaseAdd_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Add(vs)
@@ -51,6 +59,14 @@ func BaseAdd_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		vs1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Add(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Add(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Add(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseAdd_fallback_BFloat16(dst[i:n], s[i:n])
@@ -65,7 +81,7 @@ func BaseAdd_neon(dst []float32, s []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i])))
 		result := vd.Add(vs)
@@ -74,6 +90,14 @@ func BaseAdd_neon(dst []float32, s []float32) {
 		vs1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+4])))
 		result1 := vd1.Add(vs1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vs2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+8])))
+		result2 := vd2.Add(vs2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		vs3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+12])))
+		result3 := vd3.Add(vs3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseAdd_fallback(dst[i:n], s[i:n])
@@ -88,7 +112,7 @@ func BaseAdd_neon_Float64(dst []float64, s []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i])))
 		result := vd.Add(vs)
@@ -97,6 +121,14 @@ func BaseAdd_neon_Float64(dst []float64, s []float64) {
 		vs1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+2])))
 		result1 := vd1.Add(vs1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vs2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+4])))
+		result2 := vd2.Add(vs2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		vs3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+6])))
+		result3 := vd3.Add(vs3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseAdd_fallback_Float64(dst[i:n], s[i:n])
@@ -111,7 +143,7 @@ func BaseAddTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Add(vb)
@@ -120,6 +152,14 @@ func BaseAddTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 		vb1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Add(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Add(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Add(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseAddTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -134,7 +174,7 @@ func BaseAddTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Add(vb)
@@ -143,6 +183,14 @@ func BaseAddTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 		vb1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Add(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Add(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Add(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseAddTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -157,7 +205,7 @@ func BaseAddTo_neon(dst []float32, a []float32, b []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i])))
 		result := va.Add(vb)
@@ -166,6 +214,14 @@ func BaseAddTo_neon(dst []float32, a []float32, b []float32) {
 		vb1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+4])))
 		result1 := va1.Add(vb1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		va2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+8])))
+		vb2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+8])))
+		result2 := va2.Add(vb2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		va3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+12])))
+		vb3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+12])))
+		result3 := va3.Add(vb3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseAddTo_fallback(dst[i:n], a[i:n], b[i:n])
@@ -180,7 +236,7 @@ func BaseAddTo_neon_Float64(dst []float64, a []float64, b []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i])))
 		result := va.Add(vb)
@@ -189,6 +245,14 @@ func BaseAddTo_neon_Float64(dst []float64, a []float64, b []float64) {
 		vb1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+2])))
 		result1 := va1.Add(vb1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		va2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+4])))
+		vb2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+4])))
+		result2 := va2.Add(vb2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		va3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+6])))
+		vb3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+6])))
+		result3 := va3.Add(vb3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseAddTo_fallback_Float64(dst[i:n], a[i:n], b[i:n])
@@ -203,7 +267,7 @@ func BaseSub_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Sub(vs)
@@ -212,6 +276,14 @@ func BaseSub_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		vs1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Sub(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Sub(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Sub(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseSub_fallback_Float16(dst[i:n], s[i:n])
@@ -226,7 +298,7 @@ func BaseSub_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Sub(vs)
@@ -235,6 +307,14 @@ func BaseSub_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		vs1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Sub(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Sub(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Sub(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseSub_fallback_BFloat16(dst[i:n], s[i:n])
@@ -249,7 +329,7 @@ func BaseSub_neon(dst []float32, s []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i])))
 		result := vd.Sub(vs)
@@ -258,6 +338,14 @@ func BaseSub_neon(dst []float32, s []float32) {
 		vs1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+4])))
 		result1 := vd1.Sub(vs1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vs2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+8])))
+		result2 := vd2.Sub(vs2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		vs3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+12])))
+		result3 := vd3.Sub(vs3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseSub_fallback(dst[i:n], s[i:n])
@@ -272,7 +360,7 @@ func BaseSub_neon_Float64(dst []float64, s []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i])))
 		result := vd.Sub(vs)
@@ -281,6 +369,14 @@ func BaseSub_neon_Float64(dst []float64, s []float64) {
 		vs1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+2])))
 		result1 := vd1.Sub(vs1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vs2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+4])))
+		result2 := vd2.Sub(vs2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		vs3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+6])))
+		result3 := vd3.Sub(vs3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseSub_fallback_Float64(dst[i:n], s[i:n])
@@ -295,7 +391,7 @@ func BaseSubTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Sub(vb)
@@ -304,6 +400,14 @@ func BaseSubTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 		vb1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Sub(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Sub(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Sub(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseSubTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -318,7 +422,7 @@ func BaseSubTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Sub(vb)
@@ -327,6 +431,14 @@ func BaseSubTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 		vb1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Sub(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Sub(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Sub(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseSubTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -341,7 +453,7 @@ func BaseSubTo_neon(dst []float32, a []float32, b []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i])))
 		result := va.Sub(vb)
@@ -350,6 +462,14 @@ func BaseSubTo_neon(dst []float32, a []float32, b []float32) {
 		vb1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+4])))
 		result1 := va1.Sub(vb1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		va2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+8])))
+		vb2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+8])))
+		result2 := va2.Sub(vb2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		va3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+12])))
+		vb3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+12])))
+		result3 := va3.Sub(vb3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseSubTo_fallback(dst[i:n], a[i:n], b[i:n])
@@ -364,7 +484,7 @@ func BaseSubTo_neon_Float64(dst []float64, a []float64, b []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i])))
 		result := va.Sub(vb)
@@ -373,6 +493,14 @@ func BaseSubTo_neon_Float64(dst []float64, a []float64, b []float64) {
 		vb1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+2])))
 		result1 := va1.Sub(vb1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		va2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+4])))
+		vb2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+4])))
+		result2 := va2.Sub(vb2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		va3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+6])))
+		vb3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+6])))
+		result3 := va3.Sub(vb3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseSubTo_fallback_Float64(dst[i:n], a[i:n], b[i:n])
@@ -387,7 +515,7 @@ func BaseMul_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Mul(vs)
@@ -396,6 +524,14 @@ func BaseMul_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		vs1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Mul(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Mul(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Mul(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseMul_fallback_Float16(dst[i:n], s[i:n])
@@ -410,7 +546,7 @@ func BaseMul_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Mul(vs)
@@ -419,6 +555,14 @@ func BaseMul_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		vs1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Mul(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Mul(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Mul(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseMul_fallback_BFloat16(dst[i:n], s[i:n])
@@ -433,7 +577,7 @@ func BaseMul_neon(dst []float32, s []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i])))
 		result := vd.Mul(vs)
@@ -442,6 +586,14 @@ func BaseMul_neon(dst []float32, s []float32) {
 		vs1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+4])))
 		result1 := vd1.Mul(vs1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vs2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+8])))
+		result2 := vd2.Mul(vs2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		vs3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+12])))
+		result3 := vd3.Mul(vs3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseMul_fallback(dst[i:n], s[i:n])
@@ -456,7 +608,7 @@ func BaseMul_neon_Float64(dst []float64, s []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i])))
 		result := vd.Mul(vs)
@@ -465,6 +617,14 @@ func BaseMul_neon_Float64(dst []float64, s []float64) {
 		vs1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+2])))
 		result1 := vd1.Mul(vs1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vs2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+4])))
+		result2 := vd2.Mul(vs2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		vs3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+6])))
+		result3 := vd3.Mul(vs3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseMul_fallback_Float64(dst[i:n], s[i:n])
@@ -479,7 +639,7 @@ func BaseMulTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Mul(vb)
@@ -488,6 +648,14 @@ func BaseMulTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 		vb1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Mul(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Mul(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Mul(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseMulTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -502,7 +670,7 @@ func BaseMulTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Mul(vb)
@@ -511,6 +679,14 @@ func BaseMulTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 		vb1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Mul(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Mul(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Mul(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseMulTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -525,7 +701,7 @@ func BaseMulTo_neon(dst []float32, a []float32, b []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i])))
 		result := va.Mul(vb)
@@ -534,6 +710,14 @@ func BaseMulTo_neon(dst []float32, a []float32, b []float32) {
 		vb1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+4])))
 		result1 := va1.Mul(vb1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		va2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+8])))
+		vb2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+8])))
+		result2 := va2.Mul(vb2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		va3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+12])))
+		vb3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+12])))
+		result3 := va3.Mul(vb3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseMulTo_fallback(dst[i:n], a[i:n], b[i:n])
@@ -548,7 +732,7 @@ func BaseMulTo_neon_Float64(dst []float64, a []float64, b []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i])))
 		result := va.Mul(vb)
@@ -557,6 +741,14 @@ func BaseMulTo_neon_Float64(dst []float64, a []float64, b []float64) {
 		vb1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+2])))
 		result1 := va1.Mul(vb1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		va2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+4])))
+		vb2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+4])))
+		result2 := va2.Mul(vb2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		va3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+6])))
+		vb3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+6])))
+		result3 := va3.Mul(vb3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseMulTo_fallback_Float64(dst[i:n], a[i:n], b[i:n])
@@ -571,7 +763,7 @@ func BaseDiv_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Div(vs)
@@ -580,6 +772,14 @@ func BaseDiv_neon_Float16(dst []hwy.Float16, s []hwy.Float16) {
 		vs1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Div(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Div(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Div(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseDiv_fallback_Float16(dst[i:n], s[i:n])
@@ -594,7 +794,7 @@ func BaseDiv_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vs := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vd.Div(vs)
@@ -603,6 +803,14 @@ func BaseDiv_neon_BFloat16(dst []hwy.BFloat16, s []hwy.BFloat16) {
 		vs1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vd1.Div(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vs2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vd2.Div(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vs3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vd3.Div(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseDiv_fallback_BFloat16(dst[i:n], s[i:n])
@@ -617,7 +825,7 @@ func BaseDiv_neon(dst []float32, s []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i])))
 		result := vd.Div(vs)
@@ -626,6 +834,14 @@ func BaseDiv_neon(dst []float32, s []float32) {
 		vs1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+4])))
 		result1 := vd1.Div(vs1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vs2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+8])))
+		result2 := vd2.Div(vs2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		vs3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+12])))
+		result3 := vd3.Div(vs3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseDiv_fallback(dst[i:n], s[i:n])
@@ -640,7 +856,7 @@ func BaseDiv_neon_Float64(dst []float64, s []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vs := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i])))
 		result := vd.Div(vs)
@@ -649,6 +865,14 @@ func BaseDiv_neon_Float64(dst []float64, s []float64) {
 		vs1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+2])))
 		result1 := vd1.Div(vs1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vs2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+4])))
+		result2 := vd2.Div(vs2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		vs3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+6])))
+		result3 := vd3.Div(vs3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseDiv_fallback_Float64(dst[i:n], s[i:n])
@@ -663,7 +887,7 @@ func BaseDivTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Div(vb)
@@ -672,6 +896,14 @@ func BaseDivTo_neon_Float16(dst []hwy.Float16, a []hwy.Float16, b []hwy.Float16)
 		vb1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Div(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Div(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Div(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseDivTo_fallback_Float16(dst[i:n], a[i:n], b[i:n])
@@ -686,7 +918,7 @@ func BaseDivTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i:][0]))
 		vb := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i:][0]))
 		result := va.Div(vb)
@@ -695,6 +927,14 @@ func BaseDivTo_neon_BFloat16(dst []hwy.BFloat16, a []hwy.BFloat16, b []hwy.BFloa
 		vb1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+8:][0]))
 		result1 := va1.Div(vb1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		va2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+16:][0]))
+		vb2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+16:][0]))
+		result2 := va2.Div(vb2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		va3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&a[i+24:][0]))
+		vb3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&b[i+24:][0]))
+		result3 := va3.Div(vb3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseDivTo_fallback_BFloat16(dst[i:n], a[i:n], b[i:n])
@@ -709,7 +949,7 @@ func BaseDivTo_neon(dst []float32, a []float32, b []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i])))
 		result := va.Div(vb)
@@ -718,6 +958,14 @@ func BaseDivTo_neon(dst []float32, a []float32, b []float32) {
 		vb1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+4])))
 		result1 := va1.Div(vb1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		va2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+8])))
+		vb2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+8])))
+		result2 := va2.Div(vb2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		va3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&a[i+12])))
+		vb3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&b[i+12])))
+		result3 := va3.Div(vb3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	if i < n {
 		BaseDivTo_fallback(dst[i:n], a[i:n], b[i:n])
@@ -732,7 +980,7 @@ func BaseDivTo_neon_Float64(dst []float64, a []float64, b []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		va := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i])))
 		vb := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i])))
 		result := va.Div(vb)
@@ -741,6 +989,14 @@ func BaseDivTo_neon_Float64(dst []float64, a []float64, b []float64) {
 		vb1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+2])))
 		result1 := va1.Div(vb1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		va2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+4])))
+		vb2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+4])))
+		result2 := va2.Div(vb2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		va3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&a[i+6])))
+		vb3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&b[i+6])))
+		result3 := va3.Div(vb3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	if i < n {
 		BaseDivTo_fallback_Float64(dst[i:n], a[i:n], b[i:n])
@@ -756,13 +1012,19 @@ func BaseScale_neon_Float16(c hwy.Float16, dst []hwy.Float16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		result := vd.Mul(vc)
 		result.StorePtr(unsafe.Pointer(&dst[i:][0]))
 		vd1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+8:][0]))
 		result1 := vd1.Mul(vc)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		result2 := vd2.Mul(vc)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		result3 := vd3.Mul(vc)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseScale_fallback_Float16(c, dst[i:n])
@@ -778,13 +1040,19 @@ func BaseScale_neon_BFloat16(c hwy.BFloat16, dst []hwy.BFloat16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		result := vd.Mul(vc)
 		result.StorePtr(unsafe.Pointer(&dst[i:][0]))
 		vd1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+8:][0]))
 		result1 := vd1.Mul(vc)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		result2 := vd2.Mul(vc)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		result3 := vd3.Mul(vc)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseScale_fallback_BFloat16(c, dst[i:n])
@@ -800,13 +1068,19 @@ func BaseScale_neon(c float32, dst []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		result := vd.Mul(vc)
 		result.Store((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vd1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+4])))
 		result1 := vd1.Mul(vc)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		result2 := vd2.Mul(vc)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		result3 := vd3.Mul(vc)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	for ; i < n; i++ {
 		dst[i] *= c
@@ -822,13 +1096,19 @@ func BaseScale_neon_Float64(c float64, dst []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		result := vd.Mul(vc)
 		result.Store((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vd1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+2])))
 		result1 := vd1.Mul(vc)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		result2 := vd2.Mul(vc)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		result3 := vd3.Mul(vc)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	for ; i < n; i++ {
 		dst[i] *= c
@@ -844,13 +1124,19 @@ func BaseScaleTo_neon_Float16(dst []hwy.Float16, c hwy.Float16, s []hwy.Float16)
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vs := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vc.Mul(vs)
 		result.StorePtr(unsafe.Pointer(&dst[i:][0]))
 		vs1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vc.Mul(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vs2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vc.Mul(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vs3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vc.Mul(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseScaleTo_fallback_Float16(dst[i:n], c, s[i:n])
@@ -866,13 +1152,19 @@ func BaseScaleTo_neon_BFloat16(dst []hwy.BFloat16, c hwy.BFloat16, s []hwy.BFloa
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vs := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i:][0]))
 		result := vc.Mul(vs)
 		result.StorePtr(unsafe.Pointer(&dst[i:][0]))
 		vs1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+8:][0]))
 		result1 := vc.Mul(vs1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vs2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+16:][0]))
+		result2 := vc.Mul(vs2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vs3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&s[i+24:][0]))
+		result3 := vc.Mul(vs3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseScaleTo_fallback_BFloat16(dst[i:n], c, s[i:n])
@@ -888,13 +1180,19 @@ func BaseScaleTo_neon(dst []float32, c float32, s []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vs := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i])))
 		result := vc.Mul(vs)
 		result.Store((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vs1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+4])))
 		result1 := vc.Mul(vs1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vs2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+8])))
+		result2 := vc.Mul(vs2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vs3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&s[i+12])))
+		result3 := vc.Mul(vs3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	for ; i < n; i++ {
 		dst[i] = c * s[i]
@@ -910,13 +1208,19 @@ func BaseScaleTo_neon_Float64(dst []float64, c float64, s []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vs := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i])))
 		result := vc.Mul(vs)
 		result.Store((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vs1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+2])))
 		result1 := vc.Mul(vs1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vs2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+4])))
+		result2 := vc.Mul(vs2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vs3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&s[i+6])))
+		result3 := vc.Mul(vs3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	for ; i < n; i++ {
 		dst[i] = c * s[i]
@@ -932,13 +1236,19 @@ func BaseAddConst_neon_Float16(c hwy.Float16, dst []hwy.Float16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		result := vd.Add(vc)
 		result.StorePtr(unsafe.Pointer(&dst[i:][0]))
 		vd1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+8:][0]))
 		result1 := vd1.Add(vc)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		result2 := vd2.Add(vc)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		result3 := vd3.Add(vc)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseAddConst_fallback_Float16(c, dst[i:n])
@@ -954,13 +1264,19 @@ func BaseAddConst_neon_BFloat16(c hwy.BFloat16, dst []hwy.BFloat16) {
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		result := vd.Add(vc)
 		result.StorePtr(unsafe.Pointer(&dst[i:][0]))
 		vd1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+8:][0]))
 		result1 := vd1.Add(vc)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		result2 := vd2.Add(vc)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		result3 := vd3.Add(vc)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseAddConst_fallback_BFloat16(c, dst[i:n])
@@ -976,13 +1292,19 @@ func BaseAddConst_neon(c float32, dst []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		result := vd.Add(vc)
 		result.Store((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vd1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+4])))
 		result1 := vd1.Add(vc)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		result2 := vd2.Add(vc)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		result3 := vd3.Add(vc)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	for ; i < n; i++ {
 		dst[i] += c
@@ -998,13 +1320,19 @@ func BaseAddConst_neon_Float64(c float64, dst []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		result := vd.Add(vc)
 		result.Store((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vd1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+2])))
 		result1 := vd1.Add(vc)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		result2 := vd2.Add(vc)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		result3 := vd3.Add(vc)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	for ; i < n; i++ {
 		dst[i] += c
@@ -1020,7 +1348,7 @@ func BaseMulConstAddTo_neon_Float16(dst []hwy.Float16, a hwy.Float16, x []hwy.Fl
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vx := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[i:][0]))
 		result := va.MulAdd(vx, vd)
@@ -1029,6 +1357,14 @@ func BaseMulConstAddTo_neon_Float16(dst []hwy.Float16, a hwy.Float16, x []hwy.Fl
 		vx1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[i+8:][0]))
 		result1 := va.MulAdd(vx1, vd1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vx2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[i+16:][0]))
+		result2 := va.MulAdd(vx2, vd2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vx3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[i+24:][0]))
+		result3 := va.MulAdd(vx3, vd3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseMulConstAddTo_fallback_Float16(dst[i:n], a, x[i:n])
@@ -1044,7 +1380,7 @@ func BaseMulConstAddTo_neon_BFloat16(dst []hwy.BFloat16, a hwy.BFloat16, x []hwy
 	lanes := 8
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i:][0]))
 		vx := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[i:][0]))
 		result := va.MulAdd(vx, vd)
@@ -1053,6 +1389,14 @@ func BaseMulConstAddTo_neon_BFloat16(dst []hwy.BFloat16, a hwy.BFloat16, x []hwy
 		vx1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[i+8:][0]))
 		result1 := va.MulAdd(vx1, vd1)
 		result1.StorePtr(unsafe.Pointer(&dst[i+8:][0]))
+		vd2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+16:][0]))
+		vx2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[i+16:][0]))
+		result2 := va.MulAdd(vx2, vd2)
+		result2.StorePtr(unsafe.Pointer(&dst[i+16:][0]))
+		vd3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&dst[i+24:][0]))
+		vx3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[i+24:][0]))
+		result3 := va.MulAdd(vx3, vd3)
+		result3.StorePtr(unsafe.Pointer(&dst[i+24:][0]))
 	}
 	if i < n {
 		BaseMulConstAddTo_fallback_BFloat16(dst[i:n], a, x[i:n])
@@ -1068,7 +1412,7 @@ func BaseMulConstAddTo_neon(dst []float32, a float32, x []float32) {
 	lanes := 4
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i])))
 		vx := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&x[i])))
 		result := va.MulAdd(vx, vd)
@@ -1077,6 +1421,14 @@ func BaseMulConstAddTo_neon(dst []float32, a float32, x []float32) {
 		vx1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&x[i+4])))
 		result1 := va.MulAdd(vx1, vd1)
 		result1.Store((*[4]float32)(unsafe.Pointer(&dst[i+4])))
+		vd2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vx2 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&x[i+8])))
+		result2 := va.MulAdd(vx2, vd2)
+		result2.Store((*[4]float32)(unsafe.Pointer(&dst[i+8])))
+		vd3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&dst[i+12])))
+		vx3 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&x[i+12])))
+		result3 := va.MulAdd(vx3, vd3)
+		result3.Store((*[4]float32)(unsafe.Pointer(&dst[i+12])))
 	}
 	for ; i < n; i++ {
 		dst[i] += a * x[i]
@@ -1092,7 +1444,7 @@ func BaseMulConstAddTo_neon_Float64(dst []float64, a float64, x []float64) {
 	lanes := 2
 	var i int
 	i = 0
-	for ; i+lanes*2 <= n; i += lanes * 2 {
+	for ; i+lanes*4 <= n; i += lanes * 4 {
 		vd := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i])))
 		vx := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&x[i])))
 		result := va.MulAdd(vx, vd)
@@ -1101,6 +1453,14 @@ func BaseMulConstAddTo_neon_Float64(dst []float64, a float64, x []float64) {
 		vx1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&x[i+2])))
 		result1 := va.MulAdd(vx1, vd1)
 		result1.Store((*[2]float64)(unsafe.Pointer(&dst[i+2])))
+		vd2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vx2 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&x[i+4])))
+		result2 := va.MulAdd(vx2, vd2)
+		result2.Store((*[2]float64)(unsafe.Pointer(&dst[i+4])))
+		vd3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&dst[i+6])))
+		vx3 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&x[i+6])))
+		result3 := va.MulAdd(vx3, vd3)
+		result3.Store((*[2]float64)(unsafe.Pointer(&dst[i+6])))
 	}
 	for ; i < n; i++ {
 		dst[i] += a * x[i]

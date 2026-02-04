@@ -223,13 +223,13 @@ func (v Float16x8AVX2) Merge(other Float16x8AVX2, mask archsimd.Mask32x8) Float1
 
 func (v Float16x8AVX2) ReduceSum() float32 {
 	var buf [8]float32
-	v.data.StoreSlice(buf[:])
+	v.data.Store(&buf)
 	return buf[0] + buf[1] + buf[2] + buf[3] + buf[4] + buf[5] + buf[6] + buf[7]
 }
 
 func (v Float16x8AVX2) ReduceMax() float32 {
 	var buf [8]float32
-	v.data.StoreSlice(buf[:])
+	v.data.Store(&buf)
 	m := buf[0]
 	for i := 1; i < 8; i++ {
 		if buf[i] > m {
@@ -241,7 +241,7 @@ func (v Float16x8AVX2) ReduceMax() float32 {
 
 func (v Float16x8AVX2) ReduceMin() float32 {
 	var buf [8]float32
-	v.data.StoreSlice(buf[:])
+	v.data.Store(&buf)
 	m := buf[0]
 	for i := 1; i < 8; i++ {
 		if buf[i] < m {
@@ -281,16 +281,16 @@ func (v Float16x8AVX2) Data() archsimd.Float32x8 {
 
 func (v Float16x8AVX2) InterleaveLower(other Float16x8AVX2) Float16x8AVX2 {
 	var a, b [8]float32
-	v.data.StoreSlice(a[:])
-	other.data.StoreSlice(b[:])
+	v.data.Store(&a)
+	other.data.Store(&b)
 	result := [8]float32{a[0], b[0], a[1], b[1], a[2], b[2], a[3], b[3]}
 	return Float16x8AVX2{data: archsimd.LoadFloat32x8Slice(result[:])}
 }
 
 func (v Float16x8AVX2) InterleaveUpper(other Float16x8AVX2) Float16x8AVX2 {
 	var a, b [8]float32
-	v.data.StoreSlice(a[:])
-	other.data.StoreSlice(b[:])
+	v.data.Store(&a)
+	other.data.Store(&b)
 	result := [8]float32{a[4], b[4], a[5], b[5], a[6], b[6], a[7], b[7]}
 	return Float16x8AVX2{data: archsimd.LoadFloat32x8Slice(result[:])}
 }

@@ -38,11 +38,11 @@ func BaseDense_fallback_Float16(x []hwy.Float16, weight []hwy.Float16, bias []hw
 			acc3 := hwy.Zero[hwy.Float16]()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vW := hwy.Load(weight[wRow+p:])
-				vX0 := hwy.Load(x[xRow0+p:])
-				vX1 := hwy.Load(x[xRow1+p:])
-				vX2 := hwy.Load(x[xRow2+p:])
-				vX3 := hwy.Load(x[xRow3+p:])
+				vW := hwy.LoadSlice(weight[wRow+p:])
+				vX0 := hwy.LoadSlice(x[xRow0+p:])
+				vX1 := hwy.LoadSlice(x[xRow1+p:])
+				vX2 := hwy.LoadSlice(x[xRow2+p:])
+				vX3 := hwy.LoadSlice(x[xRow3+p:])
 				acc0 = hwy.MulAdd(vX0, vW, acc0)
 				acc1 = hwy.MulAdd(vX1, vW, acc1)
 				acc2 = hwy.MulAdd(vX2, vW, acc2)
@@ -79,8 +79,8 @@ func BaseDense_fallback_Float16(x []hwy.Float16, weight []hwy.Float16, bias []hw
 			acc := hwy.Zero[hwy.Float16]()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vX := hwy.Load(x[xRow+p:])
-				vW := hwy.Load(weight[wRow+p:])
+				vX := hwy.LoadSlice(x[xRow+p:])
+				vW := hwy.LoadSlice(weight[wRow+p:])
 				acc = hwy.MulAdd(vX, vW, acc)
 			}
 			sum := hwy.ReduceSum(acc).Float32()
@@ -127,11 +127,11 @@ func BaseDense_fallback_BFloat16(x []hwy.BFloat16, weight []hwy.BFloat16, bias [
 			acc3 := hwy.Zero[hwy.BFloat16]()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vW := hwy.Load(weight[wRow+p:])
-				vX0 := hwy.Load(x[xRow0+p:])
-				vX1 := hwy.Load(x[xRow1+p:])
-				vX2 := hwy.Load(x[xRow2+p:])
-				vX3 := hwy.Load(x[xRow3+p:])
+				vW := hwy.LoadSlice(weight[wRow+p:])
+				vX0 := hwy.LoadSlice(x[xRow0+p:])
+				vX1 := hwy.LoadSlice(x[xRow1+p:])
+				vX2 := hwy.LoadSlice(x[xRow2+p:])
+				vX3 := hwy.LoadSlice(x[xRow3+p:])
 				acc0 = hwy.MulAdd(vX0, vW, acc0)
 				acc1 = hwy.MulAdd(vX1, vW, acc1)
 				acc2 = hwy.MulAdd(vX2, vW, acc2)
@@ -168,8 +168,8 @@ func BaseDense_fallback_BFloat16(x []hwy.BFloat16, weight []hwy.BFloat16, bias [
 			acc := hwy.Zero[hwy.BFloat16]()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vX := hwy.Load(x[xRow+p:])
-				vW := hwy.Load(weight[wRow+p:])
+				vX := hwy.LoadSlice(x[xRow+p:])
+				vW := hwy.LoadSlice(weight[wRow+p:])
 				acc = hwy.MulAdd(vX, vW, acc)
 			}
 			sum := hwy.ReduceSum(acc).Float32()

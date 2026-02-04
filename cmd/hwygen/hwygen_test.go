@@ -882,22 +882,22 @@ func BaseAdd[T hwy.Floats](a, b, result []T) {
 	}
 }
 
-func TestLoadFullStoreFullTransformation(t *testing.T) {
+func TestLoadStoreTransformation(t *testing.T) {
 	// Create a temporary directory for test
 	tmpDir := t.TempDir()
 
-	// Create a test input file using LoadFull and StoreFull
+	// Create a test input file using Load and Store
 	// Note: Function must start with "Base" to be processed by hwygen
-	inputFile := filepath.Join(tmpDir, "loadfull.go")
-	content := `package testfull
+	inputFile := filepath.Join(tmpDir, "load.go")
+	content := `package testload
 
 import "github.com/ajroetker/go-highway/hwy"
 
-func BaseCopyFull[T hwy.FloatsNative](src, dst []T) {
+func BaseCopy[T hwy.FloatsNative](src, dst []T) {
 	n := hwy.NumLanes[T]()
 	for i := 0; i <= len(src)-n; i += n {
-		v := hwy.LoadFull(src[i:])
-		hwy.StoreFull(v, dst[i:])
+		v := hwy.Load(src[i:])
+		hwy.Store(v, dst[i:])
 	}
 }
 `
@@ -919,7 +919,7 @@ func BaseCopyFull[T hwy.FloatsNative](src, dst []T) {
 	}
 
 	// Read the generated AVX2 file
-	avx2Path := filepath.Join(tmpDir, "loadfull_avx2.gen.go")
+	avx2Path := filepath.Join(tmpDir, "load_avx2.gen.go")
 	avx2Content, err := os.ReadFile(avx2Path)
 	if err != nil {
 		t.Fatalf("Failed to read AVX2 output: %v", err)
@@ -927,9 +927,9 @@ func BaseCopyFull[T hwy.FloatsNative](src, dst []T) {
 
 	contentStr := string(avx2Content)
 
-	// Verify LoadFull was transformed to use unsafe.Pointer
+	// Verify Load was transformed to use unsafe.Pointer
 	if !strings.Contains(contentStr, "unsafe.Pointer") {
-		t.Error("Generated code missing unsafe.Pointer for LoadFull/StoreFull")
+		t.Error("Generated code missing unsafe.Pointer for Load/Store")
 	}
 
 	// Verify the pointer-to-array cast pattern exists
@@ -1043,8 +1043,9 @@ func BaseDecodeFloat32s(dst []float32, src []byte) {
 	}
 
 	// Also verify the SIMD operations use uint8 vectors
-	if !strings.Contains(contentStr, "LoadUint8x32Slice") {
-		t.Error("Expected LoadUint8x32Slice for uint8 AVX2 operations")
+	// hwy.Load generates pointer-based LoadUint8x32 (not LoadUint8x32Slice)
+	if !strings.Contains(contentStr, "LoadUint8x32") {
+		t.Error("Expected LoadUint8x32 for uint8 AVX2 operations")
 	}
 
 	// Test NEON target (should get lanes=16 for uint8, not lanes=4 for float32)
@@ -1073,5 +1074,76 @@ func BaseDecodeFloat32s(dst []float32, src []byte) {
 	}
 	if !strings.Contains(neonStr, "lanes := 16") {
 		t.Error("Expected lanes := 16 for uint8 NEON, but not found in generated code")
+	}
+}
+
+func TestNEONHalfPrecisionStoreSlice(t *testing.T) {
+	// Test that half-precision StoreSlice on NEON properly casts to []uint16
+	tmpDir := t.TempDir()
+
+	inputFile := filepath.Join(tmpDir, "halfprec_store.go")
+	content := `package testhalf
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseScale[T hwy.Floats](data []T, scale T) {
+	lanes := hwy.MaxLanes[T]()
+	scaleVec := hwy.Set(scale)
+	for i := 0; i < len(data); i += lanes {
+		v := hwy.LoadSlice(data[i:])
+		result := hwy.Mul(v, scaleVec)
+		hwy.StoreSlice(result, data[i:])
+	}
+}
+`
+
+	if err := os.WriteFile(inputFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create input file: %v", err)
+	}
+
+	gen := &Generator{
+		InputFile: inputFile,
+		OutputDir: tmpDir,
+		Targets:   []string{"neon"},
+	}
+
+	if err := gen.Run(); err != nil {
+		t.Fatalf("Generator.Run() failed: %v", err)
+	}
+
+	neonPath := filepath.Join(tmpDir, "halfprec_store_neon.gen.go")
+	neonContent, err := os.ReadFile(neonPath)
+	if err != nil {
+		t.Fatalf("Failed to read NEON output: %v", err)
+	}
+
+	neonStr := string(neonContent)
+
+	// For Float16 function, StoreSlice should cast slice to []uint16
+	// Look for the unsafe.Slice conversion pattern
+	if !strings.Contains(neonStr, "unsafe.Slice((*uint16)") {
+		t.Error("NEON Float16 StoreSlice should cast slice to []uint16 using unsafe.Slice")
+	}
+
+	// Extract just the Float16 function to check for proper conversion
+	float16Start := strings.Index(neonStr, "func BaseScale_neon_Float16")
+	float16End := strings.Index(neonStr, "func BaseScale_neon_BFloat16")
+	if float16Start == -1 || float16End == -1 {
+		t.Fatal("Could not find Float16 function in generated code")
+	}
+	float16Func := neonStr[float16Start:float16End]
+
+	// In the Float16 function, all StoreSlice calls should use unsafe.Slice
+	// Count StoreSlice calls and ensure they all have unsafe.Slice
+	storeSliceCalls := strings.Count(float16Func, ".StoreSlice(")
+	unsafeSliceCalls := strings.Count(float16Func, ".StoreSlice(unsafe.Slice(")
+
+	if storeSliceCalls != unsafeSliceCalls {
+		t.Errorf("Float16 function has %d StoreSlice calls but only %d use unsafe.Slice conversion",
+			storeSliceCalls, unsafeSliceCalls)
+	}
+
+	if storeSliceCalls == 0 {
+		t.Error("Float16 function should have StoreSlice calls")
 	}
 }

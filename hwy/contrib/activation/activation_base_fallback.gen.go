@@ -20,13 +20,13 @@ func BaseGELU_fallback_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := vOne.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		xScaled := hwy.Mul(x, vInvSqrt2)
 		erfX := math.BaseErfVec_fallback_Float16(xScaled)
 		onePlusErf := hwy.Add(vOne, erfX)
 		halfOnePlusErf := hwy.Mul(vHalf, onePlusErf)
 		result := hwy.Mul(x, halfOnePlusErf)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -45,13 +45,13 @@ func BaseGELU_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := vOne.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		xScaled := hwy.Mul(x, vInvSqrt2)
 		erfX := math.BaseErfVec_fallback_BFloat16(xScaled)
 		onePlusErf := hwy.Add(vOne, erfX)
 		halfOnePlusErf := hwy.Mul(vHalf, onePlusErf)
 		result := hwy.Mul(x, halfOnePlusErf)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -116,11 +116,11 @@ func BaseGELUApprox_fallback_Float16(input []hwy.Float16, output []hwy.Float16) 
 	lanes := vCoeff.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		xScaled := hwy.Mul(x, vCoeff)
 		sigmoidX := math.BaseSigmoidVec_fallback_Float16(xScaled)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -138,11 +138,11 @@ func BaseGELUApprox_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat1
 	lanes := vCoeff.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		xScaled := hwy.Mul(x, vCoeff)
 		sigmoidX := math.BaseSigmoidVec_fallback_BFloat16(xScaled)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -160,11 +160,11 @@ func BaseGELUApprox_fallback(input []float32, output []float32) {
 	lanes := vCoeff.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		xScaled := hwy.Mul(x, vCoeff)
 		sigmoidX := math.BaseSigmoidVec_fallback(xScaled)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i])
@@ -182,11 +182,11 @@ func BaseGELUApprox_fallback_Float64(input []float64, output []float64) {
 	lanes := vCoeff.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		xScaled := hwy.Mul(x, vCoeff)
 		sigmoidX := math.BaseSigmoidVec_fallback_Float64(xScaled)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i])
@@ -204,9 +204,9 @@ func BaseReLU_fallback_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := vZero.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		result := hwy.Max(x, vZero)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i].Float32() > 0 {
@@ -226,9 +226,9 @@ func BaseReLU_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := vZero.NumLanes()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		result := hwy.Max(x, vZero)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i].Float32() > 0 {
@@ -289,10 +289,10 @@ func BaseSiLU_fallback_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := hwy.MaxLanes[hwy.Float16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		sigmoidX := math.BaseSigmoidVec_fallback_Float16(x)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -309,10 +309,10 @@ func BaseSiLU_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := hwy.MaxLanes[hwy.BFloat16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		sigmoidX := math.BaseSigmoidVec_fallback_BFloat16(x)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -329,10 +329,10 @@ func BaseSiLU_fallback(input []float32, output []float32) {
 	lanes := hwy.MaxLanes[float32]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		sigmoidX := math.BaseSigmoidVec_fallback(x)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i])
@@ -349,10 +349,10 @@ func BaseSiLU_fallback_Float64(input []float64, output []float64) {
 	lanes := hwy.MaxLanes[float64]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		sigmoidX := math.BaseSigmoidVec_fallback_Float64(x)
 		result := hwy.Mul(x, sigmoidX)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i])
@@ -370,10 +370,10 @@ func BaseLeakyReLU_fallback_Float16(input []hwy.Float16, output []hwy.Float16, a
 	lanes := hwy.MaxLanes[hwy.Float16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		negPart := hwy.Mul(x, vAlpha)
 		result := hwy.Max(x, negPart)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i].Float32() > 0 {
@@ -393,10 +393,10 @@ func BaseLeakyReLU_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16
 	lanes := hwy.MaxLanes[hwy.BFloat16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		negPart := hwy.Mul(x, vAlpha)
 		result := hwy.Max(x, negPart)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i].Float32() > 0 {
@@ -459,9 +459,9 @@ func BaseTanh_fallback_Float16(input []hwy.Float16, output []hwy.Float16) {
 	lanes := hwy.MaxLanes[hwy.Float16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		result := math.BaseTanhVec_fallback_Float16(x)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -477,9 +477,9 @@ func BaseTanh_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16) {
 	lanes := hwy.MaxLanes[hwy.BFloat16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		result := math.BaseTanhVec_fallback_BFloat16(x)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		x := float64(input[i].Float32())
@@ -532,13 +532,13 @@ func BaseELU_fallback_Float16(input []hwy.Float16, output []hwy.Float16, alpha h
 	lanes := hwy.MaxLanes[hwy.Float16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		expX := math.BaseExpVec_fallback_Float16(x)
 		expM1 := hwy.Sub(expX, vOne)
 		negPart := hwy.Mul(vAlpha, expM1)
 		isPositive := hwy.Greater(x, vZero)
 		result := hwy.Merge(x, negPart, isPositive)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i].Float32() > 0 {
@@ -561,13 +561,13 @@ func BaseELU_fallback_BFloat16(input []hwy.BFloat16, output []hwy.BFloat16, alph
 	lanes := hwy.MaxLanes[hwy.BFloat16]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		expX := math.BaseExpVec_fallback_BFloat16(x)
 		expM1 := hwy.Sub(expX, vOne)
 		negPart := hwy.Mul(vAlpha, expM1)
 		isPositive := hwy.Greater(x, vZero)
 		result := hwy.Merge(x, negPart, isPositive)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i].Float32() > 0 {
@@ -590,13 +590,13 @@ func BaseELU_fallback(input []float32, output []float32, alpha float32) {
 	lanes := hwy.MaxLanes[float32]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		expX := math.BaseExpVec_fallback(x)
 		expM1 := hwy.Sub(expX, vOne)
 		negPart := hwy.Mul(vAlpha, expM1)
 		isPositive := hwy.Greater(x, vZero)
 		result := hwy.Merge(x, negPart, isPositive)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i] > 0 {
@@ -619,13 +619,13 @@ func BaseELU_fallback_Float64(input []float64, output []float64, alpha float64) 
 	lanes := hwy.MaxLanes[float64]()
 	ii := 0
 	for ; ii+lanes <= size; ii += lanes {
-		x := hwy.LoadFull(input[ii:])
+		x := hwy.Load(input[ii:])
 		expX := math.BaseExpVec_fallback_Float64(x)
 		expM1 := hwy.Sub(expX, vOne)
 		negPart := hwy.Mul(vAlpha, expM1)
 		isPositive := hwy.Greater(x, vZero)
 		result := hwy.Merge(x, negPart, isPositive)
-		hwy.StoreFull(result, output[ii:])
+		hwy.Store(result, output[ii:])
 	}
 	for i := ii; i < size; i++ {
 		if input[i] > 0 {

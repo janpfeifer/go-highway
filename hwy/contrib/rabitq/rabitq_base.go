@@ -48,18 +48,18 @@ func BaseBitProduct(code, q1, q2, q3, q4 []uint64) uint32 {
 	var i int
 	for i = 0; i+stride <= n; i += stride {
 		// Load vectors for first block
-		codeVec0 := hwy.Load(code[i:])
-		q1Vec0 := hwy.Load(q1[i:])
-		q2Vec0 := hwy.Load(q2[i:])
-		q3Vec0 := hwy.Load(q3[i:])
-		q4Vec0 := hwy.Load(q4[i:])
+		codeVec0 := hwy.LoadSlice(code[i:])
+		q1Vec0 := hwy.LoadSlice(q1[i:])
+		q2Vec0 := hwy.LoadSlice(q2[i:])
+		q3Vec0 := hwy.LoadSlice(q3[i:])
+		q4Vec0 := hwy.LoadSlice(q4[i:])
 
 		// Load vectors for second block
-		codeVec1 := hwy.Load(code[i+lanes:])
-		q1Vec1 := hwy.Load(q1[i+lanes:])
-		q2Vec1 := hwy.Load(q2[i+lanes:])
-		q3Vec1 := hwy.Load(q3[i+lanes:])
-		q4Vec1 := hwy.Load(q4[i+lanes:])
+		codeVec1 := hwy.LoadSlice(code[i+lanes:])
+		q1Vec1 := hwy.LoadSlice(q1[i+lanes:])
+		q2Vec1 := hwy.LoadSlice(q2[i+lanes:])
+		q3Vec1 := hwy.LoadSlice(q3[i+lanes:])
+		q4Vec1 := hwy.LoadSlice(q4[i+lanes:])
 
 		// AND and popcount for weight 1
 		and1_0 := hwy.And(codeVec0, q1Vec0)
@@ -96,11 +96,11 @@ func BaseBitProduct(code, q1, q2, q3, q4 []uint64) uint32 {
 
 	// Process remaining full vectors
 	for i+lanes <= n {
-		codeVec := hwy.Load(code[i:])
-		q1Vec := hwy.Load(q1[i:])
-		q2Vec := hwy.Load(q2[i:])
-		q3Vec := hwy.Load(q3[i:])
-		q4Vec := hwy.Load(q4[i:])
+		codeVec := hwy.LoadSlice(code[i:])
+		q1Vec := hwy.LoadSlice(q1[i:])
+		q2Vec := hwy.LoadSlice(q2[i:])
+		q3Vec := hwy.LoadSlice(q3[i:])
+		q4Vec := hwy.LoadSlice(q4[i:])
 
 		pop1 := hwy.PopCount(hwy.And(codeVec, q1Vec))
 		pop2 := hwy.PopCount(hwy.And(codeVec, q2Vec))
@@ -179,7 +179,7 @@ func BaseQuantizeVectors(
 
 		// Process full SIMD vectors
 		for dim+lanes <= dims {
-			vecData := hwy.Load(vec[dim:])
+			vecData := hwy.LoadSlice(vec[dim:])
 
 			// Get sign bits: 1 if negative, 0 otherwise
 			// We'll compute this by checking if value < 0
