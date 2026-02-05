@@ -25,7 +25,7 @@ import (
 // Set to true for debugging, false for production.
 var debugFusion = os.Getenv("DEBUG_FUSION") != ""
 
-func debugPrint(format string, args ...interface{}) {
+func debugPrint(format string, args ...any) {
 	if debugFusion {
 		fmt.Printf("[fusion] "+format+"\n", args...)
 	}
