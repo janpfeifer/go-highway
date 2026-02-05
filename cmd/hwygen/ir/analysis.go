@@ -14,6 +14,8 @@
 
 package ir
 
+import "slices"
+
 // Analyze performs data flow analysis on an IRFunction.
 // It computes:
 // - Producer-consumer relationships between nodes
@@ -277,6 +279,8 @@ func IdentifyAllocationsToEliminate(fn *IRFunction) []*IRNode {
 }
 
 // canEliminateAlloc checks if an allocation can be replaced with registers.
+// This returns true for same-loop elimination only. For cross-loop elimination,
+// use IdentifyCrossLoopAllocations.
 func canEliminateAlloc(alloc *IRNode) bool {
 	// Allocation must have exactly one consumer (the loop that uses it)
 	if len(alloc.Consumers) != 1 {
@@ -314,6 +318,108 @@ func canEliminateAlloc(alloc *IRNode) bool {
 	}
 
 	return hasWrite && hasRead
+}
+
+// CrossLoopTempArray represents a temporary array that is written in one loop
+// and read in another loop, making it a candidate for cross-loop fusion.
+type CrossLoopTempArray struct {
+	Alloc        *IRNode // The allocation node
+	WriteLoop    *IRNode // Loop that writes to the array
+	ReadLoop     *IRNode // Loop that reads from the array
+	WriteStore   *IRNode // The store operation in the write loop
+	ReadLoad     *IRNode // The load operation in the read loop
+	ArrayName    string  // The variable name of the array
+}
+
+// IdentifyCrossLoopAllocations finds temporary arrays that are written in one loop
+// and read in another, which are candidates for cross-loop fusion.
+func IdentifyCrossLoopAllocations(fn *IRFunction) []CrossLoopTempArray {
+	var candidates []CrossLoopTempArray
+
+	// Build a map of array name -> allocation
+	allocMap := make(map[string]*IRNode)
+	for _, node := range fn.AllNodes {
+		if node.Kind == OpKindAlloc && len(node.Outputs) > 0 {
+			allocMap[node.Outputs[0]] = node
+		}
+	}
+
+	// For each allocation, find write and read loops
+	for arrayName, alloc := range allocMap {
+		var writeLoop, readLoop *IRNode
+		var writeStore, readLoad *IRNode
+
+		// Scan all loops in the function
+		for _, op := range fn.Operations {
+			if op.Kind != OpKindLoop {
+				continue
+			}
+
+			// Check if this loop writes to the array
+			for _, child := range op.Children {
+				if child.Kind == OpKindStore && slices.Contains(child.InputNames, arrayName) {
+					writeLoop = op
+					writeStore = child
+				}
+			}
+
+			// Check if this loop reads from the array
+			for _, child := range op.Children {
+				if child.Kind == OpKindLoad && slices.Contains(child.InputNames, arrayName) {
+					// Only consider as read loop if different from write loop
+					if writeLoop != nil && op.ID != writeLoop.ID {
+						readLoop = op
+						readLoad = child
+					}
+				}
+			}
+		}
+
+		// If we found both write and read loops with same iteration space
+		if writeLoop != nil && readLoop != nil {
+			if writeLoop.LoopRange != nil && readLoop.LoopRange != nil &&
+				writeLoop.LoopRange.Same(readLoop.LoopRange) {
+				candidates = append(candidates, CrossLoopTempArray{
+					Alloc:      alloc,
+					WriteLoop:  writeLoop,
+					ReadLoop:   readLoop,
+					WriteStore: writeStore,
+					ReadLoad:   readLoad,
+					ArrayName:  arrayName,
+				})
+			}
+		}
+	}
+
+	return candidates
+}
+
+// FindLoopChain finds a chain of loops connected by temporary arrays.
+// Returns loops in execution order that can be fused together.
+func FindLoopChain(fn *IRFunction, startLoop *IRNode, tempArrays []CrossLoopTempArray) []*IRNode {
+	chain := []*IRNode{startLoop}
+	visited := map[int]bool{startLoop.ID: true}
+
+	// Follow the chain: if this loop writes to a temp array, add the reader
+	for {
+		currentLoop := chain[len(chain)-1]
+		foundNext := false
+
+		for _, temp := range tempArrays {
+			if temp.WriteLoop.ID == currentLoop.ID && !visited[temp.ReadLoop.ID] {
+				chain = append(chain, temp.ReadLoop)
+				visited[temp.ReadLoop.ID] = true
+				foundNext = true
+				break
+			}
+		}
+
+		if !foundNext {
+			break
+		}
+	}
+
+	return chain
 }
 
 // ComputeDepthFirst returns nodes in depth-first order for processing.

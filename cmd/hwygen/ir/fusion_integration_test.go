@@ -15,6 +15,7 @@
 package ir
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -398,6 +399,42 @@ func countLoops(fn *IRFunction) int {
 	return count
 }
 
+// getLoopPurpose returns a description of what a loop does based on its children
+func getLoopPurpose(loop *IRNode) string {
+	var ops []string
+	for _, child := range loop.Children {
+		if child.Kind == OpKindStore {
+			for _, name := range child.InputNames {
+				if name != loop.LoopRange.LoopVar && !strings.HasPrefix(name, "v") {
+					ops = append(ops, "store→"+name)
+					break
+				}
+			}
+		}
+		if child.Kind == OpKindLoad {
+			for _, name := range child.InputNames {
+				if name != loop.LoopRange.LoopVar && !strings.HasPrefix(name, "v") {
+					ops = append(ops, "load←"+name)
+					break
+				}
+			}
+		}
+		if child.Kind == OpKindReduction {
+			ops = append(ops, "reduce("+child.Op+")")
+		}
+		if child.Op == "Exp" {
+			ops = append(ops, "exp")
+		}
+		if child.Op == "Sub" {
+			ops = append(ops, "sub")
+		}
+	}
+	if len(ops) == 0 {
+		return "unknown"
+	}
+	return strings.Join(ops, ",")
+}
+
 // TestCompareToHandwrittenC compares structural properties of the generated
 // fusion output against the handwritten softmax_neon_arm64.c reference.
 func TestCompareToHandwrittenC(t *testing.T) {
@@ -429,17 +466,139 @@ func TestCompareToHandwrittenC(t *testing.T) {
 	stats = ComputeFusionStats(fn)
 	t.Logf("  After: %d fusion groups", stats.FusionGroups)
 
-	// Document the gap between current and optimal
-	allocsIdentified := IdentifyAllocationsToEliminate(fn)
-	t.Logf("  Allocations identified for elimination: %d", len(allocsIdentified))
+	// Show fusion groups
+	t.Logf("  Fusion groups: %d", len(fn.FusionGroups))
+	for i, group := range fn.FusionGroups {
+		t.Logf("    Group %d (%s): %d members, %d eliminated allocs",
+			i, group.Pattern, len(group.Members), len(group.EliminatedAllocs))
+	}
 
-	if len(allocsIdentified) == 0 {
-		t.Log("  Note: Cross-loop allocation elimination not yet implemented")
-		t.Log("  The softmax pattern requires fusing:")
-		t.Log("    - shift loop (write to shifted[])")
-		t.Log("    - exp loop (read from shifted[], write to output[])")
-		t.Log("    - sum loop (read from output[])")
-		t.Log("  into a single fused loop to eliminate shifted[]")
+	// Show cross-loop temporaries detected
+	crossLoopTemps := IdentifyCrossLoopAllocations(fn)
+	t.Logf("  Cross-loop temp arrays detected: %d", len(crossLoopTemps))
+	for _, temp := range crossLoopTemps {
+		t.Logf("    - %s: write in loop %d, read in loop %d",
+			temp.ArrayName, temp.WriteLoop.ID, temp.ReadLoop.ID)
+	}
+
+	// Document the gap
+	t.Log("")
+	if stats.EliminatedAllocs > 0 {
+		t.Log("  ✓ Cross-loop allocation elimination working!")
+	} else {
+		t.Log("  Note: No allocations eliminated in this test")
+	}
+
+	// Debug: show which loops are fused
+	t.Log("")
+	t.Log("  Loop fusion status:")
+	for _, op := range fn.Operations {
+		if op.Kind == OpKindLoop {
+			status := "unfused"
+			if op.FusionGroup >= 0 {
+				status = fn.FusionGroups[op.FusionGroup].Pattern
+			}
+			t.Logf("    Loop %d (%s): %s (FusionGroup=%d)",
+				op.ID, getLoopPurpose(op), status, op.FusionGroup)
+		}
+	}
+
+	// Compare to target
+	t.Log("")
+	t.Log("  Target (handwritten C): 3 passes")
+	t.Logf("  Current: %d passes (after fusion)", stats.FusedPasses)
+	t.Logf("    - Original: %d passes", stats.OriginalPasses)
+	t.Logf("    - Eliminated allocs: %d", stats.EliminatedAllocs)
+	t.Logf("    - Fused loops saved: %d", stats.OriginalPasses-stats.FusedPasses-stats.EliminatedAllocs)
+}
+
+// TestSumLoopFusion tests that the sum loop gets fused with the exp loop.
+func TestSumLoopFusion(t *testing.T) {
+	fn := buildSoftmaxIR()
+
+	// Run analysis
+	Analyze(fn)
+
+	// Find cross-loop temps before fusion
+	crossLoopTemps := IdentifyCrossLoopAllocations(fn)
+	t.Logf("Cross-loop temps before fusion: %d", len(crossLoopTemps))
+	for _, temp := range crossLoopTemps {
+		t.Logf("  %s: writeLoop=%d, readLoop=%d", temp.ArrayName, temp.WriteLoop.ID, temp.ReadLoop.ID)
+	}
+
+	// Find the exp loop (loop 7 in the test)
+	var expLoop *IRNode
+	for _, temp := range crossLoopTemps {
+		if temp.ReadLoop != nil {
+			expLoop = temp.ReadLoop
+			break
+		}
+	}
+
+	if expLoop == nil {
+		t.Fatal("expLoop not found")
+	}
+	t.Logf("expLoop ID: %d", expLoop.ID)
+
+	// Find what the exp loop writes to
+	var outputArrayName string
+	for _, child := range expLoop.Children {
+		t.Logf("  expLoop child: %s (Kind=%s, InputNames=%v)", child.Op, child.Kind, child.InputNames)
+		if child.Kind == OpKindStore {
+			for _, name := range child.InputNames {
+				if name != expLoop.LoopRange.LoopVar {
+					outputArrayName = name
+					break
+				}
+			}
+		}
+	}
+	t.Logf("outputArrayName: %q", outputArrayName)
+
+	// Find candidate sum loops
+	for _, op := range fn.Operations {
+		if op.Kind != OpKindLoop || op.ID == expLoop.ID {
+			continue
+		}
+		t.Logf("Checking loop %d (FusionGroup=%d):", op.ID, op.FusionGroup)
+		for _, child := range op.Children {
+			t.Logf("  child: %s (Kind=%s, InputNames=%v)", child.Op, child.Kind, child.InputNames)
+			if child.Kind == OpKindLoad {
+				if slices.Contains(child.InputNames, outputArrayName) {
+					t.Logf("  -> Found Load from %s!", outputArrayName)
+				}
+			}
+		}
+	}
+
+	// Apply fusion
+	ApplyFusionRules(fn)
+	OptimizeSoftmax(fn)
+
+	// Check results
+	t.Log("")
+	t.Log("After fusion:")
+	for _, op := range fn.Operations {
+		if op.Kind == OpKindLoop {
+			t.Logf("  Loop %d: FusionGroup=%d", op.ID, op.FusionGroup)
+		}
+	}
+
+	// Check if sum loop is fused
+	var sumLoop *IRNode
+	for _, op := range fn.Operations {
+		if op.Kind == OpKindLoop {
+			for _, child := range op.Children {
+				if child.Kind == OpKindReduction || child.Op == "Add" {
+					sumLoop = op
+					break
+				}
+			}
+		}
+	}
+
+	if sumLoop != nil && sumLoop.FusionGroup < 0 {
+		t.Errorf("Sum loop %d should be fused but has FusionGroup=%d", sumLoop.ID, sumLoop.FusionGroup)
 	}
 }
 

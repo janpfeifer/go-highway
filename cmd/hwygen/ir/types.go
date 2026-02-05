@@ -168,6 +168,10 @@ type IRNode struct {
 	// (typically the reduction or final store).
 	IsFusionRoot bool
 
+	// IsFusionEliminated is true if this node should be eliminated during
+	// code emission (e.g., store/load pair replaced by register passing).
+	IsFusionEliminated bool
+
 	// ---- Source tracking ----
 
 	// ASTNode is the original Go AST node, preserved for error messages.

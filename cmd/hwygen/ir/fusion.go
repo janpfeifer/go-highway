@@ -15,9 +15,21 @@
 package ir
 
 import (
+	"fmt"
+	"os"
 	"slices"
 	"sort"
 )
+
+// debugFusion enables debug output for fusion passes.
+// Set to true for debugging, false for production.
+var debugFusion = os.Getenv("DEBUG_FUSION") != ""
+
+func debugPrint(format string, args ...interface{}) {
+	if debugFusion {
+		fmt.Printf("[fusion] "+format+"\n", args...)
+	}
+}
 
 // FusionRule defines a pattern for fusing operations.
 type FusionRule struct {
@@ -429,74 +441,215 @@ func ComputeFusionStats(fn *IRFunction) FusionStats {
 
 // OptimizeSoftmax applies softmax-specific fusion optimizations.
 // This implements the 5→3 pass reduction from the plan:
-//   Before: max, alloc shifted, loop shift, loop exp+sum, loop normalize
-//   After:  max, loop exp+sum (fused), loop normalize
+//
+//	Before: max, alloc shifted, loop shift, loop exp, loop sum, loop normalize
+//	After:  max, loop (shift+exp+sum fused), loop normalize
+//
+// The key optimization is fusing loops connected by temporary arrays like shifted[].
 func OptimizeSoftmax(fn *IRFunction) {
-	// Find the softmax pattern:
-	// 1. ReduceMax → max
-	// 2. Alloc shifted
-	// 3. Loop: shifted[i] = input[i] - max
-	// 4. Loop (BaseApply): output[i] = exp(shifted[i]); sum += output[i]
-	// 5. Loop: output[i] *= 1/sum
+	// Step 1: Find cross-loop temporary arrays
+	crossLoopTemps := IdentifyCrossLoopAllocations(fn)
 
-	// Step 1: Identify allocations that are consumed by a single loop
-	// and produced by another loop
-	allocsToEliminate := IdentifyAllocationsToEliminate(fn)
+	if len(crossLoopTemps) == 0 {
+		return
+	}
 
-	// Step 2: For each such allocation, try to fuse the producer and consumer loops
-	for _, alloc := range allocsToEliminate {
-		// Find the producer loop (writes to alloc)
-		var producerLoop *IRNode
-		for _, consumer := range alloc.Consumers {
-			if consumer.Kind == OpKindLoop {
-				producerLoop = consumer
-				break
-			}
-		}
-
-		if producerLoop == nil {
+	// Step 2: For each temp array, fuse the write and read loops
+	for _, temp := range crossLoopTemps {
+		// Skip if already fused
+		if temp.WriteLoop.FusionGroup >= 0 || temp.ReadLoop.FusionGroup >= 0 {
 			continue
 		}
 
-		// Find consumer loop (reads from alloc)
-		var consumerLoop *IRNode
-		for _, op := range fn.Operations {
-			if op.Kind == OpKindLoop && op.ID != producerLoop.ID {
-				// Check if this loop reads from the allocation
-				for _, child := range op.Children {
-					if child.Kind == OpKindLoad {
-						if slices.Contains(child.InputNames, alloc.Outputs[0]) {
-							consumerLoop = op
-							break
-						}
-					}
+		// Find the full chain of loops connected by temp arrays
+		chain := FindLoopChain(fn, temp.WriteLoop, crossLoopTemps)
+
+		if len(chain) < 2 {
+			continue
+		}
+
+		// Create a fusion group for the entire chain
+		nextID := len(fn.FusionGroups)
+		members := []int{temp.Alloc.ID}
+		eliminatedAllocs := []int{temp.Alloc.ID}
+
+		for _, loop := range chain {
+			members = append(members, loop.ID)
+			// Also add children of each loop
+			for _, child := range loop.Children {
+				members = append(members, child.ID)
+			}
+		}
+
+		// The root is the last loop in the chain
+		rootLoop := chain[len(chain)-1]
+
+		group := FusionGroup{
+			ID:               nextID,
+			Root:             rootLoop.ID,
+			Members:          members,
+			Pattern:          "CrossLoopFusion",
+			LoopRange:        temp.WriteLoop.LoopRange.Clone(),
+			EliminatedAllocs: eliminatedAllocs,
+		}
+
+		// Mark all nodes as fused
+		temp.Alloc.FusionGroup = nextID
+		temp.Alloc.IsFusionEliminated = true
+
+		for _, loop := range chain {
+			loop.FusionGroup = nextID
+			for _, child := range loop.Children {
+				child.FusionGroup = nextID
+			}
+		}
+		rootLoop.IsFusionRoot = true
+
+		// Mark the load/store pair for elimination
+		if temp.WriteStore != nil {
+			temp.WriteStore.IsFusionEliminated = true
+		}
+		if temp.ReadLoad != nil {
+			temp.ReadLoad.IsFusionEliminated = true
+		}
+
+		fn.FusionGroups = append(fn.FusionGroups, group)
+	}
+
+	// Step 3: Also try to fuse the sum accumulation loop if connected
+	// Look for loop that reads from output[] after the exp loop
+	fuseSumLoop(fn, crossLoopTemps)
+}
+
+// fuseSumLoop tries to fuse the sum accumulation loop into the exp loop.
+// Pattern: exp loop writes to output[], sum loop reads from output[] immediately after.
+func fuseSumLoop(fn *IRFunction, crossLoopTemps []CrossLoopTempArray) {
+	// Find the exp loop (writes to output)
+	var expLoop *IRNode
+	for _, temp := range crossLoopTemps {
+		if temp.ReadLoop != nil {
+			// The read loop for shifted[] is the exp loop
+			expLoop = temp.ReadLoop
+			break
+		}
+	}
+
+	if expLoop == nil {
+		debugPrint("fuseSumLoop: expLoop is nil, returning")
+		return
+	}
+	debugPrint("fuseSumLoop: found expLoop ID=%d", expLoop.ID)
+
+	// Find what array the exp loop writes to (usually "output")
+	var outputArrayName string
+	for _, child := range expLoop.Children {
+		if child.Kind == OpKindStore {
+			for _, name := range child.InputNames {
+				// The first InputName that's not the loop variable is the array
+				if name != expLoop.LoopRange.LoopVar {
+					outputArrayName = name
+					break
 				}
 			}
 		}
+	}
 
-		if consumerLoop == nil {
+	if outputArrayName == "" {
+		debugPrint("fuseSumLoop: outputArrayName is empty, returning")
+		return
+	}
+	debugPrint("fuseSumLoop: outputArrayName=%s", outputArrayName)
+
+	// Find the sum loop (reads from output AND has a reduction)
+	var sumLoop *IRNode
+	var sumLoad *IRNode
+	for _, op := range fn.Operations {
+		if op.Kind != OpKindLoop || op.ID == expLoop.ID {
 			continue
 		}
-
-		// Create a fusion group for these loops
-		if producerLoop.LoopRange.Same(consumerLoop.LoopRange) {
-			nextID := len(fn.FusionGroups)
-			group := FusionGroup{
-				ID:               nextID,
-				Root:             consumerLoop.ID,
-				Members:          []int{alloc.ID, producerLoop.ID, consumerLoop.ID},
-				Pattern:          "SoftmaxFusion",
-				LoopRange:        producerLoop.LoopRange.Clone(),
-				EliminatedAllocs: []int{alloc.ID},
-			}
-
-			// Mark nodes as fused
-			alloc.FusionGroup = nextID
-			producerLoop.FusionGroup = nextID
-			consumerLoop.FusionGroup = nextID
-			consumerLoop.IsFusionRoot = true
-
-			fn.FusionGroups = append(fn.FusionGroups, group)
+		if op.FusionGroup >= 0 {
+			debugPrint("fuseSumLoop: loop %d already fused (group=%d), skipping", op.ID, op.FusionGroup)
+			continue // Already fused
 		}
+
+		// Check if this loop reads from output AND has a reduction
+		var foundLoad *IRNode
+		hasReduction := false
+		for _, child := range op.Children {
+			if child.Kind == OpKindLoad && slices.Contains(child.InputNames, outputArrayName) {
+				foundLoad = child
+			}
+			if child.Kind == OpKindReduction || child.Op == "Add" || child.Op == "ReduceSum" {
+				hasReduction = true
+			}
+		}
+
+		if foundLoad != nil && hasReduction {
+			sumLoop = op
+			sumLoad = foundLoad
+			debugPrint("fuseSumLoop: found sumLoop=%d (reads from %s, has reduction)", op.ID, outputArrayName)
+			break // Found the right loop
+		}
+	}
+
+	if sumLoop == nil {
+		debugPrint("fuseSumLoop: no sumLoop with reduction found, returning")
+		return
+	}
+	if !sumLoop.LoopRange.Same(expLoop.LoopRange) {
+		debugPrint("fuseSumLoop: loop ranges don't match, returning")
+		return
+	}
+	debugPrint("fuseSumLoop: sumLoop=%d, loop ranges match, continuing", sumLoop.ID)
+
+	// Find or create the fusion group for expLoop
+	var group *FusionGroup
+	for i := range fn.FusionGroups {
+		if slices.Contains(fn.FusionGroups[i].Members, expLoop.ID) {
+			group = &fn.FusionGroups[i]
+			break
+		}
+	}
+
+	if group == nil {
+		// Create new group if exp loop wasn't already fused
+		nextID := len(fn.FusionGroups)
+		group = &FusionGroup{
+			ID:        nextID,
+			Root:      expLoop.ID,
+			Members:   []int{expLoop.ID},
+			Pattern:   "ExpSumFusion",
+			LoopRange: expLoop.LoopRange.Clone(),
+		}
+		expLoop.FusionGroup = nextID
+		fn.FusionGroups = append(fn.FusionGroups, *group)
+		group = &fn.FusionGroups[len(fn.FusionGroups)-1]
+	}
+
+	// Add sum loop and its children to the group
+	group.Members = append(group.Members, sumLoop.ID)
+	sumLoop.FusionGroup = group.ID
+	for _, child := range sumLoop.Children {
+		if !slices.Contains(group.Members, child.ID) {
+			group.Members = append(group.Members, child.ID)
+			child.FusionGroup = group.ID
+		}
+	}
+
+	// Update pattern name
+	group.Pattern = "CrossLoopFusion+Sum"
+
+	// Mark the load as eliminated (we read directly from the exp result)
+	if sumLoad != nil {
+		sumLoad.IsFusionEliminated = true
+	}
+
+	// Update root to be the sum loop (later in execution)
+	if sumLoop.ID > group.Root {
+		if oldRoot := fn.GetNode(group.Root); oldRoot != nil {
+			oldRoot.IsFusionRoot = false
+		}
+		group.Root = sumLoop.ID
+		sumLoop.IsFusionRoot = true
 	}
 }
