@@ -45,6 +45,10 @@ jobs:
           echo "$(go1.26rc2 env GOROOT)/bin" >> $GITHUB_PATH
           echo "GOEXPERIMENT=simd" >> $GITHUB_ENV
 
+      - name: Install ARM64 cross-compilation headers
+        if: runner.arch != 'ARM64'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Verify Go version
         run: go version
 
