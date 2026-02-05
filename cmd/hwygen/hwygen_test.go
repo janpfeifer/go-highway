@@ -1147,3 +1147,167 @@ func BaseScale[T hwy.Floats](data []T, scale T) {
 		t.Error("Float16 function should have StoreSlice calls")
 	}
 }
+
+// TestCModeExpGeneration verifies that -c mode generates correct C code for the
+// exp function across element types. This validates:
+// - f32: native NEON path with correct intrinsics and hex constants
+// - f16: promoted math path (load f16, promote to f32, compute, demote back)
+// - bf16: promoted math path with bfloat16 load/store intrinsics
+//
+// These were previously hand-written in hwy/c/ files; hwygen now generates them.
+func TestCModeExpGeneration(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a minimal Vec→Vec function named BaseExpVec.
+	// The C emitter dispatches on function name, not body content.
+	inputFile := filepath.Join(tmpDir, "exp_base.go")
+	content := `package testexp
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseExpVec[T hwy.Floats](x hwy.Vec[T]) hwy.Vec[T] {
+	return hwy.Mul(x, x)
+}
+`
+	if err := os.WriteFile(inputFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create input file: %v", err)
+	}
+
+	gen := &Generator{
+		InputFile: inputFile,
+		OutputDir: tmpDir,
+		Targets:   []string{"neon"},
+		CMode:     true,
+	}
+
+	if err := gen.Run(); err != nil {
+		t.Fatalf("Generator.Run() in CMode failed: %v", err)
+	}
+
+	// ---- f32: native NEON path ----
+	f32Path := filepath.Join(tmpDir, "baseexpvec_c_f32_neon_arm64.c")
+	f32Content, err := os.ReadFile(f32Path)
+	if err != nil {
+		t.Fatalf("Failed to read f32 C file: %v", err)
+	}
+	f32 := string(f32Content)
+
+	// Verify function signature uses float pointers
+	if !strings.Contains(f32, "void exp_c_f32_neon(float *input, float *result, long *len)") {
+		t.Error("f32: expected float pointer signature")
+	}
+
+	// Verify NEON f32 intrinsics
+	for _, intrinsic := range []string{
+		"vld1q_f32",  // vector load
+		"vst1q_f32",  // vector store
+		"vfmaq_f32",  // fused multiply-add (Horner polynomial)
+		"vrndnq_f32", // round to nearest (range reduction)
+		"vfmsq_f32",  // fused multiply-subtract
+	} {
+		if !strings.Contains(f32, intrinsic) {
+			t.Errorf("f32: missing NEON intrinsic %q", intrinsic)
+		}
+	}
+
+	// Verify hex constant for invLn2 (1/ln(2) = 1.4426950408889634)
+	if !strings.Contains(f32, "0x3FB8AA3B") {
+		t.Error("f32: missing hex constant 0x3FB8AA3B (invLn2)")
+	}
+
+	// Verify 3-tier loop structure: main (4 vectors), single, scalar
+	if !strings.Contains(f32, "i + 15 < n; i += 16") {
+		t.Error("f32: missing main loop (16 elements = 4 vectors of 4)")
+	}
+	if !strings.Contains(f32, "i + 3 < n; i += 4") {
+		t.Error("f32: missing single vector loop (4 elements)")
+	}
+	if !strings.Contains(f32, "for (; i < n; i++)") {
+		t.Error("f32: missing scalar tail loop")
+	}
+
+	// ---- f16: promoted math path (load f16, compute in f32, store f16) ----
+	f16Path := filepath.Join(tmpDir, "baseexpvec_c_f16_neon_arm64.c")
+	f16Content, err := os.ReadFile(f16Path)
+	if err != nil {
+		t.Fatalf("Failed to read f16 C file: %v", err)
+	}
+	f16 := string(f16Content)
+
+	// Verify function signature uses unsigned short (f16 storage type)
+	if !strings.Contains(f16, "void exp_c_f16_neon(unsigned short *input, unsigned short *result, long *len)") {
+		t.Error("f16: expected unsigned short pointer signature")
+	}
+
+	// Verify promoted math comment
+	if !strings.Contains(f16, "promoted Exp via f32 polynomial") {
+		t.Error("f16: missing promoted math comment")
+	}
+
+	// Verify f16 load intrinsic
+	if !strings.Contains(f16, "vld1q_f16") {
+		t.Error("f16: missing vld1q_f16 load intrinsic")
+	}
+
+	// Verify f16→f32 promotion intrinsics
+	if !strings.Contains(f16, "vcvt_f32_f16") {
+		t.Error("f16: missing vcvt_f32_f16 promote intrinsic")
+	}
+
+	// Verify computation happens in f32 (not f16)
+	if !strings.Contains(f16, "float32x4_t") {
+		t.Error("f16: computation should use float32x4_t vectors")
+	}
+	if !strings.Contains(f16, "vfmaq_f32") {
+		t.Error("f16: Horner polynomial should use f32 FMA")
+	}
+
+	// Verify f32→f16 demotion and store
+	if !strings.Contains(f16, "vcvt_f16_f32") {
+		t.Error("f16: missing vcvt_f16_f32 demote intrinsic")
+	}
+	if !strings.Contains(f16, "vst1q_f16") {
+		t.Error("f16: missing vst1q_f16 store intrinsic")
+	}
+
+	// Verify constants are f32 (not f64)
+	if !strings.Contains(f16, "float32x4_t invLn2") {
+		t.Error("f16: promoted constants should be float32x4_t")
+	}
+	if strings.Contains(f16, "float64x2_t") {
+		t.Error("f16: should NOT contain float64x2_t (was using wrong legacy path)")
+	}
+
+	// ---- bf16: promoted math with bfloat16 intrinsics ----
+	bf16Path := filepath.Join(tmpDir, "baseexpvec_c_bf16_neon_arm64.c")
+	bf16Content, err := os.ReadFile(bf16Path)
+	if err != nil {
+		t.Fatalf("Failed to read bf16 C file: %v", err)
+	}
+	bf16 := string(bf16Content)
+
+	// Verify bf16 function signature
+	if !strings.Contains(bf16, "void exp_c_bf16_neon(unsigned short *input, unsigned short *result, long *len)") {
+		t.Error("bf16: expected unsigned short pointer signature")
+	}
+
+	// Verify bf16 load intrinsic
+	if !strings.Contains(bf16, "vld1q_bf16") {
+		t.Error("bf16: missing vld1q_bf16 load intrinsic")
+	}
+
+	// Verify bf16→f32 promotion (bit-shift pattern for bfloat16)
+	if !strings.Contains(bf16, "vshll_n_u16") {
+		t.Error("bf16: missing vshll_n_u16 for bf16→f32 promotion")
+	}
+
+	// Verify computation in f32
+	if !strings.Contains(bf16, "float32x4_t") {
+		t.Error("bf16: computation should use float32x4_t vectors")
+	}
+
+	// Verify f32→bf16 demotion
+	if !strings.Contains(bf16, "vst1q_bf16") {
+		t.Error("bf16: missing vst1q_bf16 store intrinsic")
+	}
+}

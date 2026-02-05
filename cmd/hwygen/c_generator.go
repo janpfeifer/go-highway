@@ -103,26 +103,30 @@ func (g *Generator) runCMode(result *ParseResult) error {
 			continue
 		}
 
-		// Compile all C files with GOAT
-		fmt.Printf("Compiling %d C files with GOAT...\n", len(cFiles))
-		for _, cFile := range cFiles {
-			profile := getCProfileForFile(cFile, target)
-			if err := runGOAT(cFile, profile); err != nil {
-				return fmt.Errorf("GOAT compile %s: %w", cFile, err)
+		// If -asm mode, compile C files with GOAT and generate wrappers
+		if g.AsmMode {
+			fmt.Printf("Compiling %d C files with GOAT...\n", len(cFiles))
+			for _, cFile := range cFiles {
+				profile := getCProfileForFile(cFile, target)
+				if err := runGOAT(cFile, profile); err != nil {
+					return fmt.Errorf("GOAT compile %s: %w", cFile, err)
+				}
+				fmt.Printf("  Compiled: %s\n", filepath.Base(cFile))
 			}
-			fmt.Printf("  Compiled: %s\n", filepath.Base(cFile))
-		}
 
-		// Clean up C and object files (Go build doesn't like them)
-		for _, cFile := range cFiles {
-			os.Remove(cFile)
-			os.Remove(strings.TrimSuffix(cFile, ".c") + ".o")
-		}
+			// Clean up C and object files (Go build doesn't like them)
+			for _, cFile := range cFiles {
+				os.Remove(cFile)
+				os.Remove(strings.TrimSuffix(cFile, ".c") + ".o")
+			}
 
-		// Generate unified wrapper file for this target
-		allFuncs := append(vecFuncs, sliceFuncs...)
-		if err := g.emitCWrappers(allFuncs, target); err != nil {
-			return fmt.Errorf("emit wrappers for %s: %w", target.Name, err)
+			// Generate unified wrapper file for this target
+			allFuncs := append(vecFuncs, sliceFuncs...)
+			if err := g.emitCWrappers(allFuncs, target); err != nil {
+				return fmt.Errorf("emit wrappers for %s: %w", target.Name, err)
+			}
+		} else {
+			fmt.Printf("Generated %d C files (use -asm to compile to Go assembly)\n", len(cFiles))
 		}
 	}
 

@@ -43,7 +43,8 @@ type Generator struct {
 	Targets        []string // Target architectures (e.g., ["avx2", "fallback"])
 	PackageOut     string   // Output package name (defaults to input package)
 	DispatchPrefix string   // Dispatch file prefix (defaults to function name)
-	CMode          bool     // Generate C code for GOAT compilation
+	CMode          bool     // Generate C code (with or without GOAT compilation)
+	AsmMode        bool     // Compile C to Go assembly via GOAT
 }
 
 // Run executes the code generation pipeline.

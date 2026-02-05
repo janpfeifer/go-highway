@@ -53,9 +53,23 @@ func (e *CEmitter) EmitC(pf *ParsedFunc, outPath string) (string, error) {
 	fmt.Fprintf(&buf, "// %s for %s\n\n", pf.Name, targetLabel)
 	fmt.Fprintf(&buf, "%s\n\n", include)
 
-	// Generate the function
-	if err := e.emitCFunction(&buf, pf); err != nil {
-		return "", fmt.Errorf("emit C function: %w", err)
+	// Generate the function.
+	// For promoted-math profiles (f16/bf16), dispatch math functions through
+	// the promoted path which wraps f32 computation with promote/demote.
+	if e.profile != nil && e.profile.MathStrategy == "promoted" {
+		if mathOp := mathOpFromFuncName(pf.Name); mathOp != "" {
+			if err := e.emitPromotedMathC(&buf, mathOp, pf); err != nil {
+				return "", fmt.Errorf("emit promoted math C: %w", err)
+			}
+		} else {
+			if err := e.emitCFunction(&buf, pf); err != nil {
+				return "", fmt.Errorf("emit C function: %w", err)
+			}
+		}
+	} else {
+		if err := e.emitCFunction(&buf, pf); err != nil {
+			return "", fmt.Errorf("emit C function: %w", err)
+		}
 	}
 
 	// Determine output filename
@@ -533,6 +547,42 @@ func (e *CEmitter) cFuncName(baseName string) string {
 		targetSuffix = strings.ToLower(e.profile.TargetName)
 	}
 	return strings.ToLower(name) + "_c_" + e.typeSuffix() + "_" + targetSuffix
+}
+
+// mathOpFromFuncName extracts the math operation name from a function name.
+// Returns "" if the function is not a recognized math operation.
+func mathOpFromFuncName(name string) string {
+	// Order matters: check longer names first to avoid prefix matches
+	// (e.g., "SigmoidVec" must match before "Sigmoid" in "ExpVec" check)
+	for _, op := range []struct {
+		contains string
+		exclude  string
+		result   string
+	}{
+		{"SigmoidVec", "", "Sigmoid"},
+		{"ExpVec", "Sigmoid", "Exp"},
+		{"Exp2Vec", "", "Exp"},
+		{"TanhVec", "", "Tanh"},
+		{"ErfVec", "", "Erf"},
+		{"LogVec", "", "Log"},
+		{"Log2Vec", "", "Log"},
+		{"Log10Vec", "", "Log"},
+		{"SinVec", "Sinh", "Sin"},
+		{"CosVec", "Cosh", "Cos"},
+		{"SinhVec", "", "Sinh"},
+		{"CoshVec", "", "Cosh"},
+		{"AsinhVec", "", "Asinh"},
+		{"AcoshVec", "", "Acosh"},
+		{"AtanhVec", "", "Atanh"},
+		{"PowVec", "", "Pow"},
+	} {
+		if strings.Contains(name, op.contains) {
+			if op.exclude == "" || !strings.Contains(name, op.exclude) {
+				return op.result
+			}
+		}
+	}
+	return ""
 }
 
 // IsCEligible checks if a function can be generated as C code for GOAT compilation.
