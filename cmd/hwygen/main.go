@@ -41,7 +41,7 @@ var (
 	targets        = flag.String("targets", "avx2,fallback", "Comma-separated targets ("+strings.Join(AvailableTargets(), ",")+") or 'all'")
 	packageOut     = flag.String("pkg", "", "Output package name (default: same as input)")
 	dispatchPrefix = flag.String("dispatch", "", "Dispatch file prefix (default: derived from function name)")
-	bulkMode       = flag.Bool("bulk", false, "Generate bulk C code for NEON (for GOAT compilation)")
+	cMode          = flag.Bool("c", false, "Generate C code for GOAT compilation (supports neon, avx2, avx512 targets)")
 )
 
 func main() {
@@ -68,7 +68,7 @@ func main() {
 		Targets:        targetList,
 		PackageOut:     *packageOut,
 		DispatchPrefix: *dispatchPrefix,
-		BulkMode:       *bulkMode,
+		CMode:          *cMode,
 	}
 
 	if err := gen.Run(); err != nil {
@@ -76,8 +76,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *bulkMode {
-		fmt.Printf("Successfully generated bulk C code for targets: %s\n", strings.Join(targetList, ", "))
+	if *cMode {
+		fmt.Printf("Successfully generated C code for targets: %s\n", strings.Join(targetList, ", "))
 	} else {
 		fmt.Printf("Successfully generated code for targets: %s\n", strings.Join(targetList, ", "))
 	}
