@@ -59,6 +59,12 @@ type CIntrinsicProfile struct {
 	// Empty string means no cast is needed.
 	CastExpr string
 
+	// FmaArgOrder describes how the FMA intrinsic orders its arguments.
+	// "acc_first" means FMA(acc, a, b) = acc + a*b  (NEON convention)
+	// "acc_last"  means FMA(a, b, acc) = a*b + acc  (AVX convention)
+	// Go's hwy.MulAdd(a, b, acc) follows the AVX convention (acc last).
+	FmaArgOrder string // "acc_first" or "acc_last"
+
 	// GOAT compilation settings
 	GoatTarget     string   // "arm64" or "amd64"
 	GoatExtraFlags []string // e.g., ["-march=armv8-a+simd+fp"]
@@ -153,6 +159,7 @@ func neonF32Profile() *CIntrinsicProfile {
 		GetLaneFn: map[string]string{"q": "vgetq_lane_f32"},
 
 		MathStrategy:   "native",
+		FmaArgOrder:    "acc_first",
 		GoatTarget:     "arm64",
 		GoatExtraFlags: []string{"-march=armv8-a+simd+fp"},
 	}
@@ -193,6 +200,7 @@ func neonF64Profile() *CIntrinsicProfile {
 		GetLaneFn: map[string]string{"q": "vgetq_lane_f64"},
 
 		MathStrategy:   "native",
+		FmaArgOrder:    "acc_first",
 		GoatTarget:     "arm64",
 		GoatExtraFlags: []string{"-march=armv8-a+simd+fp"},
 	}
@@ -292,6 +300,7 @@ func neonF16Profile() *CIntrinsicProfile {
 		SplitPromoteHi: "vcvt_f32_f16(vget_high_f16(%s))",  // %s = narrow vector variable
 		CombineFn:      "vcombine_f16(%s, %s)", // %s = lo half, %s = hi half
 		CastExpr:       "(float16_t*)",
+		FmaArgOrder:    "acc_first",
 		GoatTarget:     "arm64",
 		GoatExtraFlags: []string{"-march=armv8.2-a+fp16+simd"},
 	}
@@ -370,6 +379,7 @@ func neonBF16Profile() *CIntrinsicProfile {
 		SplitPromoteHi: "vreinterpretq_f32_u32(vshll_n_u16(vget_high_u16(vreinterpretq_u16_bf16(%s)), 16))", // %s = narrow vector variable
 		CombineFn:      "vreinterpretq_bf16_u16(vcombine_u16(%s, %s))",                                       // %s = lo half, %s = hi half
 		CastExpr:       "(bfloat16_t*)",
+		FmaArgOrder:    "acc_first",
 		GoatTarget:     "arm64",
 		GoatExtraFlags: []string{"-march=armv8.6-a+bf16+simd"},
 	}
@@ -433,6 +443,7 @@ func avx2F16Profile() *CIntrinsicProfile {
 		PromoteFn:      "_mm256_cvtph_ps",  // VCVTPH2PS: __m128i (8 f16) -> __m256 (8 f32)
 		DemoteFn:       "_mm256_cvtps_ph(%s, 0)",  // VCVTPS2PH: __m256 (8 f32) -> __m128i (8 f16), round to nearest
 		CastExpr:       "(__m128i*)",
+		FmaArgOrder:    "acc_last",
 		GoatTarget:     "amd64",
 		GoatExtraFlags: []string{"-mf16c", "-mavx2", "-mfma"},
 	}
@@ -535,6 +546,7 @@ func avx512F16Profile() *CIntrinsicProfile {
 		},
 
 		MathStrategy:   "native",
+		FmaArgOrder:    "acc_last",
 		GoatTarget:     "amd64",
 		GoatExtraFlags: []string{"-mavx512fp16", "-mavx512f", "-mavx512vl"},
 	}
@@ -602,6 +614,7 @@ func avx512BF16Profile() *CIntrinsicProfile {
 		MathStrategy:   "promoted",
 		PromoteFn:      "unpacklo/hi_epi16 + slli_epi32(16)",
 		DemoteFn:       "_mm512_cvtneps_pbh(%s)",
+		FmaArgOrder:    "acc_last",
 		GoatTarget:     "amd64",
 		GoatExtraFlags: []string{"-mavx512bf16", "-mavx512f", "-mavx512vl"},
 	}

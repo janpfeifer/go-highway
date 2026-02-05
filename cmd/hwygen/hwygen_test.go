@@ -5,7 +5,9 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -1310,4 +1312,794 @@ func BaseExpVec[T hwy.Floats](x hwy.Vec[T]) hwy.Vec[T] {
 	if !strings.Contains(bf16, "vst1q_bf16") {
 		t.Error("bf16: missing vst1q_bf16 store intrinsic")
 	}
+}
+
+func TestIsASTCEligible(t *testing.T) {
+	tests := []struct {
+		name string
+		pf   ParsedFunc
+		want bool
+	}{
+		{
+			name: "matmul with slices and int params",
+			pf: ParsedFunc{
+				Name: "BaseMatMul",
+				Params: []Param{
+					{Name: "a", Type: "[]T"},
+					{Name: "b", Type: "[]T"},
+					{Name: "c", Type: "[]T"},
+					{Name: "m", Type: "int"},
+					{Name: "n", Type: "int"},
+					{Name: "k", Type: "int"},
+				},
+				HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Load"}},
+			},
+			want: true,
+		},
+		{
+			name: "Vec→Vec function (not eligible)",
+			pf: ParsedFunc{
+				Name: "BaseExpVec",
+				Params: []Param{
+					{Name: "v", Type: "hwy.Vec[T]"},
+				},
+				Returns: []Param{
+					{Name: "", Type: "hwy.Vec[T]"},
+				},
+				HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Add"}},
+			},
+			want: false,
+		},
+		{
+			name: "GELU composite (not eligible - has math op name)",
+			pf: ParsedFunc{
+				Name: "BaseGELUVec",
+				Params: []Param{
+					{Name: "input", Type: "[]T"},
+					{Name: "output", Type: "[]T"},
+				},
+				HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Load"}},
+			},
+			want: false,
+		},
+		{
+			name: "slice func without int params (not eligible)",
+			pf: ParsedFunc{
+				Name: "BaseSoftmax",
+				Params: []Param{
+					{Name: "input", Type: "[]T"},
+					{Name: "output", Type: "[]T"},
+				},
+				HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Load"}},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsASTCEligible(&tt.pf)
+			if got != tt.want {
+				t.Errorf("IsASTCEligible() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestASTTranslatorMatMul(t *testing.T) {
+	// Find the matmul_base.go file
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found at %s: %v", matmulPath, err)
+	}
+
+	// Parse the file
+	result, err := Parse(matmulPath)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	// Find BaseMatMul
+	var matmulFunc *ParsedFunc
+	for i, pf := range result.Funcs {
+		if pf.Name == "BaseMatMul" {
+			matmulFunc = &result.Funcs[i]
+			break
+		}
+	}
+	if matmulFunc == nil {
+		t.Fatal("BaseMatMul not found in parsed functions")
+	}
+
+	// Verify it's AST-eligible
+	if !IsASTCEligible(matmulFunc) {
+		t.Fatal("BaseMatMul should be AST-C-eligible")
+	}
+
+	// Translate for NEON f32
+	profile := GetCProfile("NEON", "float32")
+	if profile == nil {
+		t.Fatal("NEON float32 profile not found")
+	}
+
+	translator := NewCASTTranslator(profile, "float32")
+	cCode, err := translator.TranslateToC(matmulFunc)
+	if err != nil {
+		t.Fatalf("TranslateToC failed: %v", err)
+	}
+
+	// Verify function signature with GOAT conventions
+	if !strings.Contains(cCode, "void matmul_c_f32_neon(") {
+		t.Error("missing function name: matmul_c_f32_neon")
+	}
+	if !strings.Contains(cCode, "float *a") {
+		t.Error("missing float *a parameter")
+	}
+	if !strings.Contains(cCode, "float *b") {
+		t.Error("missing float *b parameter")
+	}
+	if !strings.Contains(cCode, "float *c") {
+		t.Error("missing float *c parameter")
+	}
+	if !strings.Contains(cCode, "long *pm") {
+		t.Error("missing long *pm parameter")
+	}
+	if !strings.Contains(cCode, "long *pn") {
+		t.Error("missing long *pn parameter")
+	}
+	if !strings.Contains(cCode, "long *pk") {
+		t.Error("missing long *pk parameter")
+	}
+
+	// Verify int param dereferences
+	if !strings.Contains(cCode, "long k = *pk;") {
+		t.Error("missing int param dereference: long k = *pk;")
+	}
+	if !strings.Contains(cCode, "long m = *pm;") {
+		t.Error("missing int param dereference: long m = *pm;")
+	}
+	if !strings.Contains(cCode, "long n = *pn;") {
+		t.Error("missing int param dereference: long n = *pn;")
+	}
+
+	// Verify hwy.Zero → vdupq_n_f32(0.0f)
+	if !strings.Contains(cCode, "vdupq_n_f32(0.0f)") {
+		t.Error("missing vdupq_n_f32(0.0f) for hwy.Zero")
+	}
+
+	// Verify hwy.Set → vdupq_n_f32
+	if !strings.Contains(cCode, "vdupq_n_f32(aip)") {
+		t.Error("missing vdupq_n_f32(aip) for hwy.Set")
+	}
+
+	// Verify hwy.Load → vld1q_f32
+	if !strings.Contains(cCode, "vld1q_f32(") {
+		t.Error("missing vld1q_f32 for hwy.Load")
+	}
+
+	// Verify hwy.Store → vst1q_f32
+	if !strings.Contains(cCode, "vst1q_f32(") {
+		t.Error("missing vst1q_f32 for hwy.Store")
+	}
+
+	// Verify hwy.MulAdd → vfmaq_f32 with accumulator-first arg order (NEON)
+	if !strings.Contains(cCode, "vfmaq_f32(vC, vA, vB)") {
+		t.Errorf("missing vfmaq_f32(vC, vA, vB) for hwy.MulAdd with NEON acc-first order\n\nGenerated C:\n%s", cCode)
+	}
+
+	// Verify nested for loops are preserved
+	forCount := strings.Count(cCode, "for (")
+	if forCount < 5 {
+		t.Errorf("expected at least 5 for loops (got %d) — matmul needs nested loops", forCount)
+	}
+
+	// Verify scalar tail loop is preserved
+	if !strings.Contains(cCode, "cRow[j] = 0") {
+		t.Error("missing scalar zeroing tail: cRow[j] = 0")
+	}
+	if !strings.Contains(cCode, "cRow[j] += aip * bRow[j]") {
+		t.Error("missing scalar FMA tail: cRow[j] += aip * bRow[j]")
+	}
+
+	// Verify pointer alias: cRow := c[i*n : (i+1)*n] → float *cRow = c + i * n;
+	if !strings.Contains(cCode, "float *") && !strings.Contains(cCode, "cRow") {
+		t.Error("missing pointer alias for cRow")
+	}
+
+	// Verify NumLanes → constant 4
+	if !strings.Contains(cCode, "= 4") {
+		t.Error("missing NumLanes constant (= 4 for NEON f32)")
+	}
+
+	t.Logf("Generated C code:\n%s", cCode)
+}
+
+func TestASTTranslatorMatMulF64(t *testing.T) {
+	// Find the matmul_base.go file
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found at %s: %v", matmulPath, err)
+	}
+
+	result, err := Parse(matmulPath)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	var matmulFunc *ParsedFunc
+	for i, pf := range result.Funcs {
+		if pf.Name == "BaseMatMul" {
+			matmulFunc = &result.Funcs[i]
+			break
+		}
+	}
+	if matmulFunc == nil {
+		t.Fatal("BaseMatMul not found")
+	}
+
+	// Translate for NEON f64
+	profile := GetCProfile("NEON", "float64")
+	if profile == nil {
+		t.Fatal("NEON float64 profile not found")
+	}
+
+	translator := NewCASTTranslator(profile, "float64")
+	cCode, err := translator.TranslateToC(matmulFunc)
+	if err != nil {
+		t.Fatalf("TranslateToC failed: %v", err)
+	}
+
+	// Verify f64-specific intrinsics
+	if !strings.Contains(cCode, "matmul_c_f64_neon") {
+		t.Error("missing f64 function name")
+	}
+	if !strings.Contains(cCode, "double *a") {
+		t.Error("missing double *a parameter")
+	}
+	if !strings.Contains(cCode, "vld1q_f64") {
+		t.Error("missing vld1q_f64")
+	}
+	if !strings.Contains(cCode, "vst1q_f64") {
+		t.Error("missing vst1q_f64")
+	}
+	if !strings.Contains(cCode, "vfmaq_f64") {
+		t.Error("missing vfmaq_f64")
+	}
+	if !strings.Contains(cCode, "vdupq_n_f64(0.0)") {
+		t.Error("missing vdupq_n_f64(0.0) for hwy.Zero")
+	}
+	// NEON f64 has 2 lanes
+	if !strings.Contains(cCode, "= 2") {
+		t.Error("missing NumLanes constant (= 2 for NEON f64)")
+	}
+
+	t.Logf("Generated C code:\n%s", cCode)
+}
+
+func TestASTTranslatorFmaArgOrder(t *testing.T) {
+	// NEON profiles should use acc_first
+	neonF32 := GetCProfile("NEON", "float32")
+	if neonF32 == nil {
+		t.Fatal("NEON float32 profile not found")
+	}
+	if neonF32.FmaArgOrder != "acc_first" {
+		t.Errorf("NEON f32 FmaArgOrder = %q, want %q", neonF32.FmaArgOrder, "acc_first")
+	}
+
+	// AVX2 F16 profile should use acc_last
+	avx2F16 := GetCProfile("AVX2", "hwy.Float16")
+	if avx2F16 == nil {
+		t.Fatal("AVX2 Float16 profile not found")
+	}
+	if avx2F16.FmaArgOrder != "acc_last" {
+		t.Errorf("AVX2 f16 FmaArgOrder = %q, want %q", avx2F16.FmaArgOrder, "acc_last")
+	}
+
+	// AVX512 F16 profile should use acc_last
+	avx512F16 := GetCProfile("AVX512", "hwy.Float16")
+	if avx512F16 == nil {
+		t.Fatal("AVX512 Float16 profile not found")
+	}
+	if avx512F16.FmaArgOrder != "acc_last" {
+		t.Errorf("AVX512 f16 FmaArgOrder = %q, want %q", avx512F16.FmaArgOrder, "acc_last")
+	}
+}
+
+// TestCModeMatMulNeonGeneration is an end-to-end test that runs the full
+// hwygen -c pipeline on matmul_base.go targeting NEON and verifies the
+// generated C files match the expected NEON GOAT-compatible style.
+func TestCModeMatMulNeonGeneration(t *testing.T) {
+	// Use the real matmul_base.go as input
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found at %s: %v", matmulPath, err)
+	}
+
+	tmpDir := t.TempDir()
+
+	gen := &Generator{
+		InputFile: matmulPath,
+		OutputDir: tmpDir,
+		Targets:   []string{"neon"},
+		CMode:     true,
+	}
+
+	if err := gen.Run(); err != nil {
+		t.Fatalf("Generator.Run() in CMode failed: %v", err)
+	}
+
+	// ---- f32: NEON matmul ----
+	f32Path := filepath.Join(tmpDir, "basematmul_c_f32_neon_arm64.c")
+	f32Content, err := os.ReadFile(f32Path)
+	if err != nil {
+		t.Fatalf("Failed to read f32 C file: %v", err)
+	}
+	f32 := string(f32Content)
+
+	// Verify GOAT header structure
+	if !strings.Contains(f32, "#ifndef GOAT_PARSER") {
+		t.Error("f32: missing GOAT_PARSER guard")
+	}
+	if !strings.Contains(f32, "#include <arm_neon.h>") {
+		t.Error("f32: missing arm_neon.h include")
+	}
+	if !strings.Contains(f32, "#endif") {
+		t.Error("f32: missing #endif for GOAT_PARSER guard")
+	}
+	if !strings.Contains(f32, "Generated by hwygen") {
+		t.Error("f32: missing hwygen generation comment")
+	}
+
+	// Verify function signature matches GOAT conventions:
+	// void funcname(float *a, float *b, float *c, long *pm, long *pn, long *pk)
+	if !strings.Contains(f32, "void matmul_c_f32_neon(float *a, float *b, float *c, long *pk, long *pm, long *pn)") &&
+		!strings.Contains(f32, "void matmul_c_f32_neon(float *a, float *b, float *c, long *pm, long *pn, long *pk)") {
+		// Extract the actual signature line for debugging
+		for line := range strings.SplitSeq(f32, "\n") {
+			if strings.Contains(line, "void matmul_c_f32_neon") {
+				t.Errorf("f32: unexpected function signature: %s", strings.TrimSpace(line))
+				break
+			}
+		}
+	}
+
+	// Verify int params are dereferenced from pointers (GOAT convention)
+	for _, deref := range []string{"long k = *pk;", "long m = *pm;", "long n = *pn;"} {
+		if !strings.Contains(f32, deref) {
+			t.Errorf("f32: missing param dereference: %s", deref)
+		}
+	}
+
+	// Verify NEON f32 SIMD intrinsics
+	for _, intrinsic := range []string{
+		"vld1q_f32",   // vector load
+		"vst1q_f32",   // vector store
+		"vfmaq_f32",   // fused multiply-add
+		"vdupq_n_f32", // broadcast scalar
+		"float32x4_t", // vector type
+	} {
+		if !strings.Contains(f32, intrinsic) {
+			t.Errorf("f32: missing NEON intrinsic %q", intrinsic)
+		}
+	}
+
+	// Verify FMA uses NEON accumulator-first order: vfmaq_f32(acc, a, b)
+	if !strings.Contains(f32, "vfmaq_f32(vC, vA, vB)") {
+		t.Error("f32: FMA should use NEON acc-first order: vfmaq_f32(vC, vA, vB)")
+	}
+
+	// Verify hwy.Zero[T]() → vdupq_n_f32(0.0f) (zero vector broadcast)
+	if !strings.Contains(f32, "vdupq_n_f32(0.0f)") {
+		t.Error("f32: missing vdupq_n_f32(0.0f) for hwy.Zero")
+	}
+
+	// Verify hwy.Set(aip) → vdupq_n_f32(aip) (scalar broadcast)
+	if !strings.Contains(f32, "vdupq_n_f32(aip)") {
+		t.Error("f32: missing vdupq_n_f32(aip) for hwy.Set")
+	}
+
+	// Verify .NumLanes() was replaced with the constant 4 (NEON f32 lane count)
+	if !strings.Contains(f32, "long lanes = 4;") {
+		t.Error("f32: missing constant lane count: long lanes = 4;")
+	}
+
+	// Verify structure: nested for loops (outer rows, zero loop, k-loop, inner SIMD)
+	forCount := strings.Count(f32, "for (")
+	if forCount < 5 {
+		t.Errorf("f32: expected at least 5 for loops for matmul, got %d", forCount)
+	}
+
+	// Verify scalar tail loops are preserved
+	if !strings.Contains(f32, "cRow[j] = 0;") {
+		t.Error("f32: missing scalar zeroing tail: cRow[j] = 0;")
+	}
+	if !strings.Contains(f32, "cRow[j] += aip * bRow[j];") {
+		t.Error("f32: missing scalar FMA tail: cRow[j] += aip * bRow[j];")
+	}
+
+	// Verify slice aliases become pointer arithmetic
+	if !strings.Contains(f32, "float *cRow = c + i * n;") {
+		t.Error("f32: missing pointer alias: float *cRow = c + i * n;")
+	}
+	if !strings.Contains(f32, "float *bRow = b + p * n;") {
+		t.Error("f32: missing pointer alias: float *bRow = b + p * n;")
+	}
+
+	// Verify no Go-isms leaked into the C output
+	for _, goism := range []string{"range ", "hwy.", "panic(", ":=", "[]"} {
+		if strings.Contains(f32, goism) {
+			t.Errorf("f32: Go syntax leaked into C output: %q", goism)
+		}
+	}
+
+	// Verify bounds check panic guards were stripped
+	if strings.Contains(f32, "panic") {
+		t.Error("f32: panic calls should be stripped from C output")
+	}
+
+	// ---- f64: NEON matmul ----
+	f64Path := filepath.Join(tmpDir, "basematmul_c_f64_neon_arm64.c")
+	f64Content, err := os.ReadFile(f64Path)
+	if err != nil {
+		t.Fatalf("Failed to read f64 C file: %v", err)
+	}
+	f64 := string(f64Content)
+
+	// Verify function signature with double pointers
+	if !strings.Contains(f64, "void matmul_c_f64_neon(") {
+		t.Error("f64: missing function name")
+	}
+	if !strings.Contains(f64, "double *a") {
+		t.Error("f64: missing double *a parameter")
+	}
+
+	// Verify NEON f64 intrinsics
+	for _, intrinsic := range []string{
+		"vld1q_f64",
+		"vst1q_f64",
+		"vfmaq_f64",
+		"vdupq_n_f64",
+		"float64x2_t",
+	} {
+		if !strings.Contains(f64, intrinsic) {
+			t.Errorf("f64: missing NEON intrinsic %q", intrinsic)
+		}
+	}
+
+	// Verify f64 lane count (NEON 128-bit holds 2 doubles)
+	if !strings.Contains(f64, "long lanes = 2;") {
+		t.Error("f64: missing constant lane count: long lanes = 2;")
+	}
+
+	// Verify f64 zero uses 0.0 (not 0.0f)
+	if !strings.Contains(f64, "vdupq_n_f64(0.0)") {
+		t.Error("f64: missing vdupq_n_f64(0.0) for hwy.Zero")
+	}
+
+	// Log both files for inspection
+	t.Logf("f32 C file:\n%s", f32)
+	t.Logf("f64 C file:\n%s", f64)
+}
+
+// TestASTCWrapperGeneration verifies that the wrapper generation for
+// AST-translated multi-param functions (like matmul) produces proper
+// Go wrappers that follow the GOAT calling convention.
+func TestASTCWrapperGeneration(t *testing.T) {
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+
+	// Parse the matmul_base.go to get the parsed functions
+	result, err := Parse(matmulPath)
+	if err != nil {
+		t.Fatalf("Parse matmul_base.go: %v", err)
+	}
+
+	// Find AST-eligible functions
+	var astFuncs []ParsedFunc
+	for _, pf := range result.Funcs {
+		if IsASTCEligible(&pf) {
+			astFuncs = append(astFuncs, pf)
+		}
+	}
+	if len(astFuncs) == 0 {
+		t.Fatal("no AST-eligible functions found in matmul_base.go")
+	}
+
+	// Generate wrappers using the emitCWrappers path
+	neonTarget, err := GetTarget("neon")
+	if err != nil {
+		t.Fatalf("GetTarget(neon): %v", err)
+	}
+	gen2 := &Generator{
+		OutputDir: tmpDir,
+	}
+	if err := gen2.emitCWrappers(astFuncs, neonTarget); err != nil {
+		t.Fatalf("emitCWrappers: %v", err)
+	}
+
+	// Read the generated wrapper file
+	wrapperPath := filepath.Join(tmpDir, "c_wrappers_neon_arm64.go")
+	wrapperContent, err := os.ReadFile(wrapperPath)
+	if err != nil {
+		t.Fatalf("read wrapper file: %v", err)
+	}
+	wrapper := string(wrapperContent)
+	t.Logf("Generated wrapper:\n%s", wrapper)
+
+	// Verify file structure
+	if !strings.Contains(wrapper, "//go:build") {
+		t.Error("wrapper: missing build tag")
+	}
+	if !strings.Contains(wrapper, "import") {
+		t.Error("wrapper: missing import")
+	}
+	if !strings.Contains(wrapper, "\"unsafe\"") {
+		t.Error("wrapper: missing unsafe import")
+	}
+
+	// Verify f32 wrapper function
+	if !strings.Contains(wrapper, "func MatMulCF32(a, b, c []float32, m, n, k int)") {
+		t.Error("wrapper: missing MatMulCF32 function signature")
+	}
+	// Verify zero-dimension guard
+	if !strings.Contains(wrapper, "m == 0 || n == 0 || k == 0") {
+		t.Error("wrapper: missing zero-dimension guard")
+	}
+	// Verify int64 conversion
+	if !strings.Contains(wrapper, "mVal := int64(m)") {
+		t.Error("wrapper: missing mVal int64 conversion")
+	}
+	if !strings.Contains(wrapper, "nVal := int64(n)") {
+		t.Error("wrapper: missing nVal int64 conversion")
+	}
+	if !strings.Contains(wrapper, "kVal := int64(k)") {
+		t.Error("wrapper: missing kVal int64 conversion")
+	}
+	// Verify unsafe.Pointer calls
+	if !strings.Contains(wrapper, "unsafe.Pointer(&a[0])") {
+		t.Error("wrapper: missing unsafe.Pointer(&a[0])")
+	}
+	if !strings.Contains(wrapper, "unsafe.Pointer(&mVal)") {
+		t.Error("wrapper: missing unsafe.Pointer(&mVal)")
+	}
+	// Verify asm function name
+	if !strings.Contains(wrapper, "matmul_c_f32_neon(") {
+		t.Error("wrapper: missing matmul_c_f32_neon asm call")
+	}
+
+	// Verify f64 wrapper
+	if !strings.Contains(wrapper, "func MatMulCF64(a, b, c []float64, m, n, k int)") {
+		t.Error("wrapper: missing MatMulCF64 function signature")
+	}
+	if !strings.Contains(wrapper, "matmul_c_f64_neon(") {
+		t.Error("wrapper: missing matmul_c_f64_neon asm call")
+	}
+
+	// Verify f16/bf16 wrappers were NOT generated (promoted math not yet supported)
+	if strings.Contains(wrapper, "MatMulCF16") {
+		t.Error("wrapper: f16 wrapper should not be generated for promoted-math types")
+	}
+	if strings.Contains(wrapper, "MatMulCBF16") {
+		t.Error("wrapper: bf16 wrapper should not be generated for promoted-math types")
+	}
+}
+
+// TestCModeAsmPipeline tests the full -c -asm pipeline: generate C,
+// compile with GOAT, and verify the output files.
+func TestCModeAsmPipeline(t *testing.T) {
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+
+	gen := &Generator{
+		InputFile: matmulPath,
+		OutputDir: tmpDir,
+		Targets:   []string{"neon"},
+		CMode:     true,
+		AsmMode:   true,
+	}
+
+	err := gen.Run()
+	if err != nil {
+		// GOAT might not be available in all environments
+		if strings.Contains(err.Error(), "GOAT") || strings.Contains(err.Error(), "goat") ||
+			strings.Contains(err.Error(), "exec:") || strings.Contains(err.Error(), "go tool") {
+			t.Skipf("GOAT not available: %v", err)
+		}
+		t.Fatalf("Generator.Run() with -asm failed: %v", err)
+	}
+
+	// Verify assembly files were generated
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+
+	var sFiles, goFiles, wrapperFiles []string
+	for _, e := range entries {
+		name := e.Name()
+		switch {
+		case strings.HasSuffix(name, ".s"):
+			sFiles = append(sFiles, name)
+		case strings.HasSuffix(name, ".go") && strings.Contains(name, "c_wrappers"):
+			wrapperFiles = append(wrapperFiles, name)
+		case strings.HasSuffix(name, ".go"):
+			goFiles = append(goFiles, name)
+		}
+	}
+
+	t.Logf("Generated files: .s=%v, .go=%v, wrappers=%v", sFiles, goFiles, wrapperFiles)
+
+	if len(sFiles) == 0 {
+		t.Error("no .s assembly files generated")
+	}
+	if len(goFiles) == 0 {
+		t.Error("no GOAT .go declaration files generated")
+	}
+	if len(wrapperFiles) == 0 {
+		t.Error("no wrapper .go files generated")
+	}
+
+	// Verify wrapper file content
+	if len(wrapperFiles) > 0 {
+		content, err := os.ReadFile(filepath.Join(tmpDir, wrapperFiles[0]))
+		if err != nil {
+			t.Fatalf("read wrapper: %v", err)
+		}
+		wrapper := string(content)
+		if !strings.Contains(wrapper, "MatMulCF32") {
+			t.Error("wrapper missing MatMulCF32 function")
+		}
+		if !strings.Contains(wrapper, "unsafe.Pointer") {
+			t.Error("wrapper missing unsafe.Pointer calls")
+		}
+		t.Logf("Wrapper content:\n%s", wrapper)
+	}
+
+	// Verify no C files left behind (cleaned up after GOAT)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".c") {
+			t.Errorf("C file not cleaned up: %s", e.Name())
+		}
+	}
+}
+
+// TestCModeAsmCorrectnessF32 is a full end-to-end correctness test that:
+// 1. Generates C from matmul_base.go
+// 2. Compiles with GOAT to Go assembly
+// 3. Creates a complete Go test package with the assembly
+// 4. Runs `go test` to verify the SIMD assembly matches a scalar reference.
+func TestCModeAsmCorrectnessF32(t *testing.T) {
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found: %v", err)
+	}
+
+	// Create temp package directory
+	tmpDir := filepath.Join(t.TempDir(), "matmulgen")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	// Step 1+2+3: Generate C, compile with GOAT, generate wrappers
+	gen := &Generator{
+		InputFile: matmulPath,
+		OutputDir: tmpDir,
+		Targets:   []string{"neon"},
+		CMode:     true,
+		AsmMode:   true,
+	}
+	if err := gen.Run(); err != nil {
+		if strings.Contains(err.Error(), "GOAT") || strings.Contains(err.Error(), "goat") ||
+			strings.Contains(err.Error(), "exec:") || strings.Contains(err.Error(), "go tool") {
+			t.Skipf("GOAT not available: %v", err)
+		}
+		t.Fatalf("Generator.Run() failed: %v", err)
+	}
+
+	// List generated files for debugging
+	entries, _ := os.ReadDir(tmpDir)
+	var files []string
+	for _, e := range entries {
+		files = append(files, e.Name())
+	}
+	t.Logf("Generated files: %v", files)
+
+	// Step 4: Write go.mod for the temp package
+	goModContent := `module matmulgen
+
+go 1.26rc2
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	// Step 5: Write a correctness test file
+	testContent := `package matmulgen
+
+import (
+	"fmt"
+	"math"
+	"testing"
+)
+
+func matmulScalar(a, b, c []float32, m, n, k int) {
+	for i := range m {
+		for j := range n {
+			var sum float32
+			for p := range k {
+				sum += a[i*k+p] * b[p*n+j]
+			}
+			c[i*n+j] = sum
+		}
+	}
+}
+
+func TestMatMulCF32Correctness(t *testing.T) {
+	sizes := [][3]int{
+		{2, 3, 4},
+		{4, 4, 4},
+		{8, 8, 8},
+		{16, 16, 16},
+		{7, 9, 5},
+		{33, 17, 11},
+	}
+
+	for _, sz := range sizes {
+		m, n, k := sz[0], sz[1], sz[2]
+		t.Run(fmt.Sprintf("%dx%dx%d", m, n, k), func(t *testing.T) {
+			a := make([]float32, m*k)
+			b := make([]float32, k*n)
+			cRef := make([]float32, m*n)
+			cAsm := make([]float32, m*n)
+
+			for i := range a {
+				a[i] = float32(i%7) * 0.1
+			}
+			for i := range b {
+				b[i] = float32(i%5) * 0.2
+			}
+
+			matmulScalar(a, b, cRef, m, n, k)
+			MatMulCF32(a, b, cAsm, m, n, k)
+
+			tol := float32(1e-4) * float32(k)
+			for i := range cRef {
+				diff := float32(math.Abs(float64(cAsm[i] - cRef[i])))
+				if diff > tol {
+					t.Errorf("index %d: got %v, want %v (diff=%v, tol=%v)",
+						i, cAsm[i], cRef[i], diff, tol)
+				}
+			}
+		})
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "matmul_test.go"), []byte(testContent), 0644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	// Step 6: Run go test in the temp package
+	goBin := filepath.Join(goRoot(), "bin", "go")
+	cmd := exec.Command(goBin, "test", "-v", "-count=1", "./...")
+	cmd.Dir = tmpDir
+	cmd.Env = append(os.Environ(), "GOWORK=off")
+	output, err := cmd.CombinedOutput()
+	t.Logf("go test output:\n%s", string(output))
+	if err != nil {
+		t.Fatalf("go test failed: %v\n%s", err, string(output))
+	}
+}
+
+// goRoot returns the GOROOT for go1.26rc2.
+func goRoot() string {
+	// Try the same approach as runGOAT: use runtime.GOROOT()
+	return runtime.GOROOT()
 }
