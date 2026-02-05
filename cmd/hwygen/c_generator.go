@@ -114,8 +114,8 @@ func (g *Generator) runCMode(result *ParseResult) error {
 					continue
 				}
 				// AST translator emits native arithmetic — skip types that
-				// require promoted math (f16/bf16 on NEON need f32 promotion).
-				if profile.MathStrategy == "promoted" {
+				// require promoted math unless they have native SIMD arithmetic.
+				if profile.MathStrategy == "promoted" && !profile.NativeArithmetic {
 					continue
 				}
 				emitter := NewCEmitter(g.PackageOut, elemType, target)
@@ -328,7 +328,7 @@ func (g *Generator) emitCWrappers(funcs []ParsedFunc, target Target) error {
 			for _, et := range getCElemTypes(&pf) {
 				if isHalfPrecisionType(et) {
 					profile := GetCProfile(target.Name, et)
-					if profile != nil && profile.MathStrategy != "promoted" {
+					if profile != nil && (profile.MathStrategy != "promoted" || profile.NativeArithmetic) {
 						needsHwy = true
 						break
 					}
@@ -364,7 +364,7 @@ func (g *Generator) emitCWrappers(funcs []ParsedFunc, target Target) error {
 			}
 			if IsASTCEligible(&pf) {
 				// Skip wrapper for types that didn't get C/asm generated
-				if profile.MathStrategy == "promoted" {
+				if profile.MathStrategy == "promoted" && !profile.NativeArithmetic {
 					continue
 				}
 				emitASTCWrapperFunc(&buf, &pf, elemType, targetSuffix)

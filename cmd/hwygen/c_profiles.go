@@ -63,7 +63,9 @@ type CIntrinsicProfile struct {
 	AccReduceFn       map[string]string // e.g. "vaddvq_u32"
 
 	// Comparison (returns mask type)
-	LessThanFn map[string]string // vcltq_f32, _mm256_cmp_ps
+	LessThanFn    map[string]string // vcltq_f32, _mm256_cmp_ps
+	EqualFn       map[string]string // vceqq_f32, _mm256_cmp_ps
+	GreaterThanFn map[string]string // vcgtq_f32, _mm256_cmp_ps
 
 	// Conditional select
 	IfThenElseFn map[string]string // vbslq_f32, _mm256_blendv_ps
@@ -74,6 +76,10 @@ type CIntrinsicProfile struct {
 	// Mask vector type (comparison results)
 	MaskType map[string]string // "uint32x4_t" (NEON), "__m256" (AVX)
 
+	// Reduction min/max
+	ReduceMinFn map[string]string // vminvq_f32
+	ReduceMaxFn map[string]string // vmaxvq_f32
+
 	// InlineHelpers contains C helper function source code that should be
 	// emitted at the top of generated C files (before main functions).
 	// Used for complex intrinsic sequences like NEON popcount chains.
@@ -83,6 +89,17 @@ type CIntrinsicProfile struct {
 	// type. "promoted" means elements must be promoted to a wider type (typically
 	// float32) for arithmetic, then demoted back.
 	MathStrategy string // "native" or "promoted"
+
+	// NativeArithmetic is true when the profile has native SIMD arithmetic
+	// (add, mul, fma, etc.) even though MathStrategy may be "promoted" for
+	// complex math functions (exp, log). For example, NEON f16 has native
+	// vaddq_f16/vfmaq_f16 but uses f32 promotion for exp/log.
+	NativeArithmetic bool
+
+	// ScalarArithType is the C scalar type for native arithmetic when it differs
+	// from CType. For example, NEON f16 uses "float16_t" for scalar arithmetic
+	// but "unsigned short" as CType (for pointer signatures).
+	ScalarArithType string
 	PromoteFn    string // e.g., "vcvt_f32_f16" -- called as PromoteFn(narrowVec)
 	DemoteFn     string // fmt.Sprintf template, e.g., "vcvt_f16_f32(%s)" or "_mm256_cvtps_ph(%s, 0)"
 
@@ -211,8 +228,12 @@ func neonF32Profile() *CIntrinsicProfile {
 		InterleaveLowerFn: map[string]string{"q": "vzip1q_f32"},
 		InterleaveUpperFn: map[string]string{"q": "vzip2q_f32"},
 		LessThanFn:        map[string]string{"q": "vcltq_f32"},
+		EqualFn:           map[string]string{"q": "vceqq_f32"},
+		GreaterThanFn:     map[string]string{"q": "vcgtq_f32"},
 		IfThenElseFn:      map[string]string{"q": "vbslq_f32"},
 		MaskType:          map[string]string{"q": "uint32x4_t"},
+		ReduceMinFn:       map[string]string{"q": "vminvq_f32"},
+		ReduceMaxFn:       map[string]string{"q": "vmaxvq_f32"},
 
 		InlineHelpers: []string{
 			`static inline unsigned int float_to_bits(float f) {
@@ -274,8 +295,12 @@ func neonF64Profile() *CIntrinsicProfile {
 		InterleaveLowerFn: map[string]string{"q": "vzip1q_f64"},
 		InterleaveUpperFn: map[string]string{"q": "vzip2q_f64"},
 		LessThanFn:        map[string]string{"q": "vcltq_f64"},
+		EqualFn:           map[string]string{"q": "vceqq_f64"},
+		GreaterThanFn:     map[string]string{"q": "vcgtq_f64"},
 		IfThenElseFn:      map[string]string{"q": "vbslq_f64"},
 		MaskType:          map[string]string{"q": "uint64x2_t"},
+		ReduceMinFn:       map[string]string{"q": "vminvq_f64"},
+		ReduceMaxFn:       map[string]string{"q": "vmaxvq_f64"},
 
 		MathStrategy:   "native",
 		FmaArgOrder:    "acc_first",
@@ -371,7 +396,20 @@ func neonF16Profile() *CIntrinsicProfile {
 			"scalar": "vst1_lane_f16",
 		},
 
-		MathStrategy:   "promoted",
+		ReduceSumFn:       map[string]string{"q": "vaddvq_f16", "d": "vaddv_f16"},
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_f16", "d": "vzip1_f16"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_f16", "d": "vzip2_f16"},
+		LessThanFn:        map[string]string{"q": "vcltq_f16", "d": "vclt_f16"},
+		EqualFn:           map[string]string{"q": "vceqq_f16", "d": "vceq_f16"},
+		GreaterThanFn:     map[string]string{"q": "vcgtq_f16", "d": "vcgt_f16"},
+		IfThenElseFn:      map[string]string{"q": "vbslq_u16", "d": "vbsl_u16"},
+		MaskType:          map[string]string{"q": "uint16x8_t", "d": "uint16x4_t"},
+		ReduceMinFn:       map[string]string{"q": "vminvq_f16"},
+		ReduceMaxFn:       map[string]string{"q": "vmaxvq_f16"},
+
+		NativeArithmetic: true,
+		ScalarArithType:  "float16_t",
+		MathStrategy:     "promoted",
 		PromoteFn:      "vcvt_f32_f16",
 		DemoteFn:       "vcvt_f16_f32(%s)",
 		SplitPromoteLo: "vcvt_f32_f16(vget_low_f16(%s))",   // %s = narrow vector variable

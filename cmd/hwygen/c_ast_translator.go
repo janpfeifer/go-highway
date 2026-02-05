@@ -502,6 +502,12 @@ func (t *CASTTranslator) translateStmt(stmt ast.Stmt) {
 		t.translateIncDecStmt(s)
 	case *ast.ReturnStmt:
 		t.translateReturnStmt(s)
+	case *ast.BranchStmt:
+		if s.Tok == token.CONTINUE {
+			t.writef("continue;\n")
+		} else if s.Tok == token.BREAK {
+			t.writef("break;\n")
+		}
 	default:
 		// Skip unsupported statements
 	}
@@ -1054,6 +1060,9 @@ func (t *CASTTranslator) translateExpr(expr ast.Expr) string {
 
 	switch e := expr.(type) {
 	case *ast.Ident:
+		if e.Name == "nil" {
+			return "0"
+		}
 		return e.Name
 	case *ast.BasicLit:
 		return t.translateBasicLit(e)
@@ -1084,6 +1093,11 @@ func (t *CASTTranslator) translateBasicLit(lit *ast.BasicLit) string {
 	case token.INT:
 		return lit.Value
 	case token.FLOAT:
+		if t.profile.ScalarArithType != "" {
+			// Half-precision with native arithmetic: use bare literal
+			// (float16_t arithmetic uses native half-precision)
+			return lit.Value
+		}
 		if t.elemType == "float32" {
 			return lit.Value + "f"
 		}
@@ -1123,9 +1137,9 @@ func (t *CASTTranslator) translateCallExpr(e *ast.CallExpr) string {
 		}
 	}
 
-	// Check for math.Float32bits → float_to_bits, math.Float32frombits → bits_to_float
+	// Check for math/stdmath function calls
 	if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
-		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "math" {
+		if pkg, ok := sel.X.(*ast.Ident); ok && (pkg.Name == "math" || pkg.Name == "stdmath") {
 			switch sel.Sel.Name {
 			case "Float32bits":
 				if len(e.Args) == 1 {
@@ -1136,6 +1150,40 @@ func (t *CASTTranslator) translateCallExpr(e *ast.CallExpr) string {
 				if len(e.Args) == 1 {
 					arg := t.translateExpr(e.Args[0])
 					return fmt.Sprintf("bits_to_float(%s)", arg)
+				}
+			case "Sqrt":
+				if len(e.Args) == 1 {
+					arg := t.translateExpr(e.Args[0])
+					if t.elemType == "float64" {
+						return fmt.Sprintf("sqrt(%s)", arg)
+					}
+					return fmt.Sprintf("sqrtf(%s)", arg)
+				}
+			case "Exp":
+				if len(e.Args) == 1 {
+					arg := t.translateExpr(e.Args[0])
+					if t.elemType == "float64" {
+						return fmt.Sprintf("exp(%s)", arg)
+					}
+					return fmt.Sprintf("expf(%s)", arg)
+				}
+			case "Log":
+				if len(e.Args) == 1 {
+					arg := t.translateExpr(e.Args[0])
+					if t.elemType == "float64" {
+						return fmt.Sprintf("log(%s)", arg)
+					}
+					return fmt.Sprintf("logf(%s)", arg)
+				}
+			case "Inf":
+				if len(e.Args) == 1 {
+					arg := t.translateExpr(e.Args[0])
+					// Use constant expressions to avoid <math.h> dependency (GOAT-safe)
+					// math.Inf(1) → positive infinity, math.Inf(-1) → negative infinity
+					if strings.HasPrefix(arg, "-") {
+						return "(-1.0f/0.0f)"
+					}
+					return "(1.0f/0.0f)"
 				}
 			}
 		}
@@ -1307,6 +1355,14 @@ func (t *CASTTranslator) translateHwyCall(funcName string, args []ast.Expr) stri
 		return t.emitHwyUnaryOp(t.profile.PopCountFn, args)
 	case "LessThan":
 		return t.emitHwyBinaryOp(t.profile.LessThanFn, args)
+	case "Equal":
+		return t.emitHwyBinaryOp(t.profile.EqualFn, args)
+	case "GreaterThan":
+		return t.emitHwyBinaryOp(t.profile.GreaterThanFn, args)
+	case "ReduceMin":
+		return t.emitHwyUnaryOp(t.profile.ReduceMinFn, args)
+	case "ReduceMax":
+		return t.emitHwyUnaryOp(t.profile.ReduceMaxFn, args)
 	case "IfThenElse":
 		return t.emitHwyIfThenElse(args)
 	case "BitsFromMask":
@@ -1322,7 +1378,7 @@ func (t *CASTTranslator) translateHwyCall(funcName string, args []ast.Expr) stri
 		return t.emitHwyLoad(args) // same semantics as Load for C
 	case "StoreSlice":
 		return t.emitHwyStoreExpr(args) // same semantics as Store for C
-	case "MaxLanes":
+	case "MaxLanes", "NumLanes":
 		return fmt.Sprintf("%d", t.lanes)
 	case "GetLane":
 		return t.emitHwyGetLane(args)
@@ -1343,6 +1399,9 @@ func (t *CASTTranslator) emitHwyLoad(args []ast.Expr) string {
 	}
 	loadFn := t.profile.LoadFn[t.tier]
 	ptr := t.translateExpr(args[0])
+	if t.profile.CastExpr != "" {
+		return fmt.Sprintf("%s(%s(%s))", loadFn, t.profile.CastExpr, ptr)
+	}
 	return fmt.Sprintf("%s(%s)", loadFn, ptr)
 }
 
@@ -1357,7 +1416,11 @@ func (t *CASTTranslator) emitHwyStore(args []ast.Expr) {
 	ptr := t.translateExpr(args[1])
 	// NEON Store: vst1q_f32(ptr, vec) — pointer first, vector second
 	// AVX Store: _mm256_storeu_ps(ptr, vec) — same convention
-	t.writef("%s(%s, %s);\n", storeFn, ptr, vec)
+	if t.profile.CastExpr != "" {
+		t.writef("%s(%s(%s), %s);\n", storeFn, t.profile.CastExpr, ptr, vec)
+	} else {
+		t.writef("%s(%s, %s);\n", storeFn, ptr, vec)
+	}
 }
 
 // emitHwyStoreExpr returns Store as a string expression (for edge cases).
@@ -1368,6 +1431,9 @@ func (t *CASTTranslator) emitHwyStoreExpr(args []ast.Expr) string {
 	storeFn := t.profile.StoreFn[t.tier]
 	vec := t.translateExpr(args[0])
 	ptr := t.translateExpr(args[1])
+	if t.profile.CastExpr != "" {
+		return fmt.Sprintf("%s(%s(%s), %s)", storeFn, t.profile.CastExpr, ptr, vec)
+	}
 	return fmt.Sprintf("%s(%s, %s)", storeFn, ptr, vec)
 }
 
@@ -1391,8 +1457,14 @@ func (t *CASTTranslator) emitHwyZero() string {
 	case "float32":
 		zero = "0.0f"
 	default:
-		// Integer types: use plain 0
-		zero = "0"
+		if t.profile.ScalarArithType != "" {
+			// Half-precision with native arithmetic (e.g., NEON f16):
+			// use 0.0 as the zero literal for the dup intrinsic
+			zero = "0.0"
+		} else {
+			// Integer types: use plain 0
+			zero = "0"
+		}
 	}
 	return fmt.Sprintf("%s(%s)", dupFn, zero)
 }
@@ -1549,7 +1621,11 @@ func (t *CASTTranslator) translateGetLaneVarIndex(lhsName string, args []ast.Exp
 	cType := t.profile.CType
 
 	t.writef("volatile %s _getlane_buf[%d];\n", cType, t.lanes)
-	t.writef("%s((%s *)_getlane_buf, %s);\n", storeFn, cType, vec)
+	if t.profile.CastExpr != "" {
+		t.writef("%s(%s_getlane_buf, %s);\n", storeFn, t.profile.CastExpr, vec)
+	} else {
+		t.writef("%s((%s *)_getlane_buf, %s);\n", storeFn, cType, vec)
+	}
 
 	varInfo := cVarInfo{cType: cType}
 	if tok == token.DEFINE {
@@ -1707,10 +1783,20 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 			case "Load", "Load4", "Zero", "Set", "MulAdd", "Add", "Sub", "Mul", "Div",
 				"Min", "Max", "Neg", "Abs", "Sqrt",
 				"LoadSlice", "InterleaveLower", "InterleaveUpper",
-				"And", "Or", "Xor", "PopCount", "TableLookupBytes":
+				"And", "Or", "Xor", "PopCount", "TableLookupBytes",
+				"IfThenElse":
 				return cVarInfo{cType: vecType, isVector: true}
+			case "ReduceMin", "ReduceMax":
+				// ReduceMin/Max return a scalar
+				if t.profile.ScalarArithType != "" {
+					return cVarInfo{cType: t.profile.ScalarArithType}
+				}
+				return cVarInfo{cType: t.profile.CType}
 			case "ReduceSum":
 				// ReduceSum returns a scalar, not a vector
+				if t.profile.ScalarArithType != "" {
+					return cVarInfo{cType: t.profile.ScalarArithType}
+				}
 				return cVarInfo{cType: t.profile.CType}
 			case "BitsFromMask":
 				// BitsFromMask returns a scalar unsigned integer
@@ -1722,8 +1808,13 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 					maskType = mt
 				}
 				return cVarInfo{cType: maskType, isVector: true}
-			case "IfThenElse":
-				return cVarInfo{cType: vecType, isVector: true}
+			case "Equal", "GreaterThan":
+				// Comparison ops return a mask vector
+				maskType := vecType
+				if mt, ok := t.profile.MaskType[t.tier]; ok {
+					maskType = mt
+				}
+				return cVarInfo{cType: maskType, isVector: true}
 			case "MaxLanes", "GetLane":
 				return cVarInfo{cType: "long"}
 			}
@@ -1737,13 +1828,23 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 		}
 	}
 
-	// Check for math.Float32bits → unsigned int, math.Float32frombits → float
+	// Check for math/stdmath functions
 	if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
-		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "math" {
+		if pkg, ok := sel.X.(*ast.Ident); ok && (pkg.Name == "math" || pkg.Name == "stdmath") {
 			switch sel.Sel.Name {
 			case "Float32bits":
 				return cVarInfo{cType: "unsigned int"}
 			case "Float32frombits":
+				return cVarInfo{cType: "float"}
+			case "Sqrt", "Exp", "Log":
+				if t.elemType == "float64" {
+					return cVarInfo{cType: "double"}
+				}
+				return cVarInfo{cType: "float"}
+			case "Inf":
+				if t.elemType == "float64" {
+					return cVarInfo{cType: "double"}
+				}
 				return cVarInfo{cType: "float"}
 			}
 		}

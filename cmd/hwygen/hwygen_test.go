@@ -1881,10 +1881,11 @@ func TestASTCWrapperGeneration(t *testing.T) {
 		t.Error("wrapper: missing matmul_c_f64_neon asm call")
 	}
 
-	// Verify f16/bf16 wrappers were NOT generated (promoted math not yet supported)
-	if strings.Contains(wrapper, "MatMulCF16") {
-		t.Error("wrapper: f16 wrapper should not be generated for promoted-math types")
+	// NEON f16 has NativeArithmetic, so its wrapper SHOULD be generated
+	if !strings.Contains(wrapper, "MatMulCF16") {
+		t.Error("wrapper: f16 wrapper should be generated for NEON f16 (NativeArithmetic=true)")
 	}
+	// bf16 still uses promoted math without native arithmetic, so no wrapper
 	if strings.Contains(wrapper, "MatMulCBF16") {
 		t.Error("wrapper: bf16 wrapper should not be generated for promoted-math types")
 	}
@@ -4036,5 +4037,311 @@ func BaseSignBitTest(data []float32, n int) {
 	}
 	if !strings.Contains(cCode, ">> 31)") {
 		t.Error("missing >> 31 for inlined getSignBit")
+	}
+}
+
+func TestASTTranslatorF16NEON(t *testing.T) {
+	// Find the matmul_base.go file
+	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
+	if _, err := os.Stat(matmulPath); err != nil {
+		t.Skipf("matmul_base.go not found at %s: %v", matmulPath, err)
+	}
+
+	result, err := Parse(matmulPath)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	var matmulFunc *ParsedFunc
+	for i, pf := range result.Funcs {
+		if pf.Name == "BaseMatMul" {
+			matmulFunc = &result.Funcs[i]
+			break
+		}
+	}
+	if matmulFunc == nil {
+		t.Fatal("BaseMatMul not found in parsed functions")
+	}
+
+	// Translate for NEON f16
+	profile := GetCProfile("NEON", "hwy.Float16")
+	if profile == nil {
+		t.Fatal("NEON Float16 profile not found")
+	}
+
+	// Verify profile has NativeArithmetic set
+	if !profile.NativeArithmetic {
+		t.Error("NEON f16 profile should have NativeArithmetic = true")
+	}
+	if profile.ScalarArithType != "float16_t" {
+		t.Errorf("NEON f16 ScalarArithType = %q, want %q", profile.ScalarArithType, "float16_t")
+	}
+
+	translator := NewCASTTranslator(profile, "hwy.Float16")
+	cCode, err := translator.TranslateToC(matmulFunc)
+	if err != nil {
+		t.Fatalf("TranslateToC failed: %v", err)
+	}
+
+	t.Logf("Generated C code:\n%s", cCode)
+
+	// Verify Load with CastExpr: vld1q_f16((float16_t*)(...))
+	if !strings.Contains(cCode, "vld1q_f16((float16_t*)(") {
+		t.Error("missing vld1q_f16((float16_t*)(...)) for hwy.Load with CastExpr")
+	}
+
+	// Verify Store with CastExpr: vst1q_f16((float16_t*)(...), ...)
+	if !strings.Contains(cCode, "vst1q_f16((float16_t*)(") {
+		t.Error("missing vst1q_f16((float16_t*)(...), ...) for hwy.Store with CastExpr")
+	}
+
+	// Verify FMA: vfmaq_f16(acc, a, b) — NEON acc-first
+	if !strings.Contains(cCode, "vfmaq_f16(vC, vA, vB)") {
+		t.Error("missing vfmaq_f16(vC, vA, vB) for hwy.MulAdd with NEON f16")
+	}
+
+	// Verify Zero uses dup with 0.0 (not 0.0f for f16)
+	if !strings.Contains(cCode, "vld1q_dup_f16(0.0)") {
+		t.Error("missing vld1q_dup_f16(0.0) for hwy.Zero with f16")
+	}
+
+	// Verify lanes = 8 for NEON f16
+	if !strings.Contains(cCode, "= 8") {
+		t.Error("missing NumLanes constant (= 8 for NEON f16)")
+	}
+
+	// Verify float literals don't have 'f' suffix for f16
+	if strings.Contains(cCode, "0.0f") {
+		t.Error("f16 should not use 0.0f suffix — should use bare 0.0 or 0")
+	}
+
+	// Verify function name includes f16
+	if !strings.Contains(cCode, "matmul_c_f16_neon") {
+		t.Error("missing function name with f16 suffix")
+	}
+
+	// Verify pointer type is unsigned short (CType)
+	if !strings.Contains(cCode, "unsigned short *a") {
+		t.Error("missing unsigned short *a parameter for f16")
+	}
+}
+
+func TestASTTranslatorContinueBreak(t *testing.T) {
+	profile := GetCProfile("NEON", "float32")
+	if profile == nil {
+		t.Fatal("NEON float32 profile not found")
+	}
+
+	fset := token.NewFileSet()
+	src := `package test
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseContinueBreak(data []float32, n int) {
+	for i := 0; i < n; i++ {
+		if data[i] == 0 {
+			continue
+		}
+		v := hwy.Load(data[i:])
+		_ = v
+		if i > 10 {
+			break
+		}
+	}
+}
+`
+	file, err := parser.ParseFile(fset, "test.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var funcDecl *ast.FuncDecl
+	for _, decl := range file.Decls {
+		if fd, ok := decl.(*ast.FuncDecl); ok && fd.Name.Name == "BaseContinueBreak" {
+			funcDecl = fd
+			break
+		}
+	}
+	if funcDecl == nil {
+		t.Fatal("no function found")
+	}
+
+	pf := &ParsedFunc{
+		Name: "BaseContinueBreak",
+		Params: []Param{
+			{Name: "data", Type: "[]float32"},
+			{Name: "n", Type: "int"},
+		},
+		Body:     funcDecl.Body,
+		HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Load"}},
+	}
+
+	translator := NewCASTTranslator(profile, "float32")
+	cCode, err := translator.TranslateToC(pf)
+	if err != nil {
+		t.Fatalf("TranslateToC failed: %v", err)
+	}
+
+	t.Logf("Generated C code:\n%s", cCode)
+
+	if !strings.Contains(cCode, "continue;") {
+		t.Error("missing 'continue;' in C output")
+	}
+	if !strings.Contains(cCode, "break;") {
+		t.Error("missing 'break;' in C output")
+	}
+}
+
+func TestASTTranslatorNilComparison(t *testing.T) {
+	profile := GetCProfile("NEON", "float32")
+	if profile == nil {
+		t.Fatal("NEON float32 profile not found")
+	}
+
+	fset := token.NewFileSet()
+	src := `package test
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseNilCheck(data, bias []float32, n int) {
+	for i := 0; i < n; i++ {
+		v := hwy.Load(data[i:])
+		if bias != nil {
+			b := hwy.Load(bias[i:])
+			v = hwy.Add(v, b)
+		}
+		hwy.Store(v, data[i:])
+	}
+}
+`
+	file, err := parser.ParseFile(fset, "test.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var funcDecl *ast.FuncDecl
+	for _, decl := range file.Decls {
+		if fd, ok := decl.(*ast.FuncDecl); ok && fd.Name.Name == "BaseNilCheck" {
+			funcDecl = fd
+			break
+		}
+	}
+	if funcDecl == nil {
+		t.Fatal("no function found")
+	}
+
+	pf := &ParsedFunc{
+		Name: "BaseNilCheck",
+		Params: []Param{
+			{Name: "data", Type: "[]float32"},
+			{Name: "bias", Type: "[]float32"},
+			{Name: "n", Type: "int"},
+		},
+		Body:     funcDecl.Body,
+		HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Load"}},
+	}
+
+	translator := NewCASTTranslator(profile, "float32")
+	cCode, err := translator.TranslateToC(pf)
+	if err != nil {
+		t.Fatalf("TranslateToC failed: %v", err)
+	}
+
+	t.Logf("Generated C code:\n%s", cCode)
+
+	// nil should be translated to 0 (C NULL)
+	if !strings.Contains(cCode, "!= 0") {
+		t.Error("missing '!= 0' for nil comparison — nil should translate to 0")
+	}
+	// Should NOT contain " nil " or "nil)" in C output (as Go keyword)
+	if strings.Contains(cCode, " nil ") || strings.Contains(cCode, " nil)") {
+		t.Error("Go 'nil' keyword should not appear in C output")
+	}
+}
+
+func TestASTTranslatorStdMathCalls(t *testing.T) {
+	profile := GetCProfile("NEON", "float32")
+	if profile == nil {
+		t.Fatal("NEON float32 profile not found")
+	}
+
+	fset := token.NewFileSet()
+	src := `package test
+
+import stdmath "math"
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseMathOps(data []float32, n int) {
+	for i := 0; i < n; i++ {
+		v := hwy.Load(data[i:])
+		_ = v
+		x := data[i]
+		y := stdmath.Sqrt(x)
+		z := stdmath.Exp(y)
+		w := stdmath.Log(z)
+		inf := stdmath.Inf(1)
+		_ = w
+		_ = inf
+	}
+}
+`
+	file, err := parser.ParseFile(fset, "test.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	var funcDecl *ast.FuncDecl
+	for _, decl := range file.Decls {
+		if fd, ok := decl.(*ast.FuncDecl); ok && fd.Name.Name == "BaseMathOps" {
+			funcDecl = fd
+			break
+		}
+	}
+	if funcDecl == nil {
+		t.Fatal("no function found")
+	}
+
+	pf := &ParsedFunc{
+		Name: "BaseMathOps",
+		Params: []Param{
+			{Name: "data", Type: "[]float32"},
+			{Name: "n", Type: "int"},
+		},
+		Body:     funcDecl.Body,
+		HwyCalls: []HwyCall{{Package: "hwy", FuncName: "Load"}},
+	}
+
+	translator := NewCASTTranslator(profile, "float32")
+	cCode, err := translator.TranslateToC(pf)
+	if err != nil {
+		t.Fatalf("TranslateToC failed: %v", err)
+	}
+
+	t.Logf("Generated C code:\n%s", cCode)
+
+	// Verify sqrtf for float32
+	if !strings.Contains(cCode, "sqrtf(") {
+		t.Error("missing sqrtf() for stdmath.Sqrt with float32")
+	}
+
+	// Verify expf for float32
+	if !strings.Contains(cCode, "expf(") {
+		t.Error("missing expf() for stdmath.Exp with float32")
+	}
+
+	// Verify logf for float32
+	if !strings.Contains(cCode, "logf(") {
+		t.Error("missing logf() for stdmath.Log with float32")
+	}
+
+	// Verify Inf → (1.0f/0.0f)
+	if !strings.Contains(cCode, "(1.0f/0.0f)") {
+		t.Error("missing (1.0f/0.0f) for stdmath.Inf(1)")
+	}
+
+	// Should NOT contain "stdmath." in C output
+	if strings.Contains(cCode, "stdmath.") {
+		t.Error("Go 'stdmath.' package prefix should not appear in C output")
 	}
 }
