@@ -1757,6 +1757,19 @@ func (e *CEmitter) EmitASTTranslatedC(pf *ParsedFunc, outPath string) (string, e
 	fmt.Fprintf(&buf, "%s\n", include)
 	fmt.Fprintf(&buf, "#endif\n\n")
 
+	// Emit inline helper functions required by this profile.
+	// These are wrapped in #ifndef GOAT_PARSER because GOAT's parser
+	// doesn't support static inline non-void functions. Clang still
+	// sees and inlines them during compilation.
+	if len(e.profile.InlineHelpers) > 0 {
+		fmt.Fprintf(&buf, "#ifndef GOAT_PARSER\n")
+		for _, helper := range e.profile.InlineHelpers {
+			buf.WriteString(helper)
+			buf.WriteString("\n\n")
+		}
+		fmt.Fprintf(&buf, "#endif\n\n")
+	}
+
 	buf.WriteString(cCode)
 
 	// Determine output filename

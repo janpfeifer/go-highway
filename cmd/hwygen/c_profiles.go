@@ -34,6 +34,50 @@ type CIntrinsicProfile struct {
 	MaxFn     map[string]string
 	DupFn     map[string]string // Broadcast scalar to all lanes
 	GetLaneFn map[string]string // Extract single lane
+	Load4Fn   map[string]string // Multi-load: vld1q_u64_x4; nil for AVX (falls back to 4× LoadFn)
+	VecX4Type map[string]string // Multi-load struct type: "uint64x2x4_t"; nil for AVX
+
+	// Reduction
+	ReduceSumFn map[string]string // vaddvq_f32, _mm256_reduce_add_ps
+
+	// Shuffle/Permute
+	InterleaveLowerFn  map[string]string // vzip1q_f32, _mm256_unpacklo_ps
+	InterleaveUpperFn  map[string]string // vzip2q_f32, _mm256_unpackhi_ps
+	TableLookupBytesFn map[string]string // vqtbl1q_u8, _mm256_shuffle_epi8
+
+	// Bitwise
+	AndFn map[string]string // vandq_u64, _mm256_and_si256
+	OrFn  map[string]string // vorrq_u64, _mm256_or_si256
+	XorFn map[string]string // veorq_u64, _mm256_xor_si256
+
+	// PopCount - complex on NEON (vcntq_u8 + pairwise adds)
+	PopCountFn map[string]string
+
+	// Deferred popcount accumulation: replaces per-iteration horizontal
+	// reduction (ReduceSum(PopCount(And(...)))) with vector accumulators
+	// that are reduced once after the loop. Only used for NEON uint64.
+	// nil/empty disables the optimization.
+	PopCountPartialFn map[string]string // e.g. "neon_popcnt_u64_to_u32" — returns uint32x4_t
+	AccVecType        map[string]string // e.g. "uint32x4_t"
+	AccAddFn          map[string]string // e.g. "vaddq_u32"
+	AccReduceFn       map[string]string // e.g. "vaddvq_u32"
+
+	// Comparison (returns mask type)
+	LessThanFn map[string]string // vcltq_f32, _mm256_cmp_ps
+
+	// Conditional select
+	IfThenElseFn map[string]string // vbslq_f32, _mm256_blendv_ps
+
+	// Mask extraction
+	BitsFromMaskFn map[string]string // manual (NEON), _mm256_movemask_epi8
+
+	// Mask vector type (comparison results)
+	MaskType map[string]string // "uint32x4_t" (NEON), "__m256" (AVX)
+
+	// InlineHelpers contains C helper function source code that should be
+	// emitted at the top of generated C files (before main functions).
+	// Used for complex intrinsic sequences like NEON popcount chains.
+	InlineHelpers []string
 
 	// Math strategy: "native" means arithmetic is done directly in the element
 	// type. "promoted" means elements must be promoted to a wider type (typically
@@ -96,6 +140,9 @@ func init() {
 		avx2F16Profile(),
 		avx512F16Profile(),
 		avx512BF16Profile(),
+		neonUint64Profile(),
+		neonUint8Profile(),
+		neonUint32Profile(),
 	} {
 		// Primary key: "TargetName:ElemType"
 		key := p.TargetName + ":" + p.ElemType
@@ -157,6 +204,28 @@ func neonF32Profile() *CIntrinsicProfile {
 		MaxFn:     map[string]string{"q": "vmaxq_f32"},
 		DupFn:     map[string]string{"q": "vdupq_n_f32"},
 		GetLaneFn: map[string]string{"q": "vgetq_lane_f32"},
+		Load4Fn:   map[string]string{"q": "vld1q_f32_x4"},
+		VecX4Type: map[string]string{"q": "float32x4x4_t"},
+
+		ReduceSumFn:       map[string]string{"q": "vaddvq_f32"},
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_f32"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_f32"},
+		LessThanFn:        map[string]string{"q": "vcltq_f32"},
+		IfThenElseFn:      map[string]string{"q": "vbslq_f32"},
+		MaskType:          map[string]string{"q": "uint32x4_t"},
+
+		InlineHelpers: []string{
+			`static inline unsigned int float_to_bits(float f) {
+    unsigned int bits;
+    __builtin_memcpy(&bits, &f, 4);
+    return bits;
+}`,
+			`static inline float bits_to_float(unsigned int bits) {
+    float f;
+    __builtin_memcpy(&f, &bits, 4);
+    return f;
+}`,
+		},
 
 		MathStrategy:   "native",
 		FmaArgOrder:    "acc_first",
@@ -198,6 +267,15 @@ func neonF64Profile() *CIntrinsicProfile {
 		MaxFn:     map[string]string{"q": "vmaxq_f64"},
 		DupFn:     map[string]string{"q": "vdupq_n_f64"},
 		GetLaneFn: map[string]string{"q": "vgetq_lane_f64"},
+		Load4Fn:   map[string]string{"q": "vld1q_f64_x4"},
+		VecX4Type: map[string]string{"q": "float64x2x4_t"},
+
+		ReduceSumFn:       map[string]string{"q": "vaddvq_f64"},
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_f64"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_f64"},
+		LessThanFn:        map[string]string{"q": "vcltq_f64"},
+		IfThenElseFn:      map[string]string{"q": "vbslq_f64"},
+		MaskType:          map[string]string{"q": "uint64x2_t"},
 
 		MathStrategy:   "native",
 		FmaArgOrder:    "acc_first",
@@ -617,5 +695,155 @@ func avx512BF16Profile() *CIntrinsicProfile {
 		FmaArgOrder:    "acc_last",
 		GoatTarget:     "amd64",
 		GoatExtraFlags: []string{"-mavx512bf16", "-mavx512f", "-mavx512vl"},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NEON uint64 (for RaBitQ bit product)
+// ---------------------------------------------------------------------------
+
+func neonUint64Profile() *CIntrinsicProfile {
+	return &CIntrinsicProfile{
+		ElemType:   "uint64",
+		TargetName: "NEON",
+		Include:    "#include <arm_neon.h>",
+		CType:      "unsigned long",
+		VecTypes: map[string]string{
+			"q": "uint64x2_t",
+		},
+		Tiers: []CLoopTier{
+			{Name: "q", Lanes: 2, Unroll: 1, IsScalar: false},
+			{Name: "scalar", Lanes: 1, Unroll: 1, IsScalar: true},
+		},
+		LoadFn:    map[string]string{"q": "vld1q_u64"},
+		StoreFn:   map[string]string{"q": "vst1q_u64"},
+		AddFn:     map[string]string{"q": "vaddq_u64"},
+		DupFn:     map[string]string{"q": "vdupq_n_u64"},
+		Load4Fn:   map[string]string{"q": "vld1q_u64_x4"},
+		VecX4Type: map[string]string{"q": "uint64x2x4_t"},
+
+		AndFn:      map[string]string{"q": "vandq_u64"},
+		OrFn:       map[string]string{"q": "vorrq_u64"},
+		XorFn:      map[string]string{"q": "veorq_u64"},
+		PopCountFn: map[string]string{"q": "neon_popcnt_u64"},
+
+		ReduceSumFn: map[string]string{"q": "vaddvq_u64"},
+
+		// Deferred popcount accumulation: accumulate at uint32x4_t width
+		// inside the loop, reduce once after the loop with vaddvq_u32.
+		PopCountPartialFn: map[string]string{"q": "neon_popcnt_u64_to_u32"},
+		AccVecType:        map[string]string{"q": "uint32x4_t"},
+		AccAddFn:          map[string]string{"q": "vaddq_u32"},
+		AccReduceFn:       map[string]string{"q": "vaddvq_u32"},
+
+		MathStrategy:   "native",
+		GoatTarget:     "arm64",
+		GoatExtraFlags: []string{"-march=armv8-a+simd+fp"},
+
+		InlineHelpers: []string{
+			`static inline uint64x2_t neon_popcnt_u64(uint64x2_t v) {
+    uint8x16_t bytes = vreinterpretq_u8_u64(v);
+    uint8x16_t counts = vcntq_u8(bytes);
+    uint16x8_t pairs = vpaddlq_u8(counts);
+    uint32x4_t quads = vpaddlq_u16(pairs);
+    uint64x2_t result = vpaddlq_u32(quads);
+    return result;
+}`,
+			`static inline uint32x4_t neon_popcnt_u64_to_u32(uint64x2_t v) {
+    uint8x16_t bytes = vreinterpretq_u8_u64(v);
+    uint8x16_t counts = vcntq_u8(bytes);
+    uint16x8_t pairs = vpaddlq_u8(counts);
+    uint32x4_t quads = vpaddlq_u16(pairs);
+    return quads;
+}`,
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NEON uint8 (for varint boundary detection)
+// ---------------------------------------------------------------------------
+
+func neonUint8Profile() *CIntrinsicProfile {
+	return &CIntrinsicProfile{
+		ElemType:   "uint8",
+		TargetName: "NEON",
+		Include:    "#include <arm_neon.h>",
+		CType:      "unsigned char",
+		VecTypes: map[string]string{
+			"q": "uint8x16_t",
+		},
+		Tiers: []CLoopTier{
+			{Name: "q", Lanes: 16, Unroll: 1, IsScalar: false},
+			{Name: "scalar", Lanes: 1, Unroll: 1, IsScalar: true},
+		},
+		LoadFn:    map[string]string{"q": "vld1q_u8"},
+		StoreFn:   map[string]string{"q": "vst1q_u8"},
+		DupFn:     map[string]string{"q": "vdupq_n_u8"},
+		Load4Fn:   map[string]string{"q": "vld1q_u8_x4"},
+		VecX4Type: map[string]string{"q": "uint8x16x4_t"},
+
+		LessThanFn:         map[string]string{"q": "vcltq_u8"},
+		BitsFromMaskFn:     map[string]string{"q": "neon_bits_from_mask_u8"},
+		TableLookupBytesFn: map[string]string{"q": "vqtbl1q_u8"},
+		MaskType:           map[string]string{"q": "uint8x16_t"},
+
+		MathStrategy:   "native",
+		GoatTarget:     "arm64",
+		GoatExtraFlags: []string{"-march=armv8-a+simd+fp"},
+
+		InlineHelpers: []string{
+			`static inline unsigned int neon_bits_from_mask_u8(uint8x16_t v) {
+    // Extract one bit per byte from a NEON mask vector using volatile stack spill.
+    // v has 0xFF (true) or 0x00 (false) per byte lane.
+    // This avoids static const data that GOAT may not relocate properly.
+    volatile unsigned char tmp[16];
+    vst1q_u8((unsigned char *)tmp, v);
+    unsigned int mask = 0;
+    int i;
+    for (i = 0; i < 16; i++) {
+        if (tmp[i]) mask |= (1u << i);
+    }
+    return mask;
+}`,
+		},
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NEON uint32 (for RaBitQ code counts)
+// ---------------------------------------------------------------------------
+
+func neonUint32Profile() *CIntrinsicProfile {
+	return &CIntrinsicProfile{
+		ElemType:   "uint32",
+		TargetName: "NEON",
+		Include:    "#include <arm_neon.h>",
+		CType:      "unsigned int",
+		VecTypes: map[string]string{
+			"q": "uint32x4_t",
+		},
+		Tiers: []CLoopTier{
+			{Name: "q", Lanes: 4, Unroll: 1, IsScalar: false},
+			{Name: "scalar", Lanes: 1, Unroll: 1, IsScalar: true},
+		},
+		LoadFn:    map[string]string{"q": "vld1q_u32"},
+		StoreFn:   map[string]string{"q": "vst1q_u32"},
+		AddFn:     map[string]string{"q": "vaddq_u32"},
+		DupFn:     map[string]string{"q": "vdupq_n_u32"},
+		Load4Fn:   map[string]string{"q": "vld1q_u32_x4"},
+		VecX4Type: map[string]string{"q": "uint32x4x4_t"},
+
+		AndFn: map[string]string{"q": "vandq_u32"},
+		OrFn:  map[string]string{"q": "vorrq_u32"},
+		XorFn: map[string]string{"q": "veorq_u32"},
+
+		ReduceSumFn: map[string]string{"q": "vaddvq_u32"},
+		LessThanFn:  map[string]string{"q": "vcltq_u32"},
+		MaskType:    map[string]string{"q": "uint32x4_t"},
+
+		MathStrategy:   "native",
+		GoatTarget:     "arm64",
+		GoatExtraFlags: []string{"-march=armv8-a+simd+fp"},
 	}
 }

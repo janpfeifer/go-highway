@@ -167,9 +167,28 @@ func (g *Generator) runCMode(result *ParseResult) error {
 
 // getCElemTypes returns the concrete element types for C code generation.
 // This includes f16/bf16 types when the constraint allows them.
+// For non-generic functions, it infers the element type from slice parameters.
 func getCElemTypes(pf *ParsedFunc) []string {
 	if len(pf.TypeParams) > 0 {
 		return GetConcreteTypes(pf.TypeParams[0].Constraint)
+	}
+	// For non-generic functions, detect element type from slice param types
+	for _, p := range pf.Params {
+		if strings.HasPrefix(p.Type, "[]") {
+			elemType := strings.TrimPrefix(p.Type, "[]")
+			switch elemType {
+			case "uint64":
+				return []string{"uint64"}
+			case "uint32":
+				return []string{"uint32"}
+			case "uint8", "byte":
+				return []string{"uint8"}
+			case "float64":
+				return []string{"float64"}
+			case "float32":
+				return []string{"float32"}
+			}
+		}
 	}
 	return []string{"float32"}
 }
@@ -192,7 +211,11 @@ func IsSliceFunction(pf *ParsedFunc) bool {
 // based on its filename convention.
 func getCProfileForFile(cFile string, target Target) *CIntrinsicProfile {
 	base := filepath.Base(cFile)
-	for _, et := range []string{"float16", "hwy.Float16", "bfloat16", "hwy.BFloat16", "float32", "float64"} {
+	for _, et := range []string{
+		"float16", "hwy.Float16", "bfloat16", "hwy.BFloat16",
+		"float32", "float64",
+		"uint64", "uint32", "uint8",
+	} {
 		suffix := cTypeSuffix(et)
 		if strings.Contains(base, "_"+suffix+"_") {
 			p := GetCProfile(target.Name, et)
@@ -439,6 +462,12 @@ func cTypeSuffix(elemType string) string {
 		return "f16"
 	case "bfloat16", "hwy.BFloat16":
 		return "bf16"
+	case "uint64":
+		return "u64"
+	case "uint32":
+		return "u32"
+	case "uint8", "byte":
+		return "u8"
 	default:
 		return "f32"
 	}
@@ -455,6 +484,12 @@ func cTypePublicSuffix(elemType string) string {
 		return "F16"
 	case "bfloat16", "hwy.BFloat16":
 		return "BF16"
+	case "uint64":
+		return "U64"
+	case "uint32":
+		return "U32"
+	case "uint8", "byte":
+		return "U8"
 	default:
 		return "F32"
 	}
@@ -489,20 +524,44 @@ func astWrapperGoSliceType(elemType string) string {
 		return "[]hwy.Float16"
 	case "bfloat16", "hwy.BFloat16":
 		return "[]hwy.BFloat16"
+	case "uint64":
+		return "[]uint64"
+	case "uint32":
+		return "[]uint32"
+	case "uint8", "byte":
+		return "[]byte"
 	default:
 		return "[]float32"
 	}
 }
 
+// goReturnTypeForWrapper maps Go return types to their Go type name for wrappers.
+func goReturnTypeForWrapper(goType string) string {
+	switch goType {
+	case "uint32":
+		return "uint32"
+	case "uint64":
+		return "uint64"
+	case "int", "int64":
+		return "int"
+	case "int32":
+		return "int32"
+	case "float32":
+		return "float32"
+	case "float64":
+		return "float64"
+	default:
+		return goType
+	}
+}
+
 // emitASTCWrapperFunc generates a wrapper function for an AST-translated function
 // with arbitrary parameters (multiple slices + int dimensions).
-// Follows the pattern from the hand-written wrappers (e.g., matmul_klast_neon_wrappers.go):
 //
-//	func MatMulCF32(a, b, c []float32, m, n, k int) {
-//	    mVal := int64(m)
-//	    ...
-//	    matmul_c_f32_neon(unsafe.Pointer(&a[0]), ..., unsafe.Pointer(&mVal), ...)
-//	}
+// Handles three parameter patterns:
+//  1. Functions with explicit int params (matmul): a, b, c []float32, m, n, k int
+//  2. Functions without int params (rabitq): code, q1, q2 []uint64 → adds hidden length param
+//  3. Functions with return values (rabitq, varint): uint32 → adds output pointer param
 func emitASTCWrapperFunc(buf *bytes.Buffer, pf *ParsedFunc, elemType, targetSuffix string) {
 	publicName := buildCPublicName(pf.Name, elemType)
 	asmName := cAsmFuncName(pf.Name, elemType, targetSuffix)
@@ -519,22 +578,74 @@ func emitASTCWrapperFunc(buf *bytes.Buffer, pf *ParsedFunc, elemType, targetSuff
 		}
 	}
 
-	// Build grouped Go signature: "a, b, c []float32, m, n, k int"
+	// Determine if we need a hidden length param (no explicit int params but has slices)
+	needsHiddenLen := len(intParams) == 0 && len(sliceParams) > 0
+	firstSlice := ""
+	if needsHiddenLen && len(sliceParams) > 0 {
+		firstSlice = sliceParams[0]
+	}
+
+	// Determine if we have return values
+	hasReturns := len(pf.Returns) > 0
+
+	// Build Go signature
 	goSig := groupGoParams(pf, goSliceType)
+
+	// Build return type string
+	var returnType string
+	if hasReturns {
+		if len(pf.Returns) == 1 {
+			returnType = goReturnTypeForWrapper(pf.Returns[0].Type)
+		} else {
+			var retTypes []string
+			for _, ret := range pf.Returns {
+				retTypes = append(retTypes, goReturnTypeForWrapper(ret.Type))
+			}
+			returnType = "(" + strings.Join(retTypes, ", ") + ")"
+		}
+	}
 
 	// Comment + function signature
 	fmt.Fprintf(buf, "// %s computes %s using %s SIMD assembly.\n",
 		publicName, strings.TrimPrefix(pf.Name, "Base"), strings.ToUpper(targetSuffix))
-	fmt.Fprintf(buf, "func %s(%s) {\n", publicName, goSig)
+	if hasReturns {
+		fmt.Fprintf(buf, "func %s(%s) %s {\n", publicName, goSig, returnType)
+	} else {
+		fmt.Fprintf(buf, "func %s(%s) {\n", publicName, goSig)
+	}
 
-	// Zero-dimension guard
+	// Zero-length guard for slice-only functions
+	if needsHiddenLen {
+		fmt.Fprintf(buf, "\tif len(%s) == 0 {\n", firstSlice)
+		if hasReturns {
+			// Return zero values
+			var zeros []string
+			for range pf.Returns {
+				zeros = append(zeros, "0")
+			}
+			fmt.Fprintf(buf, "\t\treturn %s\n", strings.Join(zeros, ", "))
+		} else {
+			fmt.Fprintf(buf, "\t\treturn\n")
+		}
+		fmt.Fprintf(buf, "\t}\n")
+	}
+
+	// Zero-dimension guard for functions with explicit int params
 	if len(intParams) > 0 {
 		var checks []string
 		for _, ip := range intParams {
 			checks = append(checks, ip+" == 0")
 		}
 		fmt.Fprintf(buf, "\tif %s {\n", strings.Join(checks, " || "))
-		fmt.Fprintf(buf, "\t\treturn\n")
+		if hasReturns {
+			var zeros []string
+			for range pf.Returns {
+				zeros = append(zeros, "0")
+			}
+			fmt.Fprintf(buf, "\t\treturn %s\n", strings.Join(zeros, ", "))
+		} else {
+			fmt.Fprintf(buf, "\t\treturn\n")
+		}
 		fmt.Fprintf(buf, "\t}\n")
 	}
 
@@ -548,20 +659,68 @@ func emitASTCWrapperFunc(buf *bytes.Buffer, pf *ParsedFunc, elemType, targetSuff
 		fmt.Fprintf(buf, "\t%sVal := int64(%s)\n", ip, ip)
 	}
 
-	// Call assembly function
-	fmt.Fprintf(buf, "\t%s(\n", asmName)
-	allArgs := make([]string, 0, len(pf.Params))
-	for _, p := range pf.Params {
-		if strings.HasPrefix(p.Type, "[]") {
-			allArgs = append(allArgs, fmt.Sprintf("unsafe.Pointer(&%s[0])", p.Name))
-		} else if p.Type == "int" || p.Type == "int64" {
-			allArgs = append(allArgs, fmt.Sprintf("unsafe.Pointer(&%sVal)", p.Name))
+	// Hidden length param
+	if needsHiddenLen {
+		fmt.Fprintf(buf, "\tlenVal := int64(len(%s))\n", firstSlice)
+	}
+
+	// Output variables for return values.
+	// GOAT always uses 64-bit (long *) for output pointers, so we declare
+	// int64 variables and cast to the actual return type.
+	if hasReturns {
+		for _, ret := range pf.Returns {
+			name := ret.Name
+			if name == "" {
+				name = "result"
+			}
+			fmt.Fprintf(buf, "\tvar out_%s int64\n", name)
 		}
 	}
-	for _, arg := range allArgs {
-		fmt.Fprintf(buf, "\t\t%s,\n", arg)
+
+	// Call assembly function
+	fmt.Fprintf(buf, "\t%s(\n", asmName)
+
+	// Regular params
+	for _, p := range pf.Params {
+		if strings.HasPrefix(p.Type, "[]") {
+			fmt.Fprintf(buf, "\t\tunsafe.Pointer(&%s[0]),\n", p.Name)
+		} else if p.Type == "int" || p.Type == "int64" {
+			fmt.Fprintf(buf, "\t\tunsafe.Pointer(&%sVal),\n", p.Name)
+		}
+	}
+	// Hidden length param
+	if needsHiddenLen {
+		fmt.Fprintf(buf, "\t\tunsafe.Pointer(&lenVal),\n")
+	}
+	// Output pointer params
+	if hasReturns {
+		for _, ret := range pf.Returns {
+			name := ret.Name
+			if name == "" {
+				name = "result"
+			}
+			fmt.Fprintf(buf, "\t\tunsafe.Pointer(&out_%s),\n", name)
+		}
 	}
 	fmt.Fprintf(buf, "\t)\n")
+
+	// Return with type narrowing from int64 to actual return type
+	if hasReturns {
+		var retExprs []string
+		for _, ret := range pf.Returns {
+			name := ret.Name
+			if name == "" {
+				name = "result"
+			}
+			goType := goReturnTypeForWrapper(ret.Type)
+			if goType == "int64" || goType == "int" {
+				retExprs = append(retExprs, goType+"(out_"+name+")")
+			} else {
+				retExprs = append(retExprs, goType+"(out_"+name+")")
+			}
+		}
+		fmt.Fprintf(buf, "\treturn %s\n", strings.Join(retExprs, ", "))
+	}
 	fmt.Fprintf(buf, "}\n\n")
 }
 
