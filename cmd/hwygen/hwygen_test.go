@@ -1981,6 +1981,9 @@ func TestCModeAsmPipeline(t *testing.T) {
 // 3. Creates a complete Go test package with the assembly
 // 4. Runs `go test` to verify the SIMD assembly matches a scalar reference.
 func TestCModeAsmCorrectnessF32(t *testing.T) {
+	if runtime.GOARCH != "arm64" {
+		t.Skip("correctness test requires arm64 to execute generated NEON assembly")
+	}
 	matmulPath := filepath.Join("..", "..", "hwy", "contrib", "matmul", "matmul_base.go")
 	if _, err := os.Stat(matmulPath); err != nil {
 		t.Skipf("matmul_base.go not found: %v", err)
@@ -3314,6 +3317,9 @@ func TestTranslateVarintFindEnds(t *testing.T) {
 // TestBenchmarkRaBitQASTvsHandwritten benchmarks the AST-generated NEON rabitq
 // assembly against the existing hand-written NEON rabitq assembly.
 func TestBenchmarkRaBitQASTvsHandwritten(t *testing.T) {
+	if runtime.GOARCH != "arm64" {
+		t.Skip("correctness test requires arm64 to execute generated NEON assembly")
+	}
 	rabitqPath := filepath.Join("..", "..", "hwy", "contrib", "rabitq", "rabitq_base.go")
 	if _, err := os.Stat(rabitqPath); err != nil {
 		t.Skipf("rabitq_base.go not found: %v", err)
@@ -3558,6 +3564,9 @@ func BenchmarkBitProduct(b *testing.B) {
 // TestBenchmarkVarintASTvsHandwritten benchmarks the AST-generated NEON varint
 // assembly against the existing hand-written NEON varint assembly.
 func TestBenchmarkVarintASTvsHandwritten(t *testing.T) {
+	if runtime.GOARCH != "arm64" {
+		t.Skip("correctness test requires arm64 to execute generated NEON assembly")
+	}
 	varintPath := filepath.Join("..", "..", "hwy", "contrib", "varint", "varint_base.go")
 	if _, err := os.Stat(varintPath); err != nil {
 		t.Skipf("varint_base.go not found: %v", err)
