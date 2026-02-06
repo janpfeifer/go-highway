@@ -554,9 +554,17 @@ func runGOAT(cFile string, profile *CIntrinsicProfile) error {
 		return fmt.Errorf("find module root: %w", err)
 	}
 
-	// Build GOAT args from profile
+	// Build GOAT args from profile.
+	// -t sets GOAT's target arch (selects parser/prologue with correct type definitions).
+	// Without -t, GOAT defaults to runtime.GOARCH which is wrong for cross-compilation.
+	// -e flags are passed through to clang for compilation.
+	goatTarget := "arm64"
+	if profile != nil && profile.GoatTarget != "" {
+		goatTarget = profile.GoatTarget
+	}
 	args := []string{"tool", "github.com/gorse-io/goat", absCFile,
 		"-O3",
+		"-t", goatTarget,
 		"-o", filepath.Dir(absCFile),
 	}
 
