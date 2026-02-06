@@ -90,6 +90,13 @@ func (e *CEmitter) emitCFunction(buf *bytes.Buffer, pf *ParsedFunc) error {
 	vecType := e.vecType()
 	lanes := e.lanes()
 
+	// Pointer cast expression for load/store intrinsics (e.g., "(float16_t*)" for f16).
+	// When the C type differs from the intrinsic's expected pointer type, we need a cast.
+	castExpr := ""
+	if e.profile != nil {
+		castExpr = e.profile.CastExpr
+	}
+
 	// Function signature following GOAT conventions:
 	// void func_name(cType *input, cType *result, long *len)
 	fmt.Fprintf(buf, "// %s: processes entire array with NEON SIMD\n", funcName)
@@ -106,7 +113,7 @@ func (e *CEmitter) emitCFunction(buf *bytes.Buffer, pf *ParsedFunc) error {
 
 	// Load 4 vectors
 	for j := range 4 {
-		fmt.Fprintf(buf, "        %s x%d = %s(input + i + %d);\n", vecType, j, e.loadIntrinsic(), j*lanes)
+		fmt.Fprintf(buf, "        %s x%d = %s(%s(input + i + %d));\n", vecType, j, e.loadIntrinsic(), castExpr, j*lanes)
 	}
 	fmt.Fprintf(buf, "\n")
 
@@ -118,16 +125,16 @@ func (e *CEmitter) emitCFunction(buf *bytes.Buffer, pf *ParsedFunc) error {
 	// Store results
 	fmt.Fprintf(buf, "\n")
 	for j := range 4 {
-		fmt.Fprintf(buf, "        %s(result + i + %d, res%d);\n", e.storeIntrinsic(), j*lanes, j)
+		fmt.Fprintf(buf, "        %s(%s(result + i + %d), res%d);\n", e.storeIntrinsic(), castExpr, j*lanes, j)
 	}
 	fmt.Fprintf(buf, "    }\n\n")
 
 	// Single vector loop for remaining elements
 	fmt.Fprintf(buf, "    // Process %d elements at a time\n", lanes)
 	fmt.Fprintf(buf, "    for (; i + %d < n; i += %d) {\n", lanes-1, lanes)
-	fmt.Fprintf(buf, "        %s x = %s(input + i);\n", vecType, e.loadIntrinsic())
+	fmt.Fprintf(buf, "        %s x = %s(%s(input + i));\n", vecType, e.loadIntrinsic(), castExpr)
 	e.emitVecComputationSingle(buf, pf, "        ")
-	fmt.Fprintf(buf, "        %s(result + i, res);\n", e.storeIntrinsic())
+	fmt.Fprintf(buf, "        %s(%s(result + i), res);\n", e.storeIntrinsic(), castExpr)
 	fmt.Fprintf(buf, "    }\n\n")
 
 	// Scalar tail - use NEON for single elements
@@ -488,7 +495,34 @@ func (e *CEmitter) typeSuffix() string {
 	return cTypeSuffix(e.elemType)
 }
 
+// widestTier returns the name of the widest non-scalar tier from the profile,
+// or "" if no profile is set.
+func (e *CEmitter) widestTier() string {
+	if e.profile != nil {
+		for _, tier := range e.profile.Tiers {
+			if !tier.IsScalar {
+				return tier.Name
+			}
+		}
+	}
+	return ""
+}
+
+// profileIntrinsic looks up an intrinsic from a profile map using the widest tier.
+// Returns the intrinsic name and true if found, or "" and false otherwise.
+// Safe to call with a nil map (returns false).
+func (e *CEmitter) profileIntrinsic(m map[string]string) (string, bool) {
+	if tier := e.widestTier(); tier != "" && m != nil {
+		fn, ok := m[tier]
+		return fn, ok
+	}
+	return "", false
+}
+
 func (e *CEmitter) cType() string {
+	if e.profile != nil {
+		return e.profile.CType
+	}
 	if e.elemType == "float32" {
 		return "float"
 	}
@@ -496,6 +530,9 @@ func (e *CEmitter) cType() string {
 }
 
 func (e *CEmitter) vecType() string {
+	if fn, ok := e.profileIntrinsic(e.profile.VecTypes); ok {
+		return fn
+	}
 	if e.elemType == "float32" {
 		return "float32x4_t"
 	}
@@ -503,6 +540,13 @@ func (e *CEmitter) vecType() string {
 }
 
 func (e *CEmitter) lanes() int {
+	if e.profile != nil {
+		for _, tier := range e.profile.Tiers {
+			if !tier.IsScalar {
+				return tier.Lanes
+			}
+		}
+	}
 	if e.elemType == "float32" {
 		return 4
 	}
@@ -510,6 +554,9 @@ func (e *CEmitter) lanes() int {
 }
 
 func (e *CEmitter) loadIntrinsic() string {
+	if fn, ok := e.profileIntrinsic(e.profile.LoadFn); ok {
+		return fn
+	}
 	if e.elemType == "float32" {
 		return "vld1q_f32"
 	}
@@ -517,6 +564,9 @@ func (e *CEmitter) loadIntrinsic() string {
 }
 
 func (e *CEmitter) storeIntrinsic() string {
+	if fn, ok := e.profileIntrinsic(e.profile.StoreFn); ok {
+		return fn
+	}
 	if e.elemType == "float32" {
 		return "vst1q_f32"
 	}
@@ -524,6 +574,9 @@ func (e *CEmitter) storeIntrinsic() string {
 }
 
 func (e *CEmitter) dupIntrinsic() string {
+	if fn, ok := e.profileIntrinsic(e.profile.DupFn); ok {
+		return fn
+	}
 	if e.elemType == "float32" {
 		return "vdupq_n_f32"
 	}
@@ -531,6 +584,9 @@ func (e *CEmitter) dupIntrinsic() string {
 }
 
 func (e *CEmitter) getLaneIntrinsic() string {
+	if fn, ok := e.profileIntrinsic(e.profile.GetLaneFn); ok {
+		return fn
+	}
 	if e.elemType == "float32" {
 		return "vgetq_lane_f32"
 	}
