@@ -584,6 +584,26 @@ func runGOAT(cFile string, profile *CIntrinsicProfile) error {
 
 	cmd := exec.Command(goBin, args...)
 	cmd.Dir = modRoot
+	cmd.Env = os.Environ()
+
+	// For cross-compilation, ensure the correct architecture's objdump is on
+	// PATH. GOAT invokes bare "objdump" to disassemble the compiled object,
+	// which fails when the host objdump doesn't support the target arch.
+	if goatTarget != runtime.GOARCH {
+		if crossObjdump := crossObjdumpPath(goatTarget); crossObjdump != "" {
+			// Prepend a temp directory containing a symlink so "objdump" resolves
+			// to the cross-architecture version.
+			binDir, err := os.MkdirTemp("", "goat-cross-bin-*")
+			if err == nil {
+				defer os.RemoveAll(binDir)
+				link := filepath.Join(binDir, "objdump")
+				if os.Symlink(crossObjdump, link) == nil {
+					cmd.Env = append(cmd.Env, "PATH="+binDir+":"+os.Getenv("PATH"))
+				}
+			}
+		}
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, string(output))
@@ -614,6 +634,25 @@ func runGOAT(cFile string, profile *CIntrinsicProfile) error {
 	}
 
 	return nil
+}
+
+// crossObjdumpPath returns the path to a cross-architecture objdump binary,
+// or "" if none is found. On Linux, cross-compilation toolchains install
+// architecture-prefixed binutils (e.g., aarch64-linux-gnu-objdump).
+func crossObjdumpPath(targetArch string) string {
+	prefixes := map[string]string{
+		"arm64":   "aarch64-linux-gnu-objdump",
+		"riscv64": "riscv64-linux-gnu-objdump",
+	}
+	name, ok := prefixes[targetArch]
+	if !ok {
+		return ""
+	}
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return ""
+	}
+	return path
 }
 
 // reservedAsmNames maps Go plan9 assembler reserved names to safe replacements.
