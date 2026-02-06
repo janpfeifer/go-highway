@@ -392,9 +392,9 @@ func neonF16Profile() *CIntrinsicProfile {
 			"d": "vmax_f16",
 		},
 		DupFn: map[string]string{
-			"q":      "vld1q_dup_f16",
-			"d":      "vld1_dup_f16",
-			"scalar": "vld1_dup_f16",
+			"q":      "vdupq_n_f16",
+			"d":      "vdup_n_f16",
+			"scalar": "vdup_n_f16",
 		},
 		GetLaneFn: map[string]string{
 			"q":      "vgetq_lane_f16",

@@ -2016,10 +2016,19 @@ func TestCModeAsmCorrectnessF32(t *testing.T) {
 	t.Logf("Generated files: %v", files)
 
 	// Step 4: Write go.mod for the temp package
-	goModContent := `module matmulgen
+	// Get the absolute path to go-highway for the replace directive
+	hwyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("get go-highway root: %v", err)
+	}
+	goModContent := fmt.Sprintf(`module matmulgen
 
 go 1.26rc2
-`
+
+require github.com/ajroetker/go-highway v0.0.0
+
+replace github.com/ajroetker/go-highway => %s
+`, hwyRoot)
 	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
@@ -2089,8 +2098,16 @@ func TestMatMulCF32Correctness(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
-	// Step 6: Run go test in the temp package
+	// Step 6: Run go mod tidy to generate go.sum
 	goBin := filepath.Join(goRoot(), "bin", "go")
+	tidyCmd := exec.Command(goBin, "mod", "tidy")
+	tidyCmd.Dir = tmpDir
+	tidyCmd.Env = append(os.Environ(), "GOWORK=off")
+	if tidyOutput, err := tidyCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go mod tidy failed: %v\n%s", err, string(tidyOutput))
+	}
+
+	// Step 7: Run go test in the temp package
 	cmd := exec.Command(goBin, "test", "-v", "-count=1", "./...")
 	cmd.Dir = tmpDir
 	cmd.Env = append(os.Environ(), "GOWORK=off")
@@ -2778,10 +2795,19 @@ func MatMulHandwrittenF32(a, b, c []float32, m, n, k int) {
 	}
 
 	// Step 4: Write go.mod
-	goModContent := `module matmulbench
+	// Get the absolute path to go-highway for the replace directive
+	hwyRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("get go-highway root: %v", err)
+	}
+	goModContent := fmt.Sprintf(`module matmulbench
 
 go 1.26rc2
-`
+
+require github.com/ajroetker/go-highway v0.0.0
+
+replace github.com/ajroetker/go-highway => %s
+`, hwyRoot)
 	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
@@ -2877,8 +2903,16 @@ func matmulScalar(a, b, c []float32, m, n, k int) {
 	}
 	t.Logf("Package files: %v", files)
 
-	// Step 6: Run the benchmark
+	// Step 6a: Run go mod tidy to generate go.sum
 	goBin := filepath.Join(goRoot(), "bin", "go")
+	tidyCmd := exec.Command(goBin, "mod", "tidy")
+	tidyCmd.Dir = tmpDir
+	tidyCmd.Env = append(os.Environ(), "GOWORK=off")
+	if tidyOut, err := tidyCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go mod tidy failed: %v\n%s", err, string(tidyOut))
+	}
+
+	// Step 6b: Run the benchmark
 	cmd := exec.Command(goBin, "test", "-bench=BenchmarkMatMulF32", "-benchmem", "-count=1", "./...")
 	cmd.Dir = tmpDir
 	cmd.Env = append(os.Environ(), "GOWORK=off")
@@ -4101,8 +4135,8 @@ func TestASTTranslatorF16NEON(t *testing.T) {
 	}
 
 	// Verify Zero uses dup with 0.0 (not 0.0f for f16)
-	if !strings.Contains(cCode, "vld1q_dup_f16(0.0)") {
-		t.Error("missing vld1q_dup_f16(0.0) for hwy.Zero with f16")
+	if !strings.Contains(cCode, "vdupq_n_f16(0.0)") {
+		t.Error("missing vdupq_n_f16(0.0) for hwy.Zero with f16")
 	}
 
 	// Verify lanes = 8 for NEON f16

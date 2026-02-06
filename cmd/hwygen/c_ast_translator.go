@@ -32,6 +32,11 @@ type CASTTranslator struct {
 	// Maps scalar variable name → accumulator info.
 	deferredAccums map[string]*deferredAccum
 
+	// Struct type tracking: maps C struct type name → struct info.
+	// e.g. "ImageF32" → {goType: "*Image[T]", elemCType: "float"}
+	// Used to emit struct typedefs for any generic struct pointer parameters.
+	requiredStructTypes map[string]structTypeInfo
+
 	buf      *bytes.Buffer
 	indent   int
 	tmpCount int // counter for unique temporary variable names
@@ -57,6 +62,13 @@ func (t *CASTTranslator) deferredAccumsOrdered() []deferredAccum {
 	return accums
 }
 
+// structTypeInfo tracks information about a generic struct type used as a parameter.
+type structTypeInfo struct {
+	goType    string        // Original Go type, e.g. "*Image[T]"
+	elemCType string        // C element type, e.g. "float", "double"
+	fields    []StructField // Discovered fields from method calls
+}
+
 // cVarInfo tracks the C type of a local variable.
 type cVarInfo struct {
 	cType    string // "float32x4_t", "float", "long", "float *"
@@ -66,26 +78,29 @@ type cVarInfo struct {
 
 // cParamInfo tracks function parameter translation details.
 type cParamInfo struct {
-	goName  string // "a", "b", "c", "m", "n", "k"
-	goType  string // "[]T", "int"
-	cName   string // "a", "b", "c", "pm", "pn", "pk"
-	cType   string // "float *", "long *"
-	isSlice bool
-	isInt   bool
+	goName          string // "a", "b", "c", "m", "n", "k"
+	goType          string // "[]T", "int", "*Image[T]"
+	cName           string // "a", "b", "c", "pm", "pn", "pk"
+	cType           string // "float *", "long *", "ImageF32 *"
+	isSlice         bool
+	isInt           bool
+	isStructPtr     bool   // true for generic struct pointer parameters (e.g., *Image[T])
+	structElemCType string // "float", "double" - element type for struct's data field
 }
 
 // NewCASTTranslator creates a translator for the given profile and element type.
 func NewCASTTranslator(profile *CIntrinsicProfile, elemType string) *CASTTranslator {
 	tier, lanes := primaryTier(profile)
 	return &CASTTranslator{
-		profile:      profile,
-		tier:         tier,
-		lanes:        lanes,
-		elemType:     elemType,
-		vars:         make(map[string]cVarInfo),
-		params:       make(map[string]cParamInfo),
-		sliceLenVars: make(map[string]string),
-		buf:          &bytes.Buffer{},
+		profile:            profile,
+		tier:               tier,
+		lanes:              lanes,
+		elemType:           elemType,
+		vars:               make(map[string]cVarInfo),
+		params:             make(map[string]cParamInfo),
+		sliceLenVars:       make(map[string]string),
+		requiredStructTypes: make(map[string]structTypeInfo),
+		buf:                &bytes.Buffer{},
 	}
 }
 
@@ -105,10 +120,20 @@ func (t *CASTTranslator) TranslateToC(pf *ParsedFunc) (string, error) {
 	t.buf.Reset()
 	t.vars = make(map[string]cVarInfo)
 	t.params = make(map[string]cParamInfo)
+	t.requiredStructTypes = make(map[string]structTypeInfo)
 	t.indent = 0
 
-	// Build parameter map
+	// Build parameter map (this also collects required struct types)
 	t.buildParamMap(pf)
+
+	// Discover struct fields by analyzing method calls in the function body
+	// This must happen before emitting typedefs
+	if pf.Body != nil {
+		t.discoverStructFields(pf.Body)
+	}
+
+	// Emit struct typedefs if needed
+	t.emitStructTypedefs()
 
 	// Emit function signature
 	t.emitFuncSignature(pf)
@@ -129,6 +154,142 @@ func (t *CASTTranslator) TranslateToC(pf *ParsedFunc) (string, error) {
 	return t.buf.String(), nil
 }
 
+// discoverStructFields walks the function body to discover struct fields
+// from method calls. This uses a convention-based approach:
+//   - Methods with 0 args (e.g., Width(), Height()) → scalar fields (long)
+//   - Methods with 1 arg that are indexed (e.g., Row(y)[i]) → data + stride pattern
+func (t *CASTTranslator) discoverStructFields(body *ast.BlockStmt) {
+	// Track discovered fields per struct type
+	discovered := make(map[string]map[string]StructField) // cTypeName -> fieldName -> field
+
+	// Initialize discovered map for each struct param
+	for cTypeName := range t.requiredStructTypes {
+		discovered[cTypeName] = make(map[string]StructField)
+	}
+
+	// Walk the AST looking for method calls on struct params
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		// Check for method call: param.Method(...)
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		// Check if receiver is a struct param
+		paramInfo, exists := t.params[ident.Name]
+		if !exists || !paramInfo.isStructPtr {
+			return true
+		}
+
+		// Find the cTypeName for this param
+		structBaseName := extractStructBaseName(paramInfo.goType)
+		cTypeName := structBaseName + cTypeShortSuffix(paramInfo.structElemCType)
+
+		methodName := sel.Sel.Name
+		fieldName := strings.ToLower(methodName)
+
+		if _, exists := discovered[cTypeName][fieldName]; exists {
+			return true // Already discovered
+		}
+
+		argCount := len(call.Args)
+
+		if argCount == 0 {
+			// Simple getter: Width() → width field of type long
+			discovered[cTypeName][fieldName] = StructField{
+				Name:     fieldName,
+				GoType:   "int64",
+				CType:    "long",
+				GoGetter: "." + methodName + "()",
+				IsPtr:    false,
+			}
+		} else if argCount == 1 {
+			// Row-like accessor: Row(y) → data pointer field
+			// Also implies a stride field
+			discovered[cTypeName]["data"] = StructField{
+				Name:     "data",
+				GoType:   "unsafe.Pointer",
+				CType:    paramInfo.structElemCType + " *",
+				GoGetter: "." + methodName + "(0)[0]",
+				IsPtr:    true,
+				IsData:   true,
+			}
+			// Add stride if not already present
+			if _, exists := discovered[cTypeName]["stride"]; !exists {
+				discovered[cTypeName]["stride"] = StructField{
+					Name:     "stride",
+					GoType:   "int64",
+					CType:    "long",
+					GoGetter: ".Stride()",
+					IsPtr:    false,
+				}
+			}
+		}
+
+		return true
+	})
+
+	// Update requiredStructTypes with discovered fields
+	for cTypeName, fields := range discovered {
+		info := t.requiredStructTypes[cTypeName]
+		// Convert map to slice in a deterministic order
+		info.fields = nil
+		// Data field first (if present)
+		if f, ok := fields["data"]; ok {
+			info.fields = append(info.fields, f)
+			delete(fields, "data")
+		}
+		// Then other fields in sorted order
+		var names []string
+		for name := range fields {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			info.fields = append(info.fields, fields[name])
+		}
+		t.requiredStructTypes[cTypeName] = info
+	}
+}
+
+// emitStructTypedefs emits C struct typedefs for generic struct types used as parameters.
+// The struct layout is discovered by analyzing method calls in the function body.
+// Example: typedef struct { float *data; long width; long height; long stride; } ImageF32;
+func (t *CASTTranslator) emitStructTypedefs() {
+	if len(t.requiredStructTypes) == 0 {
+		return
+	}
+
+	t.writef("// Struct typedefs for C-compatible parameter passing\n")
+	for cTypeName, info := range t.requiredStructTypes {
+		if len(info.fields) == 0 {
+			continue
+		}
+
+		t.writef("typedef struct {\n")
+		for _, field := range info.fields {
+			if field.IsPtr {
+				// Data pointer field - use the element type
+				t.writef("    %s *%s;\n", info.elemCType, field.Name)
+			} else {
+				// Dimension fields
+				t.writef("    %s %s;\n", field.CType, field.Name)
+			}
+		}
+		t.writef("} %s;\n\n", cTypeName)
+	}
+}
+
 // buildParamMap creates cParamInfo entries for each Go parameter.
 func (t *CASTTranslator) buildParamMap(pf *ParsedFunc) {
 	for _, p := range pf.Params {
@@ -142,6 +303,20 @@ func (t *CASTTranslator) buildParamMap(pf *ParsedFunc) {
 			info.cName = p.Name
 			elemType := strings.TrimPrefix(p.Type, "[]")
 			info.cType = goSliceElemToCType(elemType, t.profile) + " *"
+		} else if isGenericStructPtr(p.Type) {
+			// Generic struct pointer param (e.g., *Image[T]) → C struct pointer
+			info.isStructPtr = true
+			info.cName = p.Name
+			elemType := extractStructElemType(p.Type)
+			info.structElemCType = goSliceElemToCType(elemType, t.profile)
+			structBaseName := extractStructBaseName(p.Type)
+			cTypeName := structBaseName + cTypeShortSuffix(info.structElemCType)
+			info.cType = cTypeName + " *"
+			// Register this struct type for typedef generation
+			t.requiredStructTypes[cTypeName] = structTypeInfo{
+				goType:    p.Type,
+				elemCType: info.structElemCType,
+			}
 		} else if p.Type == "int" || p.Type == "int64" {
 			// Int param → long pointer (GOAT convention)
 			info.isInt = true
@@ -249,6 +424,40 @@ func isScalarCType(cType string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// extractStructElemType extracts the element type from a generic struct pointer type.
+// E.g., "*Image[T]" → "T", "*Image[float32]" → "float32"
+func extractStructElemType(goType string) string {
+	start := strings.Index(goType, "[")
+	end := strings.LastIndex(goType, "]")
+	if start == -1 || end == -1 || start >= end {
+		return "T"
+	}
+	return goType[start+1 : end]
+}
+
+// Note: extractStructBaseName is defined in c_generator.go as the single source of truth
+
+// cTypeShortSuffix returns a short suffix for C struct type names.
+// "float" → "F32", "double" → "F64", "int" → "I32", etc.
+func cTypeShortSuffix(cType string) string {
+	switch cType {
+	case "float":
+		return "F32"
+	case "double":
+		return "F64"
+	case "int":
+		return "I32"
+	case "long":
+		return "I64"
+	case "unsigned int":
+		return "U32"
+	case "unsigned long":
+		return "U64"
+	default:
+		return "T"
 	}
 }
 
@@ -525,6 +734,17 @@ func (t *CASTTranslator) translateAssignStmt(s *ast.AssignStmt) {
 				}
 			}
 		}
+	}
+
+	// Handle multi-value assignments from ictCoeffs[T]()
+	if len(s.Lhs) > 1 && len(s.Rhs) == 1 {
+		if call, ok := s.Rhs[0].(*ast.CallExpr); ok {
+			if t.translateICTCoeffsAssign(s.Lhs, call, s.Tok) {
+				return
+			}
+		}
+		// Other multi-assigns not supported
+		return
 	}
 
 	if len(s.Lhs) != 1 || len(s.Rhs) != 1 {
@@ -925,6 +1145,14 @@ func (t *CASTTranslator) translateExprStmt(s *ast.ExprStmt) {
 		return
 	}
 
+	// Check for copy() calls → memcpy
+	if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "copy" {
+		if len(call.Args) >= 2 {
+			t.emitCopy(call.Args)
+			return
+		}
+	}
+
 	// Check for hwy.Store calls
 	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "hwy" {
@@ -967,10 +1195,16 @@ func (t *CASTTranslator) translateDeclStmt(s *ast.DeclStmt) {
 }
 
 // translateIfStmt handles if statements. Skips panic guards (bounds checks).
+// Handles init statements like: if remaining := width - i; remaining > 0 { ... }
 func (t *CASTTranslator) translateIfStmt(s *ast.IfStmt) {
 	// Skip if the body contains only a panic call (bounds check)
 	if isPanicGuard(s) {
 		return
+	}
+
+	// Handle init statement (e.g., if remaining := width - i; remaining > 0)
+	if s.Init != nil {
+		t.translateStmt(s.Init)
 	}
 
 	condStr := t.translateExpr(s.Cond)
@@ -1136,6 +1370,15 @@ func (t *CASTTranslator) translateCallExpr(e *ast.CallExpr) string {
 	if sel := extractSelectorExpr(e.Fun); sel != nil {
 		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "hwy" {
 			return t.translateHwyCall(sel.Sel.Name, e.Args)
+		}
+	}
+
+	// Check for struct method calls: obj.Row(y), obj.Width(), obj.Height()
+	if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+		if ident, ok := sel.X.(*ast.Ident); ok {
+			if info, exists := t.params[ident.Name]; exists && info.isStructPtr {
+				return t.translateStructMethodCall(ident.Name, sel.Sel.Name, e.Args)
+			}
 		}
 	}
 
@@ -1308,7 +1551,45 @@ func (t *CASTTranslator) translateSliceExpr(e *ast.SliceExpr) string {
 // translateSelectorExpr translates field access / method references.
 func (t *CASTTranslator) translateSelectorExpr(e *ast.SelectorExpr) string {
 	x := t.translateExpr(e.X)
+
+	// Check if X refers to a struct pointer parameter
+	if ident, ok := e.X.(*ast.Ident); ok {
+		if info, exists := t.params[ident.Name]; exists && info.isStructPtr {
+			// Use -> for struct pointer field access
+			return x + "->" + e.Sel.Name
+		}
+	}
+
 	return x + "." + e.Sel.Name
+}
+
+// translateStructMethodCall translates generic struct method calls to C.
+// Convention-based translation:
+//   - Methods with 0 args: obj.Method() → obj->methodname (lowercase)
+//   - Methods with 1 arg: obj.Method(x) → (obj->data + x * obj->stride)
+//
+// This is fully generic and works with any struct type following these conventions.
+func (t *CASTTranslator) translateStructMethodCall(structName, methodName string, args []ast.Expr) string {
+	fieldName := strings.ToLower(methodName)
+
+	if len(args) == 0 {
+		// Simple getter: Width() → ->width
+		return structName + "->" + fieldName
+	}
+
+	if len(args) == 1 {
+		// Row-like accessor: Row(y) → (data + y * stride)
+		// This assumes the standard 2D array layout pattern
+		arg := t.translateExpr(args[0])
+		return fmt.Sprintf("(%s->data + %s * %s->stride)", structName, arg, structName)
+	}
+
+	// Fallback: emit as method call (will likely cause C compile error)
+	var argStrs []string
+	for _, arg := range args {
+		argStrs = append(argStrs, t.translateExpr(arg))
+	}
+	return fmt.Sprintf("%s->%s(%s)", structName, fieldName, strings.Join(argStrs, ", "))
 }
 
 // translateUnaryExpr translates unary expressions.
@@ -1333,8 +1614,10 @@ func (t *CASTTranslator) translateHwyCall(funcName string, args []ast.Expr) stri
 		return t.emitHwySet(args)
 	case "Zero":
 		return t.emitHwyZero()
-	case "MulAdd":
+	case "MulAdd", "FMA":
 		return t.emitHwyMulAdd(args)
+	case "ShiftRight":
+		return t.emitHwyShiftRight(args)
 	case "Add":
 		return t.emitHwyBinaryOp(t.profile.AddFn, args)
 	case "Sub":
@@ -1506,6 +1789,83 @@ func (t *CASTTranslator) emitHwyMulAdd(args []ast.Expr) string {
 	return fmt.Sprintf("%s(%s, %s, %s)", fmaFn, a, b, acc)
 }
 
+// emitHwyShiftRight: hwy.ShiftRight(v, n) → vshrq_n_s32(v, n) for NEON
+// The shift amount must be a compile-time constant.
+func (t *CASTTranslator) emitHwyShiftRight(args []ast.Expr) string {
+	if len(args) < 2 {
+		return "/* ShiftRight: missing args */"
+	}
+	v := t.translateExpr(args[0])
+	n := t.translateExpr(args[1])
+
+	// Select intrinsic based on target and element type
+	var fn string
+	switch t.profile.TargetName {
+	case "NEON":
+		switch t.elemType {
+		case "int32":
+			fn = "vshrq_n_s32"
+		case "int64":
+			fn = "vshrq_n_s64"
+		case "uint32":
+			fn = "vshrq_n_u32"
+		case "uint64":
+			fn = "vshrq_n_u64"
+		default:
+			fn = "vshrq_n_s32" // fallback
+		}
+	case "AVX2":
+		switch t.elemType {
+		case "int32":
+			fn = "_mm256_srai_epi32"
+		case "int64":
+			fn = "_mm256_srai_epi64" // AVX-512 only for 64-bit
+		default:
+			fn = "_mm256_srai_epi32"
+		}
+	case "AVX512":
+		switch t.elemType {
+		case "int32":
+			fn = "_mm512_srai_epi32"
+		case "int64":
+			fn = "_mm512_srai_epi64"
+		default:
+			fn = "_mm512_srai_epi32"
+		}
+	default:
+		fn = "vshrq_n_s32" // fallback to NEON
+	}
+
+	return fmt.Sprintf("%s(%s, %s)", fn, v, n)
+}
+
+// emitCopy emits a memcpy or for-loop to copy array elements.
+// copy(dst, src) in Go copies min(len(dst), len(src)) elements.
+// For simple cases with known sizes, we emit a for-loop since GOAT
+// doesn't support memcpy calls directly.
+func (t *CASTTranslator) emitCopy(args []ast.Expr) {
+	if len(args) < 2 {
+		t.writef("/* copy: missing args */\n")
+		return
+	}
+	dst := t.translateExpr(args[0])
+	src := t.translateExpr(args[1])
+
+	// Wrap pointer expressions with parentheses to ensure correct indexing
+	// e.g., "rRow + i" → "(rRow + i)[_ci]"
+	if strings.Contains(dst, "+") || strings.Contains(dst, "-") {
+		dst = "(" + dst + ")"
+	}
+	if strings.Contains(src, "+") || strings.Contains(src, "-") {
+		src = "(" + src + ")"
+	}
+
+	// Use the lanes limit for tail handling since these are typically
+	// used for processing remaining elements.
+	t.writef("for (long _ci = 0; _ci < %d; _ci++) { %s[_ci] = %s[_ci]; }\n",
+		t.lanes, dst, src)
+}
+
 // emitHwyBinaryOp: hwy.Add(a, b) → vaddq_f32(a, b)
 func (t *CASTTranslator) emitHwyBinaryOp(fnMap map[string]string, args []ast.Expr) string {
 	if len(args) < 2 {
@@ -1656,6 +2016,91 @@ func (t *CASTTranslator) translateLoad4Assign(lhs []ast.Expr, args []ast.Expr, t
 			}
 		}
 	}
+}
+
+// translateICTCoeffsAssign handles multi-value assignments from ictCoeffs[T]().
+// These are the ICT (Irreversible Color Transform) coefficients for JPEG 2000.
+// The function inlines the coefficient values based on the element type.
+func (t *CASTTranslator) translateICTCoeffsAssign(lhs []ast.Expr, call *ast.CallExpr, tok token.Token) bool {
+	// Check if this is an ictCoeffs call
+	funcExpr := call.Fun
+	// Handle IndexExpr for ictCoeffs[T]
+	if idx, ok := funcExpr.(*ast.IndexExpr); ok {
+		if ident, ok := idx.X.(*ast.Ident); ok && ident.Name == "ictCoeffs" {
+			// This is ictCoeffs[T]() - inline the coefficients
+			return t.emitICTCoeffsAssign(lhs, tok)
+		}
+	}
+	// Handle Ident for ictCoeffs (without type param)
+	if ident, ok := funcExpr.(*ast.Ident); ok && ident.Name == "ictCoeffs" {
+		return t.emitICTCoeffsAssign(lhs, tok)
+	}
+	return false
+}
+
+// emitICTCoeffsAssign emits constant assignments for ICT coefficients.
+// ICT coefficients from ITU-T T.800:
+//
+//	Forward: rToY=0.299, gToY=0.587, bToY=0.114, rToCb=-0.16875, gToCb=-0.33126, bToCb=0.5,
+//	         rToCr=0.5, gToCr=-0.41869, bToCr=-0.08131
+//	Inverse: crToR=1.402, cbToG=-0.344136, crToG=-0.714136, cbToB=1.772
+func (t *CASTTranslator) emitICTCoeffsAssign(lhs []ast.Expr, tok token.Token) bool {
+	if len(lhs) < 13 {
+		return false
+	}
+
+	coeffs := []float64{
+		0.299,      // rToY
+		0.587,      // gToY
+		0.114,      // bToY
+		-0.16875,   // rToCb
+		-0.33126,   // gToCb
+		0.5,        // bToCb
+		0.5,        // rToCr
+		-0.41869,   // gToCr
+		-0.08131,   // bToCr
+		1.402,      // crToR
+		-0.344136,  // cbToG
+		-0.714136,  // crToG
+		1.772,      // cbToB
+	}
+
+	// Use ScalarArithType if available (e.g., float16_t for NEON f16),
+	// otherwise fall back to CType.
+	cType := t.profile.CType
+	if t.profile.ScalarArithType != "" {
+		cType = t.profile.ScalarArithType
+	}
+
+	for i := 0; i < 13; i++ {
+		// Handle blank identifier _
+		ident, ok := lhs[i].(*ast.Ident)
+		if !ok || ident.Name == "_" {
+			continue
+		}
+		name := ident.Name
+		var valStr string
+		switch t.elemType {
+		case "float32":
+			valStr = fmt.Sprintf("%.7gf", coeffs[i])
+		case "float64":
+			valStr = fmt.Sprintf("%.15g", coeffs[i])
+		default:
+			// Half-precision types: cast from double to the scalar type
+			if t.profile.ScalarArithType != "" {
+				valStr = fmt.Sprintf("(%s)%.15g", t.profile.ScalarArithType, coeffs[i])
+			} else {
+				valStr = fmt.Sprintf("%.15g", coeffs[i])
+			}
+		}
+		if tok == token.DEFINE {
+			t.vars[name] = cVarInfo{cType: cType}
+			t.writef("%s %s = %s;\n", cType, name, valStr)
+		} else {
+			t.writef("%s = %s;\n", name, valStr)
+		}
+	}
+	return true
 }
 
 // translateGetLaneVarIndex emits the store-to-stack pattern for variable-index GetLane.
@@ -1809,6 +2254,19 @@ func (t *CASTTranslator) inferType(expr ast.Expr) cVarInfo {
 			return cVarInfo{cType: t.profile.CType}
 		}
 		return cVarInfo{cType: t.profile.CType}
+	case *ast.SelectorExpr:
+		// Field access — check for Image struct fields
+		if ident, ok := e.X.(*ast.Ident); ok {
+			if info, ok := t.params[ident.Name]; ok && info.isStructPtr {
+				switch e.Sel.Name {
+				case "width", "height", "stride":
+					return cVarInfo{cType: "long"}
+				case "data":
+					return cVarInfo{cType: info.structElemCType + " *", isPtr: true}
+				}
+			}
+		}
+		return cVarInfo{cType: t.profile.CType}
 	default:
 		return cVarInfo{cType: t.profile.CType}
 	}
@@ -1841,8 +2299,8 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 	if sel := extractSelectorExpr(e.Fun); sel != nil {
 		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "hwy" {
 			switch sel.Sel.Name {
-			case "Load", "Load4", "Zero", "Set", "MulAdd", "Add", "Sub", "Mul", "Div",
-				"Min", "Max", "Neg", "Abs", "Sqrt",
+			case "Load", "Load4", "Zero", "Set", "MulAdd", "FMA", "Add", "Sub", "Mul", "Div",
+				"Min", "Max", "Neg", "Abs", "Sqrt", "ShiftRight",
 				"LoadSlice", "InterleaveLower", "InterleaveUpper",
 				"And", "Or", "Xor", "PopCount", "TableLookupBytes",
 				"IfThenElse", "SlideUpLanes":
@@ -1886,6 +2344,18 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 	if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
 		if sel.Sel.Name == "NumLanes" || sel.Sel.Name == "NumElements" {
 			return cVarInfo{cType: "long"}
+		}
+		// Check for struct method calls (e.g., Row(), Width(), etc.)
+		if ident, ok := sel.X.(*ast.Ident); ok {
+			if info, ok := t.params[ident.Name]; ok && info.isStructPtr {
+				switch sel.Sel.Name {
+				case "Row":
+					// img.Row(y) returns a pointer to the element type
+					return cVarInfo{cType: info.structElemCType + " *", isPtr: true}
+				case "Width", "Height", "Stride":
+					return cVarInfo{cType: "long"}
+				}
+			}
 		}
 	}
 
@@ -1997,19 +2467,49 @@ func (t *CASTTranslator) writefRaw(format string, args ...any) {
 
 // IsASTCEligible returns true if a function should be translated using the
 // AST-walking translator rather than the template-based CEmitter.
-// Eligible functions have slice parameters, use hwy.* operations, and are
-// NOT composite math functions handled by the template path.
+// Eligible functions have slice or *Image[T] parameters, use hwy.* operations,
+// and are NOT composite math functions handled by the template path.
 func IsASTCEligible(pf *ParsedFunc) bool {
-	// Must have slice params (not Vec→Vec)
-	hasSlice := false
+	// Must have slice or *Image[T] params (not Vec→Vec)
+	hasSliceOrImage := false
+	hasImagePtr := false
 	for _, p := range pf.Params {
 		if strings.HasPrefix(p.Type, "[]") {
-			hasSlice = true
+			hasSliceOrImage = true
+			break
+		}
+		if isGenericStructPtr(p.Type) {
+			hasSliceOrImage = true
+			hasImagePtr = true
 			break
 		}
 	}
-	if !hasSlice {
+	if !hasSliceOrImage {
 		return false
+	}
+
+	// If we have Image pointers, that's sufficient (they contain width/height)
+	if hasImagePtr {
+		// Must use hwy.* operations
+		hasHwyOps := false
+		for _, call := range pf.HwyCalls {
+			if call.Package == "hwy" {
+				hasHwyOps = true
+				break
+			}
+		}
+		if !hasHwyOps {
+			return false
+		}
+		// Must NOT have Vec in signature (those go through IsCEligible)
+		if hasVecInSignature(*pf) {
+			return false
+		}
+		// Must NOT be a composite math function (those use the template path)
+		if mathOpFromFuncName(pf.Name) != "" {
+			return false
+		}
+		return true
 	}
 
 	// Must NOT have Vec in signature (those go through IsCEligible)
