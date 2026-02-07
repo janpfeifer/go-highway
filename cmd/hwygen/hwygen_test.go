@@ -1900,6 +1900,11 @@ func TestCModeAsmPipeline(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
+	// resolveAsmImportPath walks up from OutputDir looking for go.mod.
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"),
+		[]byte("module testpkg\n\ngo 1.26\n"), 0644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
 
 	gen := &Generator{
 		InputFile: matmulPath,
@@ -1990,9 +1995,15 @@ func TestCModeAsmCorrectnessF32(t *testing.T) {
 	}
 
 	// Create temp package directory
-	tmpDir := filepath.Join(t.TempDir(), "matmulgen")
+	tmpRoot := t.TempDir()
+	tmpDir := filepath.Join(tmpRoot, "matmulgen")
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
+	}
+	// resolveAsmImportPath walks up from OutputDir looking for go.mod.
+	if err := os.WriteFile(filepath.Join(tmpRoot, "go.mod"),
+		[]byte("module testpkg\n\ngo 1.26\n"), 0644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
 	}
 
 	// Step 1+2+3: Generate C, compile with GOAT, generate wrappers
@@ -2742,9 +2753,15 @@ func TestBenchmarkASTvsHandwritten(t *testing.T) {
 		t.Skipf("matmul_base.go not found: %v", err)
 	}
 
-	tmpDir := filepath.Join(t.TempDir(), "matmulbench")
+	tmpRoot := t.TempDir()
+	tmpDir := filepath.Join(tmpRoot, "matmulbench")
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
+	}
+	// resolveAsmImportPath walks up from OutputDir looking for go.mod.
+	if err := os.WriteFile(filepath.Join(tmpRoot, "go.mod"),
+		[]byte("module testpkg\n\ngo 1.26\n"), 0644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
 	}
 
 	// Step 1: Generate AST-translated C and compile with GOAT

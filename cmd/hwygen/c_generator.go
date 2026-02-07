@@ -1688,12 +1688,31 @@ func emitASTCWrapperFunc(buf *bytes.Buffer, pf *ParsedFunc, elemType, targetSuff
 	}
 
 	// Guard against empty slices to prevent &slice[0] panic.
-	// Int params are not guarded — the C code handles zero dimensions,
-	// and some int params (e.g., phase) are legitimately 0.
 	if len(sliceParams) > 0 {
 		var checks []string
 		for _, sp := range sliceParams {
 			checks = append(checks, "len("+sp+") == 0")
+		}
+		fmt.Fprintf(buf, "\tif %s {\n", strings.Join(checks, " || "))
+		if hasReturns {
+			var zeros []string
+			for range pf.Returns {
+				zeros = append(zeros, "0")
+			}
+			fmt.Fprintf(buf, "\t\treturn %s\n", strings.Join(zeros, ", "))
+		} else {
+			fmt.Fprintf(buf, "\t\treturn\n")
+		}
+		fmt.Fprintf(buf, "\t}\n")
+	}
+
+	// Guard against zero dimensions for matmul-like functions (3 slices, 3 ints).
+	// If any dimension is zero there is no work to do, and the bounds checks
+	// below would compute incorrect products (e.g., len(a) < 0*k).
+	if len(sliceParams) == 3 && len(intParams) == 3 {
+		var checks []string
+		for _, ip := range intParams {
+			checks = append(checks, ip+" == 0")
 		}
 		fmt.Fprintf(buf, "\tif %s {\n", strings.Join(checks, " || "))
 		if hasReturns {

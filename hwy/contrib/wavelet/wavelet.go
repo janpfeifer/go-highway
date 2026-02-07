@@ -390,6 +390,47 @@ func Synthesize53Bufs[T hwy.SignedInts](data []T, phase int, low, high []T) {
 	Synthesize53Core(data, n, low, sn, high, dn, phase)
 }
 
+// Synthesize53BufsCols applies the inverse 5/3 wavelet transform to multiple columns
+// simultaneously using column-interleaved SIMD. colBuf has height*lanes elements laid
+// out as colBuf[y*lanes + c] for row y, column c. lowBuf and highBuf are scratch
+// buffers each with capacity >= ceil(height/2)*lanes.
+//
+// This is designed for the vertical pass of a 2D DWT: the caller gathers `lanes`
+// adjacent columns from each row into colBuf, calls this function, then scatters
+// the results back. Each row contributes one contiguous SIMD load/store.
+func Synthesize53BufsCols[T hwy.SignedInts](colBuf []T, height int, phase int, lowBuf, highBuf []T) {
+	if height <= 1 {
+		if height == 1 && phase == 1 {
+			lanes := hwy.MaxLanes[T]()
+			for c := range lanes {
+				colBuf[c] /= 2
+			}
+		}
+		return
+	}
+
+	var sn, dn int
+	if phase == 0 {
+		sn = (height + 1) / 2
+		dn = height / 2
+	} else {
+		dn = (height + 1) / 2
+		sn = height / 2
+	}
+
+	if sn == 0 || dn == 0 {
+		if phase == 1 && sn == 0 && dn == 1 {
+			lanes := hwy.MaxLanes[T]()
+			for c := range lanes {
+				colBuf[c] /= 2
+			}
+		}
+		return
+	}
+
+	Synthesize53CoreCols(colBuf, height, lowBuf, sn, highBuf, dn, phase)
+}
+
 // Analyze53Bufs applies the forward 5/3 wavelet transform using pre-allocated buffers.
 // low and high must each have capacity >= ceil(n/2). This avoids per-call allocations.
 func Analyze53Bufs[T hwy.SignedInts](data []T, phase int, low, high []T) {

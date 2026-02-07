@@ -17,6 +17,8 @@ package wavelet
 import (
 	"math"
 	"testing"
+
+	"github.com/ajroetker/go-highway/hwy"
 )
 
 // Test sizes covering various boundary conditions
@@ -192,6 +194,59 @@ func TestSynthesize53Core_MatchesSynthesize53(t *testing.T) {
 				for i := range dataRef {
 					if dataFused[i] != dataRef[i] {
 						t.Errorf("at %d: fused got %d, ref got %d", i, dataFused[i], dataRef[i])
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestSynthesize53CoreCols_MatchesSynthesize53(t *testing.T) {
+	for _, height := range testSizes {
+		for phase := 0; phase <= 1; phase++ {
+			t.Run(sizePhaseString(height, phase), func(t *testing.T) {
+				// Use MaxLanes columns to match the dispatched kernel width
+				lanes := hwy.MaxLanes[int32]()
+
+				// Generate lanes independent column signals in wavelet domain
+				cols := make([][]int32, lanes)
+				for c := range lanes {
+					cols[c] = make([]int32, height)
+					for y := range height {
+						cols[c][y] = int32(y*7 + c*13 - height/2)
+					}
+				}
+
+				// Reference: run scalar Synthesize53 on each column independently
+				refCols := make([][]int32, lanes)
+				for c := range lanes {
+					refCols[c] = make([]int32, height)
+					copy(refCols[c], cols[c])
+					Synthesize53(refCols[c], phase)
+				}
+
+				// Column-interleaved buffer: colBuf[y*lanes + c]
+				colBuf := make([]int32, height*lanes)
+				for y := range height {
+					for c := range lanes {
+						colBuf[y*lanes+c] = cols[c][y]
+					}
+				}
+
+				maxHalf := (height + 1) / 2
+				lowBuf := make([]int32, maxHalf*lanes)
+				highBuf := make([]int32, maxHalf*lanes)
+
+				Synthesize53BufsCols(colBuf, height, phase, lowBuf, highBuf)
+
+				// Verify each column matches reference
+				for y := range height {
+					for c := range lanes {
+						got := colBuf[y*lanes+c]
+						want := refCols[c][y]
+						if got != want {
+							t.Errorf("col %d row %d: got %d, want %d", c, y, got, want)
+						}
 					}
 				}
 			})

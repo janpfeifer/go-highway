@@ -343,3 +343,43 @@ func Synthesize53CoreCS64(data []int64, n int, low []int64, sn int, high []int64
 	)
 }
 
+// Synthesize53CoreColsCS32 computes Synthesize53CoreCols using NEON SIMD assembly.
+func Synthesize53CoreColsCS32(colBuf []int32, height int, lowBuf []int32, sn int, highBuf []int32, dn, phase int) {
+	if len(colBuf) == 0 || len(lowBuf) == 0 || len(highBuf) == 0 {
+		return
+	}
+	heightVal := int64(height)
+	snVal := int64(sn)
+	dnVal := int64(dn)
+	phaseVal := int64(phase)
+	synthesize53corecols_c_s32_neon(
+		unsafe.Pointer(&colBuf[0]),
+		unsafe.Pointer(&heightVal),
+		unsafe.Pointer(&lowBuf[0]),
+		unsafe.Pointer(&snVal),
+		unsafe.Pointer(&highBuf[0]),
+		unsafe.Pointer(&dnVal),
+		unsafe.Pointer(&phaseVal),
+	)
+}
+
+// Synthesize53CoreColsCS64 computes Synthesize53CoreCols using NEON SIMD assembly.
+func Synthesize53CoreColsCS64(colBuf []int64, height int, lowBuf []int64, sn int, highBuf []int64, dn, phase int) {
+	if len(colBuf) == 0 || len(lowBuf) == 0 || len(highBuf) == 0 {
+		return
+	}
+	heightVal := int64(height)
+	snVal := int64(sn)
+	dnVal := int64(dn)
+	phaseVal := int64(phase)
+	synthesize53corecols_c_s64_neon(
+		unsafe.Pointer(&colBuf[0]),
+		unsafe.Pointer(&heightVal),
+		unsafe.Pointer(&lowBuf[0]),
+		unsafe.Pointer(&snVal),
+		unsafe.Pointer(&highBuf[0]),
+		unsafe.Pointer(&dnVal),
+		unsafe.Pointer(&phaseVal),
+	)
+}
+
