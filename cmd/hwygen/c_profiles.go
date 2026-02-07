@@ -777,6 +777,9 @@ func neonUint64Profile() *CIntrinsicProfile {
 
 		ReduceSumFn: map[string]string{"q": "vaddvq_u64"},
 
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_u64"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_u64"},
+
 		// Deferred popcount accumulation: accumulate at uint32x4_t width
 		// inside the loop, reduce once after the loop with vaddvq_u32.
 		PopCountPartialFn: map[string]string{"q": "neon_popcnt_u64_to_u32"},
@@ -892,6 +895,9 @@ func neonUint32Profile() *CIntrinsicProfile {
 		LessThanFn:  map[string]string{"q": "vcltq_u32"},
 		MaskType:    map[string]string{"q": "uint32x4_t"},
 
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_u32"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_u32"},
+
 		MathStrategy:   "native",
 		GoatTarget:     "arm64",
 		GoatExtraFlags: []string{"-march=armv8-a+simd+fp"},
@@ -934,6 +940,9 @@ func neonInt32Profile() *CIntrinsicProfile {
 		ReduceMinFn: map[string]string{"q": "vminvq_s32"},
 		ReduceMaxFn: map[string]string{"q": "vmaxvq_s32"},
 
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_s32"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_s32"},
+
 		MathStrategy:     "native",
 		NativeArithmetic: true,
 		GoatTarget:       "arm64",
@@ -971,6 +980,9 @@ func neonInt64Profile() *CIntrinsicProfile {
 		XorFn: map[string]string{"q": "veorq_s64"},
 
 		ReduceSumFn: map[string]string{"q": "vaddvq_s64"},
+
+		InterleaveLowerFn: map[string]string{"q": "vzip1q_s64"},
+		InterleaveUpperFn: map[string]string{"q": "vzip2q_s64"},
 
 		MathStrategy:     "native",
 		NativeArithmetic: true,

@@ -2528,9 +2528,9 @@ func TestTranslateNewHwyOps(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		goCode   string
-		wantInC  []string
+		name    string
+		goCode  string
+		wantInC []string
 	}{
 		{
 			name: "ReduceSum",
@@ -3885,7 +3885,7 @@ func BaseLoad4Test(data []uint64, n int) {
 	}
 
 	// Verify .val[0] through .val[3] destructuring
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		pattern := fmt.Sprintf(".val[%d]", i)
 		if !strings.Contains(cCode, pattern) {
 			t.Errorf("missing %s destructuring", pattern)
@@ -4179,9 +4179,9 @@ func TestASTTranslatorF16NEON(t *testing.T) {
 		t.Error("missing function name with f16 suffix")
 	}
 
-	// Verify pointer type is unsigned short (CType)
-	if !strings.Contains(cCode, "unsigned short *a") {
-		t.Error("missing unsigned short *a parameter for f16")
+	// Verify pointer type uses float16_t (ScalarArithType) for native f16 arithmetic
+	if !strings.Contains(cCode, "float16_t *a") {
+		t.Error("missing float16_t *a parameter for f16")
 	}
 }
 
@@ -4597,5 +4597,108 @@ func BaseSlideUpF64(data []float64, n int) {
 	// NEON f64: 2 lanes. SlideUpLanes(v, 1) → vextq_f64(zero, v, 1)
 	if !strings.Contains(cCode, "vextq_f64(vdupq_n_f64(0.0), v, 1)") {
 		t.Error("missing vextq_f64(vdupq_n_f64(0.0), v, 1) for SlideUpLanes(v, 1)")
+	}
+}
+
+func TestGoSliceElemToCType_ScalarArithType(t *testing.T) {
+	// When ScalarArithType is set (e.g., float16_t for NEON f16),
+	// goSliceElemToCType("T", profile) should return ScalarArithType
+	// instead of CType.
+	profile := GetCProfile("NEON", "hwy.Float16")
+	if profile == nil {
+		t.Fatal("NEON Float16 profile not found")
+	}
+
+	got := goSliceElemToCType("T", profile)
+	if got != "float16_t" {
+		t.Errorf("goSliceElemToCType(T, NEON f16) = %q, want %q", got, "float16_t")
+	}
+
+	// float32 profile has no ScalarArithType — should return CType
+	f32Profile := GetCProfile("NEON", "float32")
+	if f32Profile == nil {
+		t.Fatal("NEON float32 profile not found")
+	}
+
+	got = goSliceElemToCType("T", f32Profile)
+	if got != "float" {
+		t.Errorf("goSliceElemToCType(T, NEON f32) = %q, want %q", got, "float")
+	}
+}
+
+func TestGoTypeToCType_ScalarArithType(t *testing.T) {
+	// When ScalarArithType is set, goTypeToCType("T") should return it
+	profile := GetCProfile("NEON", "hwy.Float16")
+	if profile == nil {
+		t.Fatal("NEON Float16 profile not found")
+	}
+
+	translator := NewCASTTranslator(profile, "hwy.Float16")
+	got := translator.goTypeToCType("T")
+	if got != "float16_t" {
+		t.Errorf("goTypeToCType(T, NEON f16) = %q, want %q", got, "float16_t")
+	}
+
+	// Also verify hwy.Vec[T] maps to the vector type
+	vecGot := translator.goTypeToCType("hwy.Vec[T]")
+	if vecGot == "" {
+		t.Error("goTypeToCType(hwy.Vec[T]) returned empty string")
+	}
+	// NEON f16 primary vector type should be float16x8_t
+	if vecGot != "float16x8_t" {
+		t.Errorf("goTypeToCType(hwy.Vec[T], NEON f16) = %q, want %q", vecGot, "float16x8_t")
+	}
+}
+
+func TestASTWrapperGoScalarType(t *testing.T) {
+	tests := []struct {
+		elemType string
+		want     string
+	}{
+		{"float32", "float32"},
+		{"float64", "float64"},
+		{"float16", "hwy.Float16"},
+		{"hwy.Float16", "hwy.Float16"},
+		{"bfloat16", "hwy.BFloat16"},
+		{"hwy.BFloat16", "hwy.BFloat16"},
+		{"int32", "int32"},
+		{"int64", "int64"},
+		{"uint32", "uint32"},
+		{"uint64", "uint64"},
+		{"unknown", "float32"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.elemType, func(t *testing.T) {
+			got := astWrapperGoScalarType(tt.elemType)
+			if got != tt.want {
+				t.Errorf("astWrapperGoScalarType(%q) = %q, want %q", tt.elemType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGroupGoParams_ScalarT(t *testing.T) {
+	// Test that groupGoParams maps T params to concrete Go types
+	pf := &ParsedFunc{
+		Name: "BaseLiftStep",
+		Params: []Param{
+			{Name: "target", Type: "[]T"},
+			{Name: "tLen", Type: "int"},
+			{Name: "neighbor", Type: "[]T"},
+			{Name: "nLen", Type: "int"},
+			{Name: "coeff", Type: "T"},
+			{Name: "phase", Type: "int"},
+		},
+	}
+
+	sig := groupGoParams(pf, "[]hwy.Float16", "hwy.Float16")
+	// coeff should be mapped to hwy.Float16
+	if !strings.Contains(sig, "coeff hwy.Float16") {
+		t.Errorf("groupGoParams did not map T to hwy.Float16: %q", sig)
+	}
+	// Slices should use the provided slice type
+	if !strings.Contains(sig, "[]hwy.Float16") {
+		t.Errorf("groupGoParams did not use []hwy.Float16 for slices: %q", sig)
 	}
 }

@@ -80,6 +80,125 @@ func TestAnalyze53_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestSynthesize53Bufs_MatchesNonBufs(t *testing.T) {
+	for _, size := range testSizes {
+		for phase := 0; phase <= 1; phase++ {
+			t.Run(sizePhaseString(size, phase), func(t *testing.T) {
+				// Create identical data for both variants
+				dataNonBufs := make([]int32, size)
+				dataBufs := make([]int32, size)
+				for i := range dataNonBufs {
+					dataNonBufs[i] = int32(i*7 - size/2)
+					dataBufs[i] = dataNonBufs[i]
+				}
+
+				// Run non-Bufs
+				Synthesize53(dataNonBufs, phase)
+
+				// Run Bufs with pre-allocated buffers
+				maxHalf := (size + 1) / 2
+				low := make([]int32, maxHalf)
+				high := make([]int32, maxHalf)
+				Synthesize53Bufs(dataBufs, phase, low, high)
+
+				// Verify identical results
+				for i := range dataNonBufs {
+					if dataBufs[i] != dataNonBufs[i] {
+						t.Errorf("at %d: Bufs got %d, non-Bufs got %d", i, dataBufs[i], dataNonBufs[i])
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestAnalyze53Bufs_MatchesNonBufs(t *testing.T) {
+	for _, size := range testSizes {
+		for phase := 0; phase <= 1; phase++ {
+			t.Run(sizePhaseString(size, phase), func(t *testing.T) {
+				dataNonBufs := make([]int32, size)
+				dataBufs := make([]int32, size)
+				for i := range dataNonBufs {
+					dataNonBufs[i] = int32(i*5 - size/3)
+					dataBufs[i] = dataNonBufs[i]
+				}
+
+				Analyze53(dataNonBufs, phase)
+
+				maxHalf := (size + 1) / 2
+				low := make([]int32, maxHalf)
+				high := make([]int32, maxHalf)
+				Analyze53Bufs(dataBufs, phase, low, high)
+
+				for i := range dataNonBufs {
+					if dataBufs[i] != dataNonBufs[i] {
+						t.Errorf("at %d: Bufs got %d, non-Bufs got %d", i, dataBufs[i], dataNonBufs[i])
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestSynthesize53Bufs_RoundTrip(t *testing.T) {
+	for _, size := range testSizes {
+		for phase := 0; phase <= 1; phase++ {
+			t.Run(sizePhaseString(size, phase), func(t *testing.T) {
+				original := make([]int32, size)
+				data := make([]int32, size)
+				for i := range original {
+					original[i] = int32(i*7 - size/2)
+					data[i] = original[i]
+				}
+
+				maxHalf := (size + 1) / 2
+				low := make([]int32, maxHalf)
+				high := make([]int32, maxHalf)
+
+				Analyze53Bufs(data, phase, low, high)
+				Synthesize53Bufs(data, phase, low, high)
+
+				for i := range original {
+					if data[i] != original[i] {
+						t.Errorf("at %d: got %d, want %d", i, data[i], original[i])
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestSynthesize53Core_MatchesSynthesize53(t *testing.T) {
+	for _, size := range testSizes {
+		for phase := 0; phase <= 1; phase++ {
+			t.Run(sizePhaseString(size, phase), func(t *testing.T) {
+				// Create identical wavelet-domain data for both paths
+				dataRef := make([]int32, size)
+				dataFused := make([]int32, size)
+				for i := range dataRef {
+					dataRef[i] = int32(i*11 - size/3)
+					dataFused[i] = dataRef[i]
+				}
+
+				// Reference: scalar Synthesize53
+				Synthesize53(dataRef, phase)
+
+				// Fused: Synthesize53Bufs (now calls Synthesize53Core)
+				maxHalf := (size + 1) / 2
+				low := make([]int32, maxHalf)
+				high := make([]int32, maxHalf)
+				Synthesize53Bufs(dataFused, phase, low, high)
+
+				for i := range dataRef {
+					if dataFused[i] != dataRef[i] {
+						t.Errorf("at %d: fused got %d, ref got %d", i, dataFused[i], dataRef[i])
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestSynthesize97_RoundTrip_Float32(t *testing.T) {
 	for _, size := range testSizes {
 		for phase := 0; phase <= 1; phase++ {

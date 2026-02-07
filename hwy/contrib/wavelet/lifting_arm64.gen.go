@@ -26,6 +26,8 @@ var InterleaveInt32 func(dst []int32, low []int32, sn int, high []int32, dn int,
 var InterleaveInt64 func(dst []int64, low []int64, sn int, high []int64, dn int, phase int)
 var InterleaveUint32 func(dst []uint32, low []uint32, sn int, high []uint32, dn int, phase int)
 var InterleaveUint64 func(dst []uint64, low []uint64, sn int, high []uint64, dn int, phase int)
+var Synthesize53CoreInt32 func(data []int32, n int, low []int32, sn int, high []int32, dn int, phase int)
+var Synthesize53CoreInt64 func(data []int64, n int, low []int64, sn int, high []int64, dn int, phase int)
 var DeinterleaveFloat32 func(src []float32, low []float32, sn int, high []float32, dn int, phase int)
 var DeinterleaveFloat64 func(src []float64, low []float64, sn int, high []float64, dn int, phase int)
 var DeinterleaveInt32 func(src []int32, low []int32, sn int, high []int32, dn int, phase int)
@@ -115,6 +117,21 @@ func Interleave[T hwy.Lanes](dst []T, low []T, sn int, high []T, dn int, phase i
 	}
 }
 
+// Synthesize53Core fuses copy + LiftUpdate53 + LiftPredict53 + Interleave
+// into a single dispatch target, eliminating 2 indirect calls per 1D transform.
+// data contains [low|high] on entry and interleaved samples on exit.
+// low and high are scratch buffers with capacity >= sn and >= dn respectively.
+//
+// This function dispatches to the appropriate SIMD implementation at runtime.
+func Synthesize53Core[T hwy.SignedInts](data []T, n int, low []T, sn int, high []T, dn int, phase int) {
+	switch any(data).(type) {
+	case []int32:
+		Synthesize53CoreInt32(any(data).([]int32), n, any(low).([]int32), sn, any(high).([]int32), dn, phase)
+	case []int64:
+		Synthesize53CoreInt64(any(data).([]int64), n, any(low).([]int64), sn, any(high).([]int64), dn, phase)
+	}
+}
+
 // Deinterleave extracts low and high-pass coefficients from src.
 // phase=0: low[i]=src[2i], high[i]=src[2i+1]
 // phase=1: high[i]=src[2i], low[i]=src[2i+1]
@@ -165,6 +182,8 @@ func initLiftingNEON() {
 	InterleaveInt64 = BaseInterleave_neon_Int64
 	InterleaveUint32 = BaseInterleave_neon_Uint32
 	InterleaveUint64 = BaseInterleave_neon_Uint64
+	Synthesize53CoreInt32 = BaseSynthesize53Core_neon_Int32
+	Synthesize53CoreInt64 = BaseSynthesize53Core_neon_Int64
 	DeinterleaveFloat32 = BaseDeinterleave_neon
 	DeinterleaveFloat64 = BaseDeinterleave_neon_Float64
 	DeinterleaveInt32 = BaseDeinterleave_neon_Int32
@@ -192,6 +211,8 @@ func initLiftingFallback() {
 	InterleaveInt64 = BaseInterleave_fallback_Int64
 	InterleaveUint32 = BaseInterleave_fallback_Uint32
 	InterleaveUint64 = BaseInterleave_fallback_Uint64
+	Synthesize53CoreInt32 = BaseSynthesize53Core_fallback_Int32
+	Synthesize53CoreInt64 = BaseSynthesize53Core_fallback_Int64
 	DeinterleaveFloat32 = BaseDeinterleave_fallback
 	DeinterleaveFloat64 = BaseDeinterleave_fallback_Float64
 	DeinterleaveInt32 = BaseDeinterleave_fallback_Int32

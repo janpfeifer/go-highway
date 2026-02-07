@@ -96,15 +96,15 @@ type cParamInfo struct {
 func NewCASTTranslator(profile *CIntrinsicProfile, elemType string) *CASTTranslator {
 	tier, lanes := primaryTier(profile)
 	return &CASTTranslator{
-		profile:            profile,
-		tier:               tier,
-		lanes:              lanes,
-		elemType:           elemType,
-		vars:               make(map[string]cVarInfo),
-		params:             make(map[string]cParamInfo),
-		sliceLenVars:       make(map[string]string),
+		profile:             profile,
+		tier:                tier,
+		lanes:               lanes,
+		elemType:            elemType,
+		vars:                make(map[string]cVarInfo),
+		params:              make(map[string]cParamInfo),
+		sliceLenVars:        make(map[string]string),
 		requiredStructTypes: make(map[string]structTypeInfo),
-		buf:                &bytes.Buffer{},
+		buf:                 &bytes.Buffer{},
 	}
 }
 
@@ -386,7 +386,11 @@ func (t *CASTTranslator) buildParamMap(pf *ParsedFunc) {
 			}
 		} else {
 			info.cName = p.Name
-			info.cType = t.profile.CType
+			if t.profile.ScalarArithType != "" {
+				info.cType = t.profile.ScalarArithType
+			} else {
+				info.cType = t.profile.CType
+			}
 		}
 		t.params[p.Name] = info
 	}
@@ -463,6 +467,9 @@ func goSliceElemToCType(elemType string, profile *CIntrinsicProfile) string {
 	case "int32":
 		return "int"
 	case "T":
+		if profile.ScalarArithType != "" {
+			return profile.ScalarArithType
+		}
 		return profile.CType
 	default:
 		return profile.CType
@@ -666,8 +673,8 @@ func (t *CASTTranslator) scanSharedPopCountLoops(block *ast.BlockStmt) (accums [
 
 	// Collect all for-loops and their popcount accum variables
 	type loopInfo struct {
-		idx      int
-		forStmt  *ast.ForStmt
+		idx        int
+		forStmt    *ast.ForStmt
 		scalarVars map[string]bool
 	}
 	var loops []loopInfo
@@ -783,6 +790,13 @@ func (t *CASTTranslator) translateStmt(stmt ast.Stmt) {
 
 // translateAssignStmt handles := and = assignments.
 func (t *CASTTranslator) translateAssignStmt(s *ast.AssignStmt) {
+	// Handle blank identifier discards: _ = expr (no-op, skip entirely)
+	if len(s.Lhs) == 1 {
+		if ident, ok := s.Lhs[0].(*ast.Ident); ok && ident.Name == "_" {
+			return
+		}
+	}
+
 	// Handle 4-way multi-assign from hwy.Load4
 	if len(s.Lhs) == 4 && len(s.Rhs) == 1 {
 		if call, ok := s.Rhs[0].(*ast.CallExpr); ok {
@@ -802,12 +816,31 @@ func (t *CASTTranslator) translateAssignStmt(s *ast.AssignStmt) {
 				return
 			}
 		}
-		// Other multi-assigns not supported
+		// Other single-RHS multi-assigns not supported
+		return
+	}
+
+	// Handle parallel multi-assign: off1, off2 := -1, 0
+	// where len(Lhs) == len(Rhs) and each pair is an independent assignment.
+	if len(s.Lhs) > 1 && len(s.Lhs) == len(s.Rhs) {
+		for i := range s.Lhs {
+			// Skip blank identifiers
+			if ident, ok := s.Lhs[i].(*ast.Ident); ok && ident.Name == "_" {
+				continue
+			}
+			sub := &ast.AssignStmt{
+				Lhs:    []ast.Expr{s.Lhs[i]},
+				TokPos: s.TokPos,
+				Tok:    s.Tok,
+				Rhs:    []ast.Expr{s.Rhs[i]},
+			}
+			t.translateAssignStmt(sub)
+		}
 		return
 	}
 
 	if len(s.Lhs) != 1 || len(s.Rhs) != 1 {
-		// Multi-assign not supported
+		// Unsupported multi-assign shape
 		return
 	}
 
@@ -837,9 +870,9 @@ func (t *CASTTranslator) translateAssignStmt(s *ast.AssignStmt) {
 		rhsStr := t.translateExpr(rhs)
 
 		// Handle make([]hwy.Vec[T], N) → stack-allocated C array
-		if strings.HasPrefix(rhsStr, "/* VEC_ARRAY:") {
+		if after, ok := strings.CutPrefix(rhsStr, "/* VEC_ARRAY:"); ok {
 			// Parse: /* VEC_ARRAY:float32x4_t:4 */
-			inner := strings.TrimPrefix(rhsStr, "/* VEC_ARRAY:")
+			inner := after
 			inner = strings.TrimSuffix(inner, " */")
 			parts := strings.SplitN(inner, ":", 2)
 			if len(parts) == 2 {
@@ -852,8 +885,8 @@ func (t *CASTTranslator) translateAssignStmt(s *ast.AssignStmt) {
 		}
 
 		// Handle make([]T, size) → C99 VLA for scalar slices
-		if strings.HasPrefix(rhsStr, "/* SCALAR_ARRAY:") {
-			inner := strings.TrimPrefix(rhsStr, "/* SCALAR_ARRAY:")
+		if after, ok := strings.CutPrefix(rhsStr, "/* SCALAR_ARRAY:"); ok {
+			inner := after
 			inner = strings.TrimSuffix(inner, " */")
 			parts := strings.SplitN(inner, ":", 2)
 			if len(parts) == 2 {
@@ -1240,9 +1273,11 @@ func (t *CASTTranslator) translateDeclStmt(s *ast.DeclStmt) {
 			continue
 		}
 
-		cType := t.goTypeToCType(exprToString(valueSpec.Type))
+		goType := exprToString(valueSpec.Type)
+		cType := t.goTypeToCType(goType)
+		isVec := strings.HasPrefix(goType, "hwy.Vec[") || strings.HasPrefix(goType, "hwy.Mask[")
 		for _, name := range valueSpec.Names {
-			t.vars[name.Name] = cVarInfo{cType: cType}
+			t.vars[name.Name] = cVarInfo{cType: cType, isVector: isVec}
 			// Go zero-initializes all declared variables; emit = 0 for scalar types
 			if isScalarCType(cType) {
 				t.writef("%s = 0;\n", cDeclVar(cType, name.Name))
@@ -1902,10 +1937,13 @@ func (t *CASTTranslator) emitHwyShiftRight(args []ast.Expr) string {
 // copy(dst, src) in Go copies min(len(dst), len(src)) elements.
 // We emit a for-loop since GOAT doesn't support memcpy calls directly.
 //
-// IMPORTANT: This copies exactly `lanes` elements regardless of the Go slice bounds.
-// This is safe for tail-handling buffers (which are always lanes-sized) and for
-// Image row access (where stride >= width provides padding). Functions using copy()
-// in other contexts should verify their memory layout provides sufficient padding.
+// This copies exactly `lanes` elements. This is safe for:
+//   - Tail-handling buffers (which are always lanes-sized)
+//   - Image row access (where stride >= width provides padding)
+//
+// Functions that operate on bare slices without stride padding should use
+// scalar loops for tail handling instead of the copy-to-buffer pattern,
+// to avoid writing past the valid range.
 func (t *CASTTranslator) emitCopy(args []ast.Expr) {
 	if len(args) < 2 {
 		t.writef("/* copy: missing args */\n")
@@ -1923,8 +1961,8 @@ func (t *CASTTranslator) emitCopy(args []ast.Expr) {
 		src = "(" + src + ")"
 	}
 
-	// Copy lanes elements. This assumes the source has at least lanes elements
-	// accessible (either through explicit sizing or stride padding).
+	// Copy lanes elements. Functions operating on bare slices should use
+	// scalar tail loops instead of this buffer pattern to avoid OOB writes.
 	t.writef("for (long _ci = 0; _ci < %d; _ci++) { %s[_ci] = %s[_ci]; }\n",
 		t.lanes, dst, src)
 }
@@ -2048,7 +2086,7 @@ func (t *CASTTranslator) translateLoad4Assign(lhs []ast.Expr, args []ast.Expr, t
 
 	// Get LHS variable names
 	var names [4]string
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		names[i] = t.translateExpr(lhs[i])
 	}
 
@@ -2058,7 +2096,7 @@ func (t *CASTTranslator) translateLoad4Assign(lhs []ast.Expr, args []ast.Expr, t
 		tmpName := fmt.Sprintf("_load4_%d", t.tmpCount)
 		t.tmpCount++
 		t.writef("%s %s = %s(%s);\n", x4Type, tmpName, load4Fn, ptr)
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			if tok == token.DEFINE {
 				t.vars[names[i]] = cVarInfo{cType: vecType, isVector: true}
 				t.writef("%s %s = %s.val[%d];\n", vecType, names[i], tmpName, i)
@@ -2069,7 +2107,7 @@ func (t *CASTTranslator) translateLoad4Assign(lhs []ast.Expr, args []ast.Expr, t
 	} else {
 		// AVX fallback: 4 individual loads
 		loadFn := t.profile.LoadFn[t.tier]
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			var loadExpr string
 			if i == 0 {
 				loadExpr = fmt.Sprintf("%s(%s)", loadFn, ptr)
@@ -2118,19 +2156,19 @@ func (t *CASTTranslator) emitICTCoeffsAssign(lhs []ast.Expr, tok token.Token) bo
 	}
 
 	coeffs := []float64{
-		0.299,      // rToY
-		0.587,      // gToY
-		0.114,      // bToY
-		-0.16875,   // rToCb
-		-0.33126,   // gToCb
-		0.5,        // bToCb
-		0.5,        // rToCr
-		-0.41869,   // gToCr
-		-0.08131,   // bToCr
-		1.402,      // crToR
-		-0.344136,  // cbToG
-		-0.714136,  // crToG
-		1.772,      // cbToB
+		0.299,     // rToY
+		0.587,     // gToY
+		0.114,     // bToY
+		-0.16875,  // rToCb
+		-0.33126,  // gToCb
+		0.5,       // bToCb
+		0.5,       // rToCr
+		-0.41869,  // gToCr
+		-0.08131,  // bToCr
+		1.402,     // crToR
+		-0.344136, // cbToG
+		-0.714136, // crToG
+		1.772,     // cbToB
 	}
 
 	// Use ScalarArithType if available (e.g., float16_t for NEON f16),
@@ -2140,7 +2178,7 @@ func (t *CASTTranslator) emitICTCoeffsAssign(lhs []ast.Expr, tok token.Token) bo
 		cType = t.profile.ScalarArithType
 	}
 
-	for i := 0; i < 13; i++ {
+	for i := range 13 {
 		// Handle blank identifier _
 		ident, ok := lhs[i].(*ast.Ident)
 		if !ok || ident.Name == "_" {
@@ -2223,8 +2261,8 @@ func (t *CASTTranslator) translateMakeExpr(e *ast.CallExpr) string {
 	}
 
 	// Scalar slice types: []float32, []T, etc.
-	if strings.HasPrefix(typeStr, "[]") {
-		elemGoType := strings.TrimPrefix(typeStr, "[]")
+	if after, ok := strings.CutPrefix(typeStr, "[]"); ok {
+		elemGoType := after
 		cType := t.goTypeToCType(elemGoType)
 		return fmt.Sprintf("/* SCALAR_ARRAY:%s:%s */", cType, length)
 	}
@@ -2476,8 +2514,8 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 			if strings.Contains(typeStr, "hwy.Vec") || strings.Contains(typeStr, "Vec[") {
 				return cVarInfo{cType: t.profile.VecTypes[t.tier], isVector: true, isPtr: true}
 			}
-			if strings.HasPrefix(typeStr, "[]") {
-				elemGoType := strings.TrimPrefix(typeStr, "[]")
+			if after, ok0 := strings.CutPrefix(typeStr, "[]"); ok0 {
+				elemGoType := after
 				cType := t.goTypeToCType(elemGoType)
 				return cVarInfo{cType: cType + " *", isPtr: true}
 			}
@@ -2513,11 +2551,22 @@ func (t *CASTTranslator) goTypeToCType(goType string) string {
 	case "uint8", "byte":
 		return "unsigned char"
 	case "T":
+		if t.profile.ScalarArithType != "" {
+			return t.profile.ScalarArithType
+		}
 		return t.profile.CType
 	default:
-		if strings.HasPrefix(goType, "[]") {
-			elemType := strings.TrimPrefix(goType, "[]")
+		if after, ok := strings.CutPrefix(goType, "[]"); ok {
+			elemType := after
 			return goSliceElemToCType(elemType, t.profile) + " *"
+		}
+		// hwy.Vec[T] → the profile's primary vector type (e.g., int32x4_t, float32x4_t)
+		if goType == "hwy.Vec[T]" || strings.HasPrefix(goType, "hwy.Vec[") {
+			return t.profile.VecTypes[t.tier]
+		}
+		// hwy.Mask[T] → the profile's primary vector type (masks are same width)
+		if goType == "hwy.Mask[T]" || strings.HasPrefix(goType, "hwy.Mask[") {
+			return t.profile.VecTypes[t.tier]
 		}
 		return "long" // default for unknown types
 	}

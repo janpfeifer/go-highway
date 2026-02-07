@@ -43,7 +43,7 @@ func BaseForwardRCT[T hwy.SignedInts](r, g, b, outY, outCb, outCr *Image[T]) {
 	height := r.height
 	width := r.width
 
-	for y := 0; y < height; y++ {
+	for y := range height {
 		rRow := r.Row(y)
 		gRow := g.Row(y)
 		bRow := b.Row(y)
@@ -129,7 +129,7 @@ func BaseInverseRCT[T hwy.SignedInts](y, cb, cr, outR, outG, outB *Image[T]) {
 	height := y.height
 	width := y.width
 
-	for row := 0; row < height; row++ {
+	for row := range height {
 		yRow := y.Row(row)
 		cbRow := cb.Row(row)
 		crRow := cr.Row(row)
@@ -231,7 +231,7 @@ func BaseForwardICT[T hwy.Floats](r, g, b, outY, outCb, outCr *Image[T]) {
 	height := r.height
 	width := r.width
 
-	for row := 0; row < height; row++ {
+	for row := range height {
 		rRow := r.Row(row)
 		gRow := g.Row(row)
 		bRow := b.Row(row)
@@ -325,7 +325,7 @@ func BaseInverseICT[T hwy.Floats](y, cb, cr, outR, outG, outB *Image[T]) {
 	height := y.height
 	width := y.width
 
-	for row := 0; row < height; row++ {
+	for row := range height {
 		yRow := y.Row(row)
 		cbRow := cb.Row(row)
 		crRow := cr.Row(row)

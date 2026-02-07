@@ -44,21 +44,21 @@ func Synthesize2D_53(img *image.Image[int32], levels int, phaseFn PhaseFunc) {
 
 		// Vertical pass first (on columns)
 		col := make([]int32, levelHeight)
-		for x := 0; x < levelWidth; x++ {
+		for x := range levelWidth {
 			// Extract column
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				col[y] = img.At(x, y)
 			}
 			// Transform
 			Synthesize53(col, phaseV)
 			// Write back
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				img.Set(x, y, col[y])
 			}
 		}
 
 		// Horizontal pass (on rows)
-		for y := 0; y < levelHeight; y++ {
+		for y := range levelHeight {
 			row := img.Row(y)[:levelWidth]
 			Synthesize53(row, phaseH)
 		}
@@ -74,7 +74,7 @@ func Analyze2D_53(img *image.Image[int32], levels int, phaseFn PhaseFunc) {
 	}
 
 	// Process from finest to coarsest level
-	for level := 0; level < levels; level++ {
+	for level := range levels {
 		phaseH, phaseV := phaseFn(level)
 		levelWidth := levelDim(img.Width(), level)
 		levelHeight := levelDim(img.Height(), level)
@@ -84,22 +84,22 @@ func Analyze2D_53(img *image.Image[int32], levels int, phaseFn PhaseFunc) {
 		}
 
 		// Horizontal pass first (on rows)
-		for y := 0; y < levelHeight; y++ {
+		for y := range levelHeight {
 			row := img.Row(y)[:levelWidth]
 			Analyze53(row, phaseH)
 		}
 
 		// Vertical pass (on columns)
 		col := make([]int32, levelHeight)
-		for x := 0; x < levelWidth; x++ {
+		for x := range levelWidth {
 			// Extract column
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				col[y] = img.At(x, y)
 			}
 			// Transform
 			Analyze53(col, phaseV)
 			// Write back
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				img.Set(x, y, col[y])
 			}
 		}
@@ -122,21 +122,21 @@ func Synthesize2D_97[T hwy.Floats](img *image.Image[T], levels int, phaseFn Phas
 
 		// Vertical pass first
 		col := make([]T, levelHeight)
-		for x := 0; x < levelWidth; x++ {
+		for x := range levelWidth {
 			// Extract column
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				col[y] = img.At(x, y)
 			}
 			// Transform
 			Synthesize97(col, phaseV)
 			// Write back
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				img.Set(x, y, col[y])
 			}
 		}
 
 		// Horizontal pass
-		for y := 0; y < levelHeight; y++ {
+		for y := range levelHeight {
 			row := img.Row(y)[:levelWidth]
 			Synthesize97(row, phaseH)
 		}
@@ -152,7 +152,7 @@ func Analyze2D_97[T hwy.Floats](img *image.Image[T], levels int, phaseFn PhaseFu
 	}
 
 	// Process from finest to coarsest level
-	for level := 0; level < levels; level++ {
+	for level := range levels {
 		phaseH, phaseV := phaseFn(level)
 		levelWidth := levelDim(img.Width(), level)
 		levelHeight := levelDim(img.Height(), level)
@@ -162,22 +162,22 @@ func Analyze2D_97[T hwy.Floats](img *image.Image[T], levels int, phaseFn PhaseFu
 		}
 
 		// Horizontal pass first
-		for y := 0; y < levelHeight; y++ {
+		for y := range levelHeight {
 			row := img.Row(y)[:levelWidth]
 			Analyze97(row, phaseH)
 		}
 
 		// Vertical pass
 		col := make([]T, levelHeight)
-		for x := 0; x < levelWidth; x++ {
+		for x := range levelWidth {
 			// Extract column
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				col[y] = img.At(x, y)
 			}
 			// Transform
 			Analyze97(col, phaseV)
 			// Write back
-			for y := 0; y < levelHeight; y++ {
+			for y := range levelHeight {
 				img.Set(x, y, col[y])
 			}
 		}
@@ -187,7 +187,7 @@ func Analyze2D_97[T hwy.Floats](img *image.Image[T], levels int, phaseFn PhaseFu
 // levelDim calculates the dimension at a given decomposition level.
 // Level 0 is the original dimension, level 1 is (dim+1)/2, etc.
 func levelDim(dim, level int) int {
-	for i := 0; i < level; i++ {
+	for range level {
 		dim = (dim + 1) / 2
 	}
 	return dim

@@ -10,116 +10,270 @@ func BaseLiftUpdate53_fallback_Int32(target []int32, tLen int, neighbor []int32,
 	if tLen == 0 || nLen == 0 {
 		return
 	}
-	twoVec := int32(int32(2))
-	off1, off2 := -1, 0
-	if phase == 1 {
-		off1, off2 = 0, 1
+	twoVec := hwy.Set(int32(2))
+	lanes := hwy.MaxLanes[int32]()
+	start := 0
+	if phase == 0 {
+		target[0] -= (neighbor[0] + neighbor[0] + 2) >> 2
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
-		if n1Idx < 0 {
-			n1Idx = 0
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	} else {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	}
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[int32]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		} else {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		}
+		sum := hwy.Add(hwy.Add(n1, n2), twoVec)
+		update := hwy.ShiftRight(sum, 2)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Sub(t, update), target[i:])
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i - 1
+			n2Idx = i
+		} else {
+			n1Idx = i
+			n2Idx = i + 1
+		}
+		target[i] -= (neighbor[n1Idx] + neighbor[n2Idx] + 2) >> 2
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i - 1
+			n2Idx = i
+		} else {
+			n1Idx = i
+			n2Idx = i + 1
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
-		}
-		if n2Idx < 0 {
-			n2Idx = 0
 		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
 		target[i] -= (neighbor[n1Idx] + neighbor[n2Idx] + 2) >> 2
 	}
-	_ = twoVec
-	_ = 1
+	_ = lanes
 }
 
 func BaseLiftUpdate53_fallback_Int64(target []int64, tLen int, neighbor []int64, nLen int, phase int) {
 	if tLen == 0 || nLen == 0 {
 		return
 	}
-	twoVec := int64(int64(2))
-	off1, off2 := -1, 0
-	if phase == 1 {
-		off1, off2 = 0, 1
+	twoVec := hwy.Set(int64(2))
+	lanes := hwy.MaxLanes[int64]()
+	start := 0
+	if phase == 0 {
+		target[0] -= (neighbor[0] + neighbor[0] + 2) >> 2
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
-		if n1Idx < 0 {
-			n1Idx = 0
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	} else {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	}
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[int64]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		} else {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		}
+		sum := hwy.Add(hwy.Add(n1, n2), twoVec)
+		update := hwy.ShiftRight(sum, 2)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Sub(t, update), target[i:])
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i - 1
+			n2Idx = i
+		} else {
+			n1Idx = i
+			n2Idx = i + 1
+		}
+		target[i] -= (neighbor[n1Idx] + neighbor[n2Idx] + 2) >> 2
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i - 1
+			n2Idx = i
+		} else {
+			n1Idx = i
+			n2Idx = i + 1
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
-		}
-		if n2Idx < 0 {
-			n2Idx = 0
 		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
 		target[i] -= (neighbor[n1Idx] + neighbor[n2Idx] + 2) >> 2
 	}
-	_ = twoVec
-	_ = 1
+	_ = lanes
 }
 
 func BaseLiftPredict53_fallback_Int32(target []int32, tLen int, neighbor []int32, nLen int, phase int) {
 	if tLen == 0 || nLen == 0 {
 		return
 	}
-	off1, off2 := 0, 1
+	lanes := hwy.MaxLanes[int32]()
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		target[0] += (neighbor[0] + neighbor[0]) >> 1
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[int32]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		} else {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		}
+		update := hwy.ShiftRight(hwy.Add(n1, n2), 1)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Add(t, update), target[i:])
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] += (neighbor[n1Idx] + neighbor[n2Idx]) >> 1
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
 		}
-		if n2Idx < 0 {
-			n2Idx = 0
-		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
 		target[i] += (neighbor[n1Idx] + neighbor[n2Idx]) >> 1
 	}
-	_ = 1
+	_ = lanes
 }
 
 func BaseLiftPredict53_fallback_Int64(target []int64, tLen int, neighbor []int64, nLen int, phase int) {
 	if tLen == 0 || nLen == 0 {
 		return
 	}
-	off1, off2 := 0, 1
+	lanes := hwy.MaxLanes[int64]()
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		target[0] += (neighbor[0] + neighbor[0]) >> 1
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[int64]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		} else {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		}
+		update := hwy.ShiftRight(hwy.Add(n1, n2), 1)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Add(t, update), target[i:])
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] += (neighbor[n1Idx] + neighbor[n2Idx]) >> 1
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
 		}
-		if n2Idx < 0 {
-			n2Idx = 0
-		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
 		target[i] += (neighbor[n1Idx] + neighbor[n2Idx]) >> 1
 	}
-	_ = 1
+	_ = lanes
 }
 
 func BaseLiftStep97_fallback_Float16(target []hwy.Float16, tLen int, neighbor []hwy.Float16, nLen int, coeff hwy.Float16, phase int) {
@@ -128,21 +282,61 @@ func BaseLiftStep97_fallback_Float16(target []hwy.Float16, tLen int, neighbor []
 	}
 	coeffVec := hwy.Set(coeff)
 	lanes := hwy.MaxLanes[hwy.Float16]()
-	off1, off2 := 0, 1
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		target[0] = hwy.Float32ToFloat16(target[0].Float32() - coeff.Float32()*(neighbor[0].Float32()+neighbor[0].Float32()))
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[hwy.Float16]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		} else {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		}
+		sum := hwy.Add(n1, n2)
+		update := hwy.Mul(coeffVec, sum)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Sub(t, update), target[i:])
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] = hwy.Float32ToFloat16(target[i].Float32() - coeff.Float32()*(neighbor[n1Idx].Float32()+neighbor[n2Idx].Float32()))
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
-		}
-		if n2Idx < 0 {
-			n2Idx = 0
 		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
@@ -159,21 +353,61 @@ func BaseLiftStep97_fallback_BFloat16(target []hwy.BFloat16, tLen int, neighbor 
 	}
 	coeffVec := hwy.Set(coeff)
 	lanes := hwy.MaxLanes[hwy.BFloat16]()
-	off1, off2 := 0, 1
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		target[0] = hwy.Float32ToBFloat16(target[0].Float32() - coeff.Float32()*(neighbor[0].Float32()+neighbor[0].Float32()))
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[hwy.BFloat16]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		} else {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		}
+		sum := hwy.Add(n1, n2)
+		update := hwy.Mul(coeffVec, sum)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Sub(t, update), target[i:])
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] = hwy.Float32ToBFloat16(target[i].Float32() - coeff.Float32()*(neighbor[n1Idx].Float32()+neighbor[n2Idx].Float32()))
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
-		}
-		if n2Idx < 0 {
-			n2Idx = 0
 		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
@@ -189,21 +423,61 @@ func BaseLiftStep97_fallback(target []float32, tLen int, neighbor []float32, nLe
 		return
 	}
 	coeffVec := float32(coeff)
-	off1, off2 := 0, 1
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		target[0] -= coeff * (neighbor[0] + neighbor[0])
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+	i := start
+	for ; i < safeEnd; i++ {
+		var n1, n2 float32
+		if phase == 0 {
+			n1 = neighbor[i]
+			n2 = neighbor[i+1]
+		} else {
+			n1 = neighbor[i-1]
+			n2 = neighbor[i]
+		}
+		sum := n1 + n2
+		update := coeffVec * sum
+		t := target[i]
+		target[i] = t - update
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] -= coeff * (neighbor[n1Idx] + neighbor[n2Idx])
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
-		}
-		if n2Idx < 0 {
-			n2Idx = 0
 		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
@@ -219,21 +493,61 @@ func BaseLiftStep97_fallback_Float64(target []float64, tLen int, neighbor []floa
 		return
 	}
 	coeffVec := float64(coeff)
-	off1, off2 := 0, 1
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		target[0] -= coeff * (neighbor[0] + neighbor[0])
+		start = 1
 	}
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+	i := start
+	for ; i < safeEnd; i++ {
+		var n1, n2 float64
+		if phase == 0 {
+			n1 = neighbor[i]
+			n2 = neighbor[i+1]
+		} else {
+			n1 = neighbor[i-1]
+			n2 = neighbor[i]
+		}
+		sum := n1 + n2
+		update := coeffVec * sum
+		t := target[i]
+		target[i] = t - update
+	}
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] -= coeff * (neighbor[n1Idx] + neighbor[n2Idx])
+	}
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
-		}
-		if n2Idx < 0 {
-			n2Idx = 0
 		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
@@ -256,13 +570,8 @@ func BaseScaleSlice_fallback_Float16(data []hwy.Float16, n int, scale hwy.Float1
 		result := hwy.Mul(v, scaleVec)
 		hwy.Store(result, data[i:])
 	}
-	if remaining := n - i; remaining > 0 {
-		buf := make([]hwy.Float16, lanes)
-		copy(buf, data[i:i+remaining])
-		v := hwy.Load(buf)
-		result := hwy.Mul(v, scaleVec)
-		hwy.Store(result, buf)
-		copy(data[i:i+remaining], buf[:remaining])
+	for ; i < n; i++ {
+		data[i] = hwy.Float32ToFloat16(data[i].Float32() * scale.Float32())
 	}
 }
 
@@ -278,13 +587,8 @@ func BaseScaleSlice_fallback_BFloat16(data []hwy.BFloat16, n int, scale hwy.BFlo
 		result := hwy.Mul(v, scaleVec)
 		hwy.Store(result, data[i:])
 	}
-	if remaining := n - i; remaining > 0 {
-		buf := make([]hwy.BFloat16, lanes)
-		copy(buf, data[i:i+remaining])
-		v := hwy.Load(buf)
-		result := hwy.Mul(v, scaleVec)
-		hwy.Store(result, buf)
-		copy(data[i:i+remaining], buf[:remaining])
+	for ; i < n; i++ {
+		data[i] = hwy.Float32ToBFloat16(data[i].Float32() * scale.Float32())
 	}
 }
 
@@ -299,13 +603,8 @@ func BaseScaleSlice_fallback(data []float32, n int, scale float32) {
 		result := v * scaleVec
 		data[i] = result
 	}
-	if remaining := n - i; remaining > 0 {
-		buf := make([]float32, 1)
-		copy(buf, data[i:i+remaining])
-		v := buf[0]
-		result := v * scaleVec
-		buf[0] = result
-		copy(data[i:i+remaining], buf[:remaining])
+	for ; i < n; i++ {
+		data[i] *= scale
 	}
 }
 
@@ -320,13 +619,8 @@ func BaseScaleSlice_fallback_Float64(data []float64, n int, scale float64) {
 		result := v * scaleVec
 		data[i] = result
 	}
-	if remaining := n - i; remaining > 0 {
-		buf := make([]float64, 1)
-		copy(buf, data[i:i+remaining])
-		v := buf[0]
-		result := v * scaleVec
-		buf[0] = result
-		copy(data[i:i+remaining], buf[:remaining])
+	for ; i < n; i++ {
+		data[i] *= scale
 	}
 }
 
@@ -486,19 +780,359 @@ func BaseInterleave_fallback_Uint64(dst []uint64, low []uint64, sn int, high []u
 	}
 }
 
+func BaseSynthesize53Core_fallback_Int32(data []int32, n int, low []int32, sn int, high []int32, dn int, phase int) {
+	for ci := 0; ci < sn; ci++ {
+		low[ci] = data[ci]
+	}
+	for ci := 0; ci < dn; ci++ {
+		high[ci] = data[sn+ci]
+	}
+	{
+		twoVec := hwy.Set(int32(2))
+		lanes := hwy.MaxLanes[int32]()
+		start := 0
+		if phase == 0 {
+			low[0] -= (high[0] + high[0] + 2) >> 2
+			start = 1
+		}
+		safeEnd := sn
+		if phase == 0 {
+			if dn < safeEnd {
+				safeEnd = dn
+			}
+		} else {
+			if dn-1 < safeEnd {
+				safeEnd = dn - 1
+			}
+		}
+		i := start
+		for ; i+lanes <= safeEnd; i += lanes {
+			var n1, n2 hwy.Vec[int32]
+			if phase == 0 {
+				n1 = hwy.Load(high[i-1:])
+				n2 = hwy.Load(high[i:])
+			} else {
+				n1 = hwy.Load(high[i:])
+				n2 = hwy.Load(high[i+1:])
+			}
+			sum := hwy.Add(hwy.Add(n1, n2), twoVec)
+			update := hwy.ShiftRight(sum, 2)
+			t := hwy.Load(low[i:])
+			hwy.Store(hwy.Sub(t, update), low[i:])
+		}
+		for ; i < safeEnd; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i - 1
+				n2Idx = i
+			} else {
+				n1Idx = i
+				n2Idx = i + 1
+			}
+			low[i] -= (high[n1Idx] + high[n2Idx] + 2) >> 2
+		}
+		for ; i < sn; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i - 1
+				n2Idx = i
+			} else {
+				n1Idx = i
+				n2Idx = i + 1
+			}
+			if n1Idx >= dn {
+				n1Idx = dn - 1
+			}
+			if n2Idx >= dn {
+				n2Idx = dn - 1
+			}
+			low[i] -= (high[n1Idx] + high[n2Idx] + 2) >> 2
+		}
+		_ = twoVec
+		_ = lanes
+	}
+	{
+		lanes := hwy.MaxLanes[int32]()
+		start := 0
+		if phase == 1 {
+			high[0] += (low[0] + low[0]) >> 1
+			start = 1
+		}
+		safeEnd := dn
+		if phase == 0 {
+			if sn-1 < safeEnd {
+				safeEnd = sn - 1
+			}
+		} else {
+			if sn < safeEnd {
+				safeEnd = sn
+			}
+		}
+		i := start
+		for ; i+lanes <= safeEnd; i += lanes {
+			var n1, n2 hwy.Vec[int32]
+			if phase == 0 {
+				n1 = hwy.Load(low[i:])
+				n2 = hwy.Load(low[i+1:])
+			} else {
+				n1 = hwy.Load(low[i-1:])
+				n2 = hwy.Load(low[i:])
+			}
+			update := hwy.ShiftRight(hwy.Add(n1, n2), 1)
+			t := hwy.Load(high[i:])
+			hwy.Store(hwy.Add(t, update), high[i:])
+		}
+		for ; i < safeEnd; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i
+				n2Idx = i + 1
+			} else {
+				n1Idx = i - 1
+				n2Idx = i
+			}
+			high[i] += (low[n1Idx] + low[n2Idx]) >> 1
+		}
+		for ; i < dn; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i
+				n2Idx = i + 1
+			} else {
+				n1Idx = i - 1
+				n2Idx = i
+			}
+			if n1Idx < 0 {
+				n1Idx = 0
+			}
+			if n1Idx >= sn {
+				n1Idx = sn - 1
+			}
+			if n2Idx >= sn {
+				n2Idx = sn - 1
+			}
+			high[i] += (low[n1Idx] + low[n2Idx]) >> 1
+		}
+		_ = lanes
+	}
+	if phase == 0 {
+		lanes := hwy.MaxLanes[int32]()
+		minN := min(sn, dn)
+		i := 0
+		for ; i+lanes <= minN; i += lanes {
+			lo := hwy.Load(low[i:])
+			hi := hwy.Load(high[i:])
+			z0 := hwy.InterleaveLower(lo, hi)
+			z1 := hwy.InterleaveUpper(lo, hi)
+			hwy.Store(z0, data[2*i:])
+			hwy.Store(z1, data[2*i+lanes:])
+		}
+		for ; i < minN; i++ {
+			data[2*i] = low[i]
+			data[2*i+1] = high[i]
+		}
+		for i := dn; i < sn; i++ {
+			data[2*i] = low[i]
+		}
+		_ = lanes
+	} else {
+		minN := min(sn, dn)
+		for i := range minN {
+			data[2*i] = high[i]
+			data[2*i+1] = low[i]
+		}
+		for i := dn; i < sn; i++ {
+			data[2*i+1] = low[i]
+		}
+		for i := sn; i < dn; i++ {
+			data[2*i] = high[i]
+		}
+	}
+}
+
+func BaseSynthesize53Core_fallback_Int64(data []int64, n int, low []int64, sn int, high []int64, dn int, phase int) {
+	for ci := 0; ci < sn; ci++ {
+		low[ci] = data[ci]
+	}
+	for ci := 0; ci < dn; ci++ {
+		high[ci] = data[sn+ci]
+	}
+	{
+		twoVec := hwy.Set(int64(2))
+		lanes := hwy.MaxLanes[int64]()
+		start := 0
+		if phase == 0 {
+			low[0] -= (high[0] + high[0] + 2) >> 2
+			start = 1
+		}
+		safeEnd := sn
+		if phase == 0 {
+			if dn < safeEnd {
+				safeEnd = dn
+			}
+		} else {
+			if dn-1 < safeEnd {
+				safeEnd = dn - 1
+			}
+		}
+		i := start
+		for ; i+lanes <= safeEnd; i += lanes {
+			var n1, n2 hwy.Vec[int64]
+			if phase == 0 {
+				n1 = hwy.Load(high[i-1:])
+				n2 = hwy.Load(high[i:])
+			} else {
+				n1 = hwy.Load(high[i:])
+				n2 = hwy.Load(high[i+1:])
+			}
+			sum := hwy.Add(hwy.Add(n1, n2), twoVec)
+			update := hwy.ShiftRight(sum, 2)
+			t := hwy.Load(low[i:])
+			hwy.Store(hwy.Sub(t, update), low[i:])
+		}
+		for ; i < safeEnd; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i - 1
+				n2Idx = i
+			} else {
+				n1Idx = i
+				n2Idx = i + 1
+			}
+			low[i] -= (high[n1Idx] + high[n2Idx] + 2) >> 2
+		}
+		for ; i < sn; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i - 1
+				n2Idx = i
+			} else {
+				n1Idx = i
+				n2Idx = i + 1
+			}
+			if n1Idx >= dn {
+				n1Idx = dn - 1
+			}
+			if n2Idx >= dn {
+				n2Idx = dn - 1
+			}
+			low[i] -= (high[n1Idx] + high[n2Idx] + 2) >> 2
+		}
+		_ = twoVec
+		_ = lanes
+	}
+	{
+		lanes := hwy.MaxLanes[int64]()
+		start := 0
+		if phase == 1 {
+			high[0] += (low[0] + low[0]) >> 1
+			start = 1
+		}
+		safeEnd := dn
+		if phase == 0 {
+			if sn-1 < safeEnd {
+				safeEnd = sn - 1
+			}
+		} else {
+			if sn < safeEnd {
+				safeEnd = sn
+			}
+		}
+		i := start
+		for ; i+lanes <= safeEnd; i += lanes {
+			var n1, n2 hwy.Vec[int64]
+			if phase == 0 {
+				n1 = hwy.Load(low[i:])
+				n2 = hwy.Load(low[i+1:])
+			} else {
+				n1 = hwy.Load(low[i-1:])
+				n2 = hwy.Load(low[i:])
+			}
+			update := hwy.ShiftRight(hwy.Add(n1, n2), 1)
+			t := hwy.Load(high[i:])
+			hwy.Store(hwy.Add(t, update), high[i:])
+		}
+		for ; i < safeEnd; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i
+				n2Idx = i + 1
+			} else {
+				n1Idx = i - 1
+				n2Idx = i
+			}
+			high[i] += (low[n1Idx] + low[n2Idx]) >> 1
+		}
+		for ; i < dn; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i
+				n2Idx = i + 1
+			} else {
+				n1Idx = i - 1
+				n2Idx = i
+			}
+			if n1Idx < 0 {
+				n1Idx = 0
+			}
+			if n1Idx >= sn {
+				n1Idx = sn - 1
+			}
+			if n2Idx >= sn {
+				n2Idx = sn - 1
+			}
+			high[i] += (low[n1Idx] + low[n2Idx]) >> 1
+		}
+		_ = lanes
+	}
+	if phase == 0 {
+		lanes := hwy.MaxLanes[int64]()
+		minN := min(sn, dn)
+		i := 0
+		for ; i+lanes <= minN; i += lanes {
+			lo := hwy.Load(low[i:])
+			hi := hwy.Load(high[i:])
+			z0 := hwy.InterleaveLower(lo, hi)
+			z1 := hwy.InterleaveUpper(lo, hi)
+			hwy.Store(z0, data[2*i:])
+			hwy.Store(z1, data[2*i+lanes:])
+		}
+		for ; i < minN; i++ {
+			data[2*i] = low[i]
+			data[2*i+1] = high[i]
+		}
+		for i := dn; i < sn; i++ {
+			data[2*i] = low[i]
+		}
+		_ = lanes
+	} else {
+		minN := min(sn, dn)
+		for i := range minN {
+			data[2*i] = high[i]
+			data[2*i+1] = low[i]
+		}
+		for i := dn; i < sn; i++ {
+			data[2*i+1] = low[i]
+		}
+		for i := sn; i < dn; i++ {
+			data[2*i] = high[i]
+		}
+	}
+}
+
 func BaseDeinterleave_fallback(src []float32, low []float32, sn int, high []float32, dn int, phase int) {
 	if phase == 0 {
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}
@@ -506,17 +1140,17 @@ func BaseDeinterleave_fallback(src []float32, low []float32, sn int, high []floa
 
 func BaseDeinterleave_fallback_Float64(src []float64, low []float64, sn int, high []float64, dn int, phase int) {
 	if phase == 0 {
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}
@@ -524,17 +1158,17 @@ func BaseDeinterleave_fallback_Float64(src []float64, low []float64, sn int, hig
 
 func BaseDeinterleave_fallback_Int32(src []int32, low []int32, sn int, high []int32, dn int, phase int) {
 	if phase == 0 {
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}
@@ -542,17 +1176,17 @@ func BaseDeinterleave_fallback_Int32(src []int32, low []int32, sn int, high []in
 
 func BaseDeinterleave_fallback_Int64(src []int64, low []int64, sn int, high []int64, dn int, phase int) {
 	if phase == 0 {
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}
@@ -560,17 +1194,17 @@ func BaseDeinterleave_fallback_Int64(src []int64, low []int64, sn int, high []in
 
 func BaseDeinterleave_fallback_Uint32(src []uint32, low []uint32, sn int, high []uint32, dn int, phase int) {
 	if phase == 0 {
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}
@@ -578,17 +1212,17 @@ func BaseDeinterleave_fallback_Uint32(src []uint32, low []uint32, sn int, high [
 
 func BaseDeinterleave_fallback_Uint64(src []uint64, low []uint64, sn int, high []uint64, dn int, phase int) {
 	if phase == 0 {
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}

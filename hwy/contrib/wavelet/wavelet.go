@@ -355,6 +355,127 @@ func Synthesize97[T hwy.Floats](data []T, phase int) {
 	}
 }
 
+// Synthesize53Bufs applies the inverse 5/3 wavelet transform using pre-allocated buffers.
+// low and high must each have capacity >= ceil(n/2). This avoids per-call allocations
+// and uses SIMD-dispatched lifting and interleaving.
+func Synthesize53Bufs[T hwy.SignedInts](data []T, phase int, low, high []T) {
+	n := len(data)
+	if n <= 1 {
+		if n == 1 && phase == 1 {
+			data[0] /= 2
+		}
+		return
+	}
+
+	var sn, dn int
+	if phase == 0 {
+		sn = (n + 1) / 2
+		dn = n / 2
+	} else {
+		dn = (n + 1) / 2
+		sn = n / 2
+	}
+
+	if sn == 0 || dn == 0 {
+		if phase == 1 && sn == 0 && dn == 1 {
+			data[0] /= 2
+		}
+		return
+	}
+
+	low = low[:sn]
+	high = high[:dn]
+
+	// Fused kernel: copy + update + predict + interleave in a single dispatch
+	Synthesize53Core(data, n, low, sn, high, dn, phase)
+}
+
+// Analyze53Bufs applies the forward 5/3 wavelet transform using pre-allocated buffers.
+// low and high must each have capacity >= ceil(n/2). This avoids per-call allocations.
+func Analyze53Bufs[T hwy.SignedInts](data []T, phase int, low, high []T) {
+	n := len(data)
+	if n <= 1 {
+		if n == 1 && phase == 1 {
+			data[0] *= 2
+		}
+		return
+	}
+
+	var sn, dn int
+	if phase == 0 {
+		sn = (n + 1) / 2
+		dn = n / 2
+	} else {
+		dn = (n + 1) / 2
+		sn = n / 2
+	}
+
+	if sn == 0 || dn == 0 {
+		if phase == 1 && sn == 0 && dn == 1 {
+			data[0] *= 2
+		}
+		return
+	}
+
+	low = low[:sn]
+	high = high[:dn]
+
+	// Deinterleave
+	Deinterleave(data, low, sn, high, dn, phase)
+
+	// Forward lifting uses opposite signs from the SIMD primitives.
+	// LiftPredict53 does +=, but analysis step 1 needs -=.
+	// LiftUpdate53 does -=, but analysis step 2 needs +=.
+	// Use scalar loops with boundary-safe access (same as Analyze53).
+
+	getHigh := func(i int) T {
+		if i < 0 {
+			return high[0]
+		}
+		if i >= dn {
+			return high[dn-1]
+		}
+		return high[i]
+	}
+
+	getLow := func(i int) T {
+		if i < 0 {
+			return low[0]
+		}
+		if i >= sn {
+			return low[sn-1]
+		}
+		return low[i]
+	}
+
+	if phase == 0 {
+		for i := 0; i < dn; i++ {
+			l1 := getLow(i)
+			l2 := getLow(i + 1)
+			high[i] -= (l1 + l2) >> 1
+		}
+		for i := 0; i < sn; i++ {
+			h1 := getHigh(i - 1)
+			h2 := getHigh(i)
+			low[i] += (h1 + h2 + 2) >> 2
+		}
+	} else {
+		for i := 0; i < dn; i++ {
+			l1 := getLow(i)
+			l2 := getLow(i - 1)
+			high[i] -= (l1 + l2) >> 1
+		}
+		for i := 0; i < sn; i++ {
+			h1 := getHigh(i)
+			h2 := getHigh(i + 1)
+			low[i] += (h1 + h2 + 2) >> 2
+		}
+	}
+
+	copy(data[:sn], low)
+	copy(data[sn:], high)
+}
+
 // Analyze97 applies the forward 9/7 wavelet transform (analysis) in-place.
 // The input data is interleaved samples, and output is in [low | high] format.
 // Uses standard K normalization (not JPEG 2000's 2/K convention).

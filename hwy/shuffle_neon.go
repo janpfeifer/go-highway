@@ -62,3 +62,43 @@ func InterleaveUpper_NEON_F64x2(a, b asm.Float64x2) asm.Float64x2 {
 	result := [2]float64{dataA[1], dataB[1]}
 	return asm.LoadFloat64x2(&result)
 }
+
+// InterleaveLower_NEON_I32x4 interleaves lower halves of int32 vectors.
+// [a0,a1,a2,a3], [b0,b1,b2,b3] -> [a0,b0,a1,b1]
+func InterleaveLower_NEON_I32x4(a, b asm.Int32x4) asm.Int32x4 {
+	var dataA, dataB [4]int32
+	a.Store(&dataA)
+	b.Store(&dataB)
+	result := [4]int32{dataA[0], dataB[0], dataA[1], dataB[1]}
+	return asm.LoadInt32x4(&result)
+}
+
+// InterleaveLower_NEON_I64x2 interleaves lower halves of int64 vectors.
+// [a0,a1], [b0,b1] -> [a0,b0]
+func InterleaveLower_NEON_I64x2(a, b asm.Int64x2) asm.Int64x2 {
+	var dataA, dataB [2]int64
+	a.Store(&dataA)
+	b.Store(&dataB)
+	result := [2]int64{dataA[0], dataB[0]}
+	return asm.LoadInt64x2(&result)
+}
+
+// InterleaveUpper_NEON_I32x4 interleaves upper halves of int32 vectors.
+// [a0,a1,a2,a3], [b0,b1,b2,b3] -> [a2,b2,a3,b3]
+func InterleaveUpper_NEON_I32x4(a, b asm.Int32x4) asm.Int32x4 {
+	var dataA, dataB [4]int32
+	a.Store(&dataA)
+	b.Store(&dataB)
+	result := [4]int32{dataA[2], dataB[2], dataA[3], dataB[3]}
+	return asm.LoadInt32x4(&result)
+}
+
+// InterleaveUpper_NEON_I64x2 interleaves upper halves of int64 vectors.
+// [a0,a1], [b0,b1] -> [a1,b1]
+func InterleaveUpper_NEON_I64x2(a, b asm.Int64x2) asm.Int64x2 {
+	var dataA, dataB [2]int64
+	a.Store(&dataA)
+	b.Store(&dataB)
+	result := [2]int64{dataA[1], dataB[1]}
+	return asm.LoadInt64x2(&result)
+}

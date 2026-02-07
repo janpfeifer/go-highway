@@ -19,6 +19,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -256,19 +257,13 @@ func (r *FunctionRegistry) parsePackage(importPath string) (*ParseResult, error)
 			result.PackageName = parsed.PackageName
 		}
 
-		for k, v := range parsed.Imports {
-			result.Imports[k] = v
-		}
+		maps.Copy(result.Imports, parsed.Imports)
 
-		for name, pf := range parsed.AllFuncs {
-			result.AllFuncs[name] = pf
-		}
+		maps.Copy(result.AllFuncs, parsed.AllFuncs)
 
 		result.Funcs = append(result.Funcs, parsed.Funcs...)
 
-		for k, v := range parsed.TypeSpecificConsts {
-			result.TypeSpecificConsts[k] = v
-		}
+		maps.Copy(result.TypeSpecificConsts, parsed.TypeSpecificConsts)
 	}
 
 	r.parsedPkgs[importPath] = result
@@ -284,9 +279,9 @@ func (r *FunctionRegistry) parseFile(filename string) (*ParseResult, error) {
 // importPathToFilesystem converts an import path to a filesystem path.
 func (r *FunctionRegistry) importPathToFilesystem(importPath string) (string, error) {
 	// Check if it's a go-highway internal import
-	if strings.HasPrefix(importPath, r.moduleName) {
+	if after, ok := strings.CutPrefix(importPath, r.moduleName); ok {
 		// Strip module name prefix and join with module root
-		relPath := strings.TrimPrefix(importPath, r.moduleName)
+		relPath := after
 		relPath = strings.TrimPrefix(relPath, "/")
 		return filepath.Join(r.moduleRoot, relPath), nil
 	}
@@ -354,11 +349,11 @@ func FindModuleRoot(startDir string) (string, string, error) {
 			}
 
 			// Parse module name from first line
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
+			lines := strings.SplitSeq(string(content), "\n")
+			for line := range lines {
 				line = strings.TrimSpace(line)
-				if strings.HasPrefix(line, "module ") {
-					moduleName := strings.TrimPrefix(line, "module ")
+				if after, ok := strings.CutPrefix(line, "module "); ok {
+					moduleName := after
 					return dir, moduleName, nil
 				}
 			}
@@ -557,13 +552,9 @@ func (r *FunctionRegistry) ParsePackageFromPath(pkgPath string) (*ParseResult, e
 			result.PackageName = parsed.PackageName
 		}
 
-		for k, v := range parsed.Imports {
-			result.Imports[k] = v
-		}
+		maps.Copy(result.Imports, parsed.Imports)
 
-		for name, pf := range parsed.AllFuncs {
-			result.AllFuncs[name] = pf
-		}
+		maps.Copy(result.AllFuncs, parsed.AllFuncs)
 
 		result.Funcs = append(result.Funcs, parsed.Funcs...)
 	}

@@ -19,6 +19,7 @@ import (
 )
 
 //go:generate go run ../../../cmd/hwygen -input lifting_base.go -output . -targets avx2,avx512,neon,fallback -dispatch lifting
+//go:generate go run ../../../cmd/hwygen -input lifting_base.go -output . -targets neon -asm
 
 // BaseLiftUpdate53 applies the 5/3 update step: target[i] -= (neighbor[i+off1] + neighbor[i+off2] + 2) >> 2
 // This is used for the update step in 5/3 synthesis and the predict step in analysis.
@@ -31,40 +32,88 @@ func BaseLiftUpdate53[T hwy.SignedInts](target []T, tLen int, neighbor []T, nLen
 	twoVec := hwy.Set(T(2))
 	lanes := hwy.MaxLanes[T]()
 
-	// The offset depends on phase:
 	// phase=0: target[i] -= (neighbor[i-1] + neighbor[i] + 2) >> 2
 	// phase=1: target[i] -= (neighbor[i] + neighbor[i+1] + 2) >> 2
-	off1, off2 := -1, 0
-	if phase == 1 {
-		off1, off2 = 0, 1
+	//
+	// For phase=0: n1 = neighbor[i-1] (left-shifted), n2 = neighbor[i] (aligned)
+	//   boundary: i=0 clamps n1 to neighbor[0]
+	//   bulk: i=1..min(tLen,nLen)-1, both indices in [0, nLen-1]
+	//   boundary: last element if i >= nLen, clamp n2 to neighbor[nLen-1]
+	//
+	// For phase=1: n1 = neighbor[i] (aligned), n2 = neighbor[i+1] (right-shifted)
+	//   bulk: i=0..min(tLen,nLen-1)-1, both indices in [0, nLen-1]
+	//   boundary: last element(s) if i+1 >= nLen, clamp n2 to neighbor[nLen-1]
+
+	// Handle first boundary element for phase=0
+	start := 0
+	if phase == 0 {
+		// i=0: n1=neighbor[0], n2=neighbor[0] (clamped)
+		target[0] -= (neighbor[0] + neighbor[0] + 2) >> 2
+		start = 1
 	}
 
-	// Process elements
-	for i := 0; i < tLen; i++ {
-		// Get neighbor indices with boundary clamping
-		n1Idx := i + off1
-		n2Idx := i + off2
-		if n1Idx < 0 {
-			n1Idx = 0
+	// Determine the safe range where both neighbor accesses are in bounds
+	// phase=0: need i-1 >= 0 (start=1) and i < nLen
+	// phase=1: need i >= 0 and i+1 < nLen, so i < nLen-1
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	} else {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	}
+
+	// Bulk SIMD loop for safe range
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[T]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		} else {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		}
+		sum := hwy.Add(hwy.Add(n1, n2), twoVec)
+		update := hwy.ShiftRight(sum, 2)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Sub(t, update), target[i:])
+	}
+
+	// Scalar remainder within safe range
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i - 1
+			n2Idx = i
+		} else {
+			n1Idx = i
+			n2Idx = i + 1
+		}
+		target[i] -= (neighbor[n1Idx] + neighbor[n2Idx] + 2) >> 2
+	}
+
+	// Scalar tail with boundary clamping
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i - 1
+			n2Idx = i
+		} else {
+			n1Idx = i
+			n2Idx = i + 1
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
 		}
-		if n2Idx < 0 {
-			n2Idx = 0
-		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
-
-		// Scalar processing for boundaries, vector for bulk
 		target[i] -= (neighbor[n1Idx] + neighbor[n2Idx] + 2) >> 2
 	}
-
-	// Note: For SIMD optimization in generated code, we would process the
-	// bulk middle section with shifted loads. The boundary handling above
-	// is for correctness in the scalar fallback.
-	_ = twoVec // Used in SIMD version
 	_ = lanes
 }
 
@@ -77,30 +126,77 @@ func BaseLiftPredict53[T hwy.SignedInts](target []T, tLen int, neighbor []T, nLe
 
 	lanes := hwy.MaxLanes[T]()
 
-	// The offset depends on phase:
 	// phase=0: target[i] += (neighbor[i] + neighbor[i+1]) >> 1
 	// phase=1: target[i] += (neighbor[i-1] + neighbor[i]) >> 1
-	off1, off2 := 0, 1
+
+	// Handle first boundary element for phase=1
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		// i=0: n1=neighbor[-1] clamped to neighbor[0], n2=neighbor[0]
+		target[0] += (neighbor[0] + neighbor[0]) >> 1
+		start = 1
 	}
 
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	// Safe range where both accesses are in bounds
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+
+	// Bulk SIMD loop
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[T]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		} else {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		}
+		update := hwy.ShiftRight(hwy.Add(n1, n2), 1)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Add(t, update), target[i:])
+	}
+
+	// Scalar remainder within safe range
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] += (neighbor[n1Idx] + neighbor[n2Idx]) >> 1
+	}
+
+	// Scalar tail with boundary clamping
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
 		}
-		if n2Idx < 0 {
-			n2Idx = 0
-		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
-
 		target[i] += (neighbor[n1Idx] + neighbor[n2Idx]) >> 1
 	}
 	_ = lanes
@@ -116,31 +212,78 @@ func BaseLiftStep97[T hwy.Floats](target []T, tLen int, neighbor []T, nLen int, 
 	coeffVec := hwy.Set(coeff)
 	lanes := hwy.MaxLanes[T]()
 
-	// Determine offsets based on phase
-	// For predict steps: target odd, neighbor even
-	// For update steps: target even, neighbor odd
-	// phase controls which direction
-	off1, off2 := 0, 1
+	// phase=0: target[i] -= coeff * (neighbor[i] + neighbor[i+1])
+	// phase=1: target[i] -= coeff * (neighbor[i-1] + neighbor[i])
+
+	// Handle first boundary element for phase=1
+	start := 0
 	if phase == 1 {
-		off1, off2 = -1, 0
+		// i=0: neighbor[-1] clamped to neighbor[0]
+		target[0] -= coeff * (neighbor[0] + neighbor[0])
+		start = 1
 	}
 
-	for i := 0; i < tLen; i++ {
-		n1Idx := i + off1
-		n2Idx := i + off2
+	// Safe range where both accesses are in bounds
+	safeEnd := tLen
+	if phase == 0 {
+		if nLen-1 < safeEnd {
+			safeEnd = nLen - 1
+		}
+	} else {
+		if nLen < safeEnd {
+			safeEnd = nLen
+		}
+	}
+
+	// Bulk SIMD loop for safe range
+	i := start
+	for ; i+lanes <= safeEnd; i += lanes {
+		var n1, n2 hwy.Vec[T]
+		if phase == 0 {
+			n1 = hwy.Load(neighbor[i:])
+			n2 = hwy.Load(neighbor[i+1:])
+		} else {
+			n1 = hwy.Load(neighbor[i-1:])
+			n2 = hwy.Load(neighbor[i:])
+		}
+		sum := hwy.Add(n1, n2)
+		update := hwy.Mul(coeffVec, sum)
+		t := hwy.Load(target[i:])
+		hwy.Store(hwy.Sub(t, update), target[i:])
+	}
+
+	// Scalar remainder within safe range
+	for ; i < safeEnd; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
+		target[i] -= coeff * (neighbor[n1Idx] + neighbor[n2Idx])
+	}
+
+	// Scalar tail with boundary clamping
+	for ; i < tLen; i++ {
+		var n1Idx, n2Idx int
+		if phase == 0 {
+			n1Idx = i
+			n2Idx = i + 1
+		} else {
+			n1Idx = i - 1
+			n2Idx = i
+		}
 		if n1Idx < 0 {
 			n1Idx = 0
 		}
 		if n1Idx >= nLen {
 			n1Idx = nLen - 1
 		}
-		if n2Idx < 0 {
-			n2Idx = 0
-		}
 		if n2Idx >= nLen {
 			n2Idx = nLen - 1
 		}
-
 		target[i] -= coeff * (neighbor[n1Idx] + neighbor[n2Idx])
 	}
 	_ = coeffVec
@@ -164,14 +307,9 @@ func BaseScaleSlice[T hwy.Floats](data []T, n int, scale T) {
 		hwy.Store(result, data[i:])
 	}
 
-	// Handle tail elements
-	if remaining := n - i; remaining > 0 {
-		buf := make([]T, lanes)
-		copy(buf, data[i:i+remaining])
-		v := hwy.Load(buf)
-		result := hwy.Mul(v, scaleVec)
-		hwy.Store(result, buf)
-		copy(data[i:i+remaining], buf[:remaining])
+	// Scalar tail — no buffer needed, avoids OOB writes on bare slices.
+	for ; i < n; i++ {
+		data[i] *= scale
 	}
 }
 
@@ -208,24 +346,223 @@ func BaseInterleave[T hwy.Lanes](dst []T, low []T, sn int, high []T, dn int, pha
 	}
 }
 
+// BaseSynthesize53Core fuses copy + LiftUpdate53 + LiftPredict53 + Interleave
+// into a single dispatch target, eliminating 2 indirect calls per 1D transform.
+// data contains [low|high] on entry and interleaved samples on exit.
+// low and high are scratch buffers with capacity >= sn and >= dn respectively.
+func BaseSynthesize53Core[T hwy.SignedInts](data []T, n int, low []T, sn int, high []T, dn int, phase int) {
+	// 1. Copy subbands from data into scratch buffers.
+	// Use explicit loops instead of copy() so the C emitter emits
+	// length-dependent loops rather than fixed-lane-count loops.
+	for ci := 0; ci < sn; ci++ {
+		low[ci] = data[ci]
+	}
+	for ci := 0; ci < dn; ci++ {
+		high[ci] = data[sn+ci]
+	}
+
+	// 2. LiftUpdate53: low[i] -= (high[off1] + high[off2] + 2) >> 2
+	{
+		twoVec := hwy.Set(T(2))
+		lanes := hwy.MaxLanes[T]()
+
+		start := 0
+		if phase == 0 {
+			low[0] -= (high[0] + high[0] + 2) >> 2
+			start = 1
+		}
+
+		safeEnd := sn
+		if phase == 0 {
+			if dn < safeEnd {
+				safeEnd = dn
+			}
+		} else {
+			if dn-1 < safeEnd {
+				safeEnd = dn - 1
+			}
+		}
+
+		i := start
+		for ; i+lanes <= safeEnd; i += lanes {
+			var n1, n2 hwy.Vec[T]
+			if phase == 0 {
+				n1 = hwy.Load(high[i-1:])
+				n2 = hwy.Load(high[i:])
+			} else {
+				n1 = hwy.Load(high[i:])
+				n2 = hwy.Load(high[i+1:])
+			}
+			sum := hwy.Add(hwy.Add(n1, n2), twoVec)
+			update := hwy.ShiftRight(sum, 2)
+			t := hwy.Load(low[i:])
+			hwy.Store(hwy.Sub(t, update), low[i:])
+		}
+
+		for ; i < safeEnd; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i - 1
+				n2Idx = i
+			} else {
+				n1Idx = i
+				n2Idx = i + 1
+			}
+			low[i] -= (high[n1Idx] + high[n2Idx] + 2) >> 2
+		}
+
+		for ; i < sn; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i - 1
+				n2Idx = i
+			} else {
+				n1Idx = i
+				n2Idx = i + 1
+			}
+			if n1Idx >= dn {
+				n1Idx = dn - 1
+			}
+			if n2Idx >= dn {
+				n2Idx = dn - 1
+			}
+			low[i] -= (high[n1Idx] + high[n2Idx] + 2) >> 2
+		}
+		_ = twoVec
+		_ = lanes
+	}
+
+	// 3. LiftPredict53: high[i] += (low[off1] + low[off2]) >> 1
+	{
+		lanes := hwy.MaxLanes[T]()
+
+		start := 0
+		if phase == 1 {
+			high[0] += (low[0] + low[0]) >> 1
+			start = 1
+		}
+
+		safeEnd := dn
+		if phase == 0 {
+			if sn-1 < safeEnd {
+				safeEnd = sn - 1
+			}
+		} else {
+			if sn < safeEnd {
+				safeEnd = sn
+			}
+		}
+
+		i := start
+		for ; i+lanes <= safeEnd; i += lanes {
+			var n1, n2 hwy.Vec[T]
+			if phase == 0 {
+				n1 = hwy.Load(low[i:])
+				n2 = hwy.Load(low[i+1:])
+			} else {
+				n1 = hwy.Load(low[i-1:])
+				n2 = hwy.Load(low[i:])
+			}
+			update := hwy.ShiftRight(hwy.Add(n1, n2), 1)
+			t := hwy.Load(high[i:])
+			hwy.Store(hwy.Add(t, update), high[i:])
+		}
+
+		for ; i < safeEnd; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i
+				n2Idx = i + 1
+			} else {
+				n1Idx = i - 1
+				n2Idx = i
+			}
+			high[i] += (low[n1Idx] + low[n2Idx]) >> 1
+		}
+
+		for ; i < dn; i++ {
+			var n1Idx, n2Idx int
+			if phase == 0 {
+				n1Idx = i
+				n2Idx = i + 1
+			} else {
+				n1Idx = i - 1
+				n2Idx = i
+			}
+			if n1Idx < 0 {
+				n1Idx = 0
+			}
+			if n1Idx >= sn {
+				n1Idx = sn - 1
+			}
+			if n2Idx >= sn {
+				n2Idx = sn - 1
+			}
+			high[i] += (low[n1Idx] + low[n2Idx]) >> 1
+		}
+		_ = lanes
+	}
+
+	// 4. Interleave with SIMD for phase=0
+	if phase == 0 {
+		lanes := hwy.MaxLanes[T]()
+		minN := min(sn, dn)
+
+		// SIMD bulk: process lanes elements at a time, producing 2*lanes outputs
+		i := 0
+		for ; i+lanes <= minN; i += lanes {
+			lo := hwy.Load(low[i:])
+			hi := hwy.Load(high[i:])
+			z0 := hwy.InterleaveLower(lo, hi)
+			z1 := hwy.InterleaveUpper(lo, hi)
+			hwy.Store(z0, data[2*i:])
+			hwy.Store(z1, data[2*i+lanes:])
+		}
+
+		// Scalar tail for paired elements
+		for ; i < minN; i++ {
+			data[2*i] = low[i]
+			data[2*i+1] = high[i]
+		}
+		// Remaining low (sn > dn)
+		for i := dn; i < sn; i++ {
+			data[2*i] = low[i]
+		}
+		_ = lanes
+	} else {
+		// phase=1: scalar interleave (rare path, odd-phase tiles)
+		minN := min(sn, dn)
+		for i := range minN {
+			data[2*i] = high[i]
+			data[2*i+1] = low[i]
+		}
+		for i := dn; i < sn; i++ {
+			data[2*i+1] = low[i]
+		}
+		for i := sn; i < dn; i++ {
+			data[2*i] = high[i]
+		}
+	}
+}
+
 // BaseDeinterleave extracts low and high-pass coefficients from src.
 // phase=0: low[i]=src[2i], high[i]=src[2i+1]
 // phase=1: high[i]=src[2i], low[i]=src[2i+1]
 func BaseDeinterleave[T hwy.Lanes](src []T, low []T, sn int, high []T, dn int, phase int) {
 	if phase == 0 {
 		// Even-first: even indices to low, odd indices to high
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i]
 		}
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i+1]
 		}
 	} else {
 		// Odd-first: even indices to high, odd indices to low
-		for i := 0; i < dn; i++ {
+		for i := range dn {
 			high[i] = src[2*i]
 		}
-		for i := 0; i < sn; i++ {
+		for i := range sn {
 			low[i] = src[2*i+1]
 		}
 	}

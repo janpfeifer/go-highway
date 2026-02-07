@@ -578,6 +578,10 @@ func scalarizeDecl(s *ast.DeclStmt, elemType string) []ast.Stmt {
 	if genDecl, ok := s.Decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
 		for _, spec := range genDecl.Specs {
 			if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+				// Transform the type: hwy.Vec[T] → T
+				if valueSpec.Type != nil {
+					valueSpec.Type = scalarizeVecTypeExpr(valueSpec.Type, elemType)
+				}
 				for i, val := range valueSpec.Values {
 					valueSpec.Values[i] = scalarizeExpr(val, elemType)
 				}
@@ -585,6 +589,23 @@ func scalarizeDecl(s *ast.DeclStmt, elemType string) []ast.Stmt {
 		}
 	}
 	return []ast.Stmt{s}
+}
+
+// scalarizeVecTypeExpr converts hwy.Vec[T] type expressions to scalar type T.
+// E.g., hwy.Vec[float32] → float32, hwy.Vec[int32] → int32.
+func scalarizeVecTypeExpr(typeExpr ast.Expr, elemType string) ast.Expr {
+	// Match hwy.Vec[T] which is an IndexExpr wrapping a SelectorExpr
+	if idx, ok := typeExpr.(*ast.IndexExpr); ok {
+		if sel, ok := idx.X.(*ast.SelectorExpr); ok {
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "hwy" {
+				if sel.Sel.Name == "Vec" || sel.Sel.Name == "Mask" {
+					// Return the type argument (e.g., float32, int32)
+					return idx.Index
+				}
+			}
+		}
+	}
+	return typeExpr
 }
 
 // scalarizeExprStmt transforms an expression statement.

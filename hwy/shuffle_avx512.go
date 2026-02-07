@@ -217,6 +217,58 @@ func InterleaveUpper_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	return archsimd.LoadFloat64x8Slice(result[:])
 }
 
+// InterleaveLower_AVX512_I32x16 interleaves lower halves of int32 vectors.
+func InterleaveLower_AVX512_I32x16(a, b archsimd.Int32x16) archsimd.Int32x16 {
+	var dataA, dataB [16]int32
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [16]int32
+	for i := 0; i < 8; i++ {
+		result[2*i] = dataA[i]
+		result[2*i+1] = dataB[i]
+	}
+	return archsimd.LoadInt32x16(&result)
+}
+
+// InterleaveLower_AVX512_I64x8 interleaves lower halves of int64 vectors.
+func InterleaveLower_AVX512_I64x8(a, b archsimd.Int64x8) archsimd.Int64x8 {
+	var dataA, dataB [8]int64
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [8]int64
+	for i := 0; i < 4; i++ {
+		result[2*i] = dataA[i]
+		result[2*i+1] = dataB[i]
+	}
+	return archsimd.LoadInt64x8(&result)
+}
+
+// InterleaveUpper_AVX512_I32x16 interleaves upper halves of int32 vectors.
+func InterleaveUpper_AVX512_I32x16(a, b archsimd.Int32x16) archsimd.Int32x16 {
+	var dataA, dataB [16]int32
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [16]int32
+	for i := 0; i < 8; i++ {
+		result[2*i] = dataA[8+i]
+		result[2*i+1] = dataB[8+i]
+	}
+	return archsimd.LoadInt32x16(&result)
+}
+
+// InterleaveUpper_AVX512_I64x8 interleaves upper halves of int64 vectors.
+func InterleaveUpper_AVX512_I64x8(a, b archsimd.Int64x8) archsimd.Int64x8 {
+	var dataA, dataB [8]int64
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [8]int64
+	for i := 0; i < 4; i++ {
+		result[2*i] = dataA[4+i]
+		result[2*i+1] = dataB[4+i]
+	}
+	return archsimd.LoadInt64x8(&result)
+}
+
 // ConcatLowerLower_AVX512_F32x16 concatenates lower halves.
 func ConcatLowerLower_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 	var dataA, dataB [16]float32

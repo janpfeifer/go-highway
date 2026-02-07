@@ -804,7 +804,7 @@ func unrollLoop(forStmt *ast.ForStmt, loopInfo *LoopInfo, unrollFactor int, lane
 	}
 }
 
-// collectDeclaredVars finds all variable names declared with := in the statements.
+// collectDeclaredVars finds all variable names declared with := or var in the statements.
 // It excludes the blank identifier "_" which should never be renamed.
 func collectDeclaredVars(stmts []ast.Stmt) map[string]bool {
 	vars := make(map[string]bool)
@@ -814,6 +814,18 @@ func collectDeclaredVars(stmts []ast.Stmt) map[string]bool {
 				for _, lhs := range assign.Lhs {
 					if ident, ok := lhs.(*ast.Ident); ok && ident.Name != "_" {
 						vars[ident.Name] = true
+					}
+				}
+			}
+			// Also collect names from "var x, y Type" declarations
+			if decl, ok := n.(*ast.GenDecl); ok && decl.Tok == token.VAR {
+				for _, spec := range decl.Specs {
+					if vs, ok := spec.(*ast.ValueSpec); ok {
+						for _, name := range vs.Names {
+							if name.Name != "_" {
+								vars[name.Name] = true
+							}
+						}
 					}
 				}
 			}

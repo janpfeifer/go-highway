@@ -34,11 +34,11 @@ func TestForwardRCT(t *testing.T) {
 			outCr := NewImage[int32](width, height)
 
 			// Fill with test data
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := r.Row(y)
 				gRow := g.Row(y)
 				bRow := b.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					rRow[x] = int32((x + y*width) % 256)
 					gRow[x] = int32((x + y*width + 85) % 256)
 					bRow[x] = int32((x + y*width + 170) % 256)
@@ -49,14 +49,14 @@ func TestForwardRCT(t *testing.T) {
 			ForwardRCT(r, g, b, outY, outCb, outCr)
 
 			// Verify results manually
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := r.Row(y)
 				gRow := g.Row(y)
 				bRow := b.Row(y)
 				yRow := outY.Row(y)
 				cbRow := outCb.Row(y)
 				crRow := outCr.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					expectedY := (rRow[x] + 2*gRow[x] + bRow[x]) >> 2
 					expectedCb := bRow[x] - gRow[x]
 					expectedCr := rRow[x] - gRow[x]
@@ -88,14 +88,14 @@ func TestInverseRCT(t *testing.T) {
 			outB := NewImage[int32](width, height)
 
 			// Fill with test data (YCbCr values)
-			for y := 0; y < height; y++ {
+			for y := range height {
 				yRow := yImg.Row(y)
 				cbRow := cb.Row(y)
 				crRow := cr.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					yRow[x] = int32(128 + (x+y*width)%64)
-					cbRow[x] = int32((x + y*width) % 128 - 64)
-					crRow[x] = int32((x + y*width + 32) % 128 - 64)
+					cbRow[x] = int32((x+y*width)%128 - 64)
+					crRow[x] = int32((x+y*width+32)%128 - 64)
 				}
 			}
 
@@ -103,14 +103,14 @@ func TestInverseRCT(t *testing.T) {
 			InverseRCT(yImg, cb, cr, outR, outG, outB)
 
 			// Verify results manually
-			for y := 0; y < height; y++ {
+			for y := range height {
 				yRow := yImg.Row(y)
 				cbRow := cb.Row(y)
 				crRow := cr.Row(y)
 				rRow := outR.Row(y)
 				gRow := outG.Row(y)
 				bRow := outB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					expectedG := yRow[x] - ((cbRow[x] + crRow[x]) >> 2)
 					expectedR := crRow[x] + expectedG
 					expectedB := cbRow[x] + expectedG
@@ -151,11 +151,11 @@ func TestRCTRoundTrip(t *testing.T) {
 			recB := NewImage[int32](width, height)
 
 			// Fill with test data
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := origR.Row(y)
 				gRow := origG.Row(y)
 				bRow := origB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					rRow[x] = int32((x + y*width) % 256)
 					gRow[x] = int32((x + y*width + 85) % 256)
 					bRow[x] = int32((x + y*width + 170) % 256)
@@ -167,14 +167,14 @@ func TestRCTRoundTrip(t *testing.T) {
 			InverseRCT(yImg, cb, cr, recR, recG, recB)
 
 			// Verify exact match (RCT is lossless)
-			for y := 0; y < height; y++ {
+			for y := range height {
 				origRRow := origR.Row(y)
 				origGRow := origG.Row(y)
 				origBRow := origB.Row(y)
 				recRRow := recR.Row(y)
 				recGRow := recG.Row(y)
 				recBRow := recB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					if origRRow[x] != recRRow[x] {
 						t.Errorf("R at (%d,%d): orig %d != rec %d", x, y, origRRow[x], recRRow[x])
 					}
@@ -202,11 +202,11 @@ func TestForwardICT_Float32(t *testing.T) {
 			outCr := NewImage[float32](width, height)
 
 			// Fill with test data (normalized [0, 1])
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := r.Row(y)
 				gRow := g.Row(y)
 				bRow := b.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					rRow[x] = float32(x+y*width) / float32(width*height)
 					gRow[x] = float32((x+y*width)+width*height/3) / float32(width*height*2)
 					bRow[x] = float32((x+y*width)+width*height*2/3) / float32(width*height*2)
@@ -217,14 +217,14 @@ func TestForwardICT_Float32(t *testing.T) {
 			ForwardICT(r, g, b, outY, outCb, outCr)
 
 			// Verify results manually
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := r.Row(y)
 				gRow := g.Row(y)
 				bRow := b.Row(y)
 				yRow := outY.Row(y)
 				cbRow := outCb.Row(y)
 				crRow := outCr.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					expectedY := float32(ICT_RtoY)*rRow[x] + float32(ICT_GtoY)*gRow[x] + float32(ICT_BtoY)*bRow[x]
 					expectedCb := float32(ICT_RtoCb)*rRow[x] + float32(ICT_GtoCb)*gRow[x] + float32(ICT_BtoCb)*bRow[x]
 					expectedCr := float32(ICT_RtoCr)*rRow[x] + float32(ICT_GtoCr)*gRow[x] + float32(ICT_BtoCr)*bRow[x]
@@ -256,11 +256,11 @@ func TestForwardICT_Float64(t *testing.T) {
 			outCr := NewImage[float64](width, height)
 
 			// Fill with test data
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := r.Row(y)
 				gRow := g.Row(y)
 				bRow := b.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					rRow[x] = float64(x+y*width) / float64(width*height)
 					gRow[x] = float64((x+y*width)+width*height/3) / float64(width*height*2)
 					bRow[x] = float64((x+y*width)+width*height*2/3) / float64(width*height*2)
@@ -271,14 +271,14 @@ func TestForwardICT_Float64(t *testing.T) {
 			ForwardICT(r, g, b, outY, outCb, outCr)
 
 			// Verify results manually
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := r.Row(y)
 				gRow := g.Row(y)
 				bRow := b.Row(y)
 				yRow := outY.Row(y)
 				cbRow := outCb.Row(y)
 				crRow := outCr.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					expectedY := ICT_RtoY*rRow[x] + ICT_GtoY*gRow[x] + ICT_BtoY*bRow[x]
 					expectedCb := ICT_RtoCb*rRow[x] + ICT_GtoCb*gRow[x] + ICT_BtoCb*bRow[x]
 					expectedCr := ICT_RtoCr*rRow[x] + ICT_GtoCr*gRow[x] + ICT_BtoCr*bRow[x]
@@ -319,11 +319,11 @@ func TestICTRoundTrip_Float32(t *testing.T) {
 			recB := NewImage[float32](width, height)
 
 			// Fill with test data
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := origR.Row(y)
 				gRow := origG.Row(y)
 				bRow := origB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					rRow[x] = float32(x+y*width) / float32(width*height)
 					gRow[x] = float32((x+y*width)+width*height/3) / float32(width*height*2)
 					bRow[x] = float32((x+y*width)+width*height*2/3) / float32(width*height*2)
@@ -336,14 +336,14 @@ func TestICTRoundTrip_Float32(t *testing.T) {
 
 			// Verify approximate match (ICT is lossy due to float precision)
 			// float32 has ~7 decimal digits of precision, so use 1e-4 tolerance
-			for y := 0; y < height; y++ {
+			for y := range height {
 				origRRow := origR.Row(y)
 				origGRow := origG.Row(y)
 				origBRow := origB.Row(y)
 				recRRow := recR.Row(y)
 				recGRow := recG.Row(y)
 				recBRow := recB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					if !almostEqual(origRRow[x], recRRow[x], 1e-4) {
 						t.Errorf("R at (%d,%d): orig %v != rec %v", x, y, origRRow[x], recRRow[x])
 					}
@@ -380,11 +380,11 @@ func TestICTRoundTrip_Float64(t *testing.T) {
 			recB := NewImage[float64](width, height)
 
 			// Fill with test data
-			for y := 0; y < height; y++ {
+			for y := range height {
 				rRow := origR.Row(y)
 				gRow := origG.Row(y)
 				bRow := origB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					rRow[x] = float64(x+y*width) / float64(width*height)
 					gRow[x] = float64((x+y*width)+width*height/3) / float64(width*height*2)
 					bRow[x] = float64((x+y*width)+width*height*2/3) / float64(width*height*2)
@@ -397,14 +397,14 @@ func TestICTRoundTrip_Float64(t *testing.T) {
 
 			// Verify close match (float64 has higher precision, but ICT/inverse ICT
 			// coefficients are not an exact inverse matrix, so there's inherent error)
-			for y := 0; y < height; y++ {
+			for y := range height {
 				origRRow := origR.Row(y)
 				origGRow := origG.Row(y)
 				origBRow := origB.Row(y)
 				recRRow := recR.Row(y)
 				recGRow := recG.Row(y)
 				recBRow := recB.Row(y)
-				for x := 0; x < width; x++ {
+				for x := range width {
 					if !almostEqualF64(origRRow[x], recRRow[x], 1e-4) {
 						t.Errorf("R at (%d,%d): orig %v != rec %v", x, y, origRRow[x], recRRow[x])
 					}
@@ -472,11 +472,11 @@ func TestRCTInt64(t *testing.T) {
 	recB := NewImage[int64](width, height)
 
 	// Fill with test data
-	for y := 0; y < height; y++ {
+	for y := range height {
 		rRow := r.Row(y)
 		gRow := g.Row(y)
 		bRow := b.Row(y)
-		for x := 0; x < width; x++ {
+		for x := range width {
 			rRow[x] = int64((x + y*width) % 256)
 			gRow[x] = int64((x + y*width + 85) % 256)
 			bRow[x] = int64((x + y*width + 170) % 256)
@@ -488,14 +488,14 @@ func TestRCTInt64(t *testing.T) {
 	InverseRCT(yImg, cb, cr, recR, recG, recB)
 
 	// Verify exact match
-	for y := 0; y < height; y++ {
+	for y := range height {
 		rRow := r.Row(y)
 		gRow := g.Row(y)
 		bRow := b.Row(y)
 		recRRow := recR.Row(y)
 		recGRow := recG.Row(y)
 		recBRow := recB.Row(y)
-		for x := 0; x < width; x++ {
+		for x := range width {
 			if rRow[x] != recRRow[x] || gRow[x] != recGRow[x] || bRow[x] != recBRow[x] {
 				t.Errorf("Mismatch at (%d,%d): orig (%d,%d,%d) != rec (%d,%d,%d)",
 					x, y, rRow[x], gRow[x], bRow[x], recRRow[x], recGRow[x], recBRow[x])
