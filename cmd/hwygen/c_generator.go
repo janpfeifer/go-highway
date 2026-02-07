@@ -588,8 +588,11 @@ func getCElemTypes(pf *ParsedFunc) []string {
 	return []string{"float32"}
 }
 
-// IsSliceFunction checks if a function operates on slices (not Vec).
-// These are composite functions like GELU that process entire arrays.
+// IsSliceFunction checks if a function operates on slices (not Vec) and is
+// vectorizable. These are composite functions like GELU that process entire
+// arrays using hwy SIMD operations. Pure scalar functions (like Interleave,
+// Deinterleave) that operate on slices but have no hwy calls are excluded —
+// the composite C template generates incorrect code for them.
 func IsSliceFunction(pf *ParsedFunc) bool {
 	hasSliceParam := false
 	for _, param := range pf.Params {
@@ -598,8 +601,17 @@ func IsSliceFunction(pf *ParsedFunc) bool {
 			break
 		}
 	}
-	// Must have slice params and NOT have Vec in signature
-	return hasSliceParam && !hasVecInSignature(*pf)
+	if !hasSliceParam || hasVecInSignature(*pf) {
+		return false
+	}
+	// Must have hwy operations to be vectorizable via the composite C path.
+	for _, call := range pf.HwyCalls {
+		if call.Package == "hwy" {
+			return true
+		}
+	}
+	// Also eligible if it's a recognized math composite (Exp, Sin, GELU, etc.)
+	return mathOpFromFuncName(pf.Name) != ""
 }
 
 // getCProfileForFile determines the CIntrinsicProfile for a generated C file
