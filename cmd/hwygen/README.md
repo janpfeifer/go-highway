@@ -231,6 +231,31 @@ Output (for float64):
 func BaseAdd_avx2_Float64(a, b []float64) { ... }
 ```
 
+### Special `hwy.Float16` and `hwy.BFloat16` types
+
+Since Go doesn't natively support `float16` and `bfloat16` types, `hwy` adds an implementation for them.
+
+They required specialized handling though: if they are accessed normally, they are implicitly "promoted" to float32.
+But when the promoted type is used, for instance, to be passed to another function, it needs to be explicity
+converted back, usually using the generic type `T(myPromotedValue)`. This is a no-op for other float types,
+but for `hwy.Float16` and `hwy.BFloat16` it will generate the correct conversion.
+
+Example:
+
+```go
+func BaseOnePlus[T hwy.Floats](x T) {
+    return T(x+1)
+}
+```
+
+Generated code:
+
+```go
+func BaseOnePlus_fallback_float16(x hwy.Float16) {
+    return hwy.Float32ToFloat16(x.Float32()+1)
+}
+```
+
 ### Operation Transformation
 
 | Portable | AVX2 | Fallback |

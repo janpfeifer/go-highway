@@ -4724,3 +4724,69 @@ func TestGroupGoParams_ScalarT(t *testing.T) {
 		t.Errorf("groupGoParams did not use []hwy.Float16 for slices: %q", sig)
 	}
 }
+
+func TestRefCastGeneration(t *testing.T) {
+	// Create a temporary directory for test
+	tmpDir := t.TempDir()
+
+	// Create a simple test input file
+	inputFile := filepath.Join(tmpDir, "cast.go")
+	content := `package testcast
+
+import "github.com/ajroetker/go-highway/hwy"
+
+func BaseOnePlus[T hwy.Floats](x T) T {
+	return T(x + 1)
+}
+`
+
+	if err := os.WriteFile(inputFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to create input file: %v", err)
+	}
+
+	// Create generator
+	gen := &Generator{
+		InputFile:   inputFile,
+		OutputDir:   tmpDir,
+		TargetSpecs: makeTestSpecs(TargetModeGoSimd, "fallback"),
+	}
+
+	// Run generation
+	if err := gen.Run(); err != nil {
+		t.Fatalf("Generator.Run() failed: %v", err)
+	}
+
+	// Check the fallback file: cast_fallback.gen.go
+	generatedFile := filepath.Join(tmpDir, "cast_fallback.gen.go")
+	if _, err := os.Stat(generatedFile); os.IsNotExist(err) {
+		t.Fatalf("Expected file %q was not created", generatedFile)
+	}
+
+	contentBytes, err := os.ReadFile(generatedFile)
+	if err != nil {
+		t.Fatalf("Failed to read generated file: %v", err)
+	}
+
+	generatedContent := string(contentBytes)
+	fmt.Printf("Generated code:\n%s\n", generatedContent)
+
+	// Since we expect it to fail (not implemented yet), we are just verifying that the test runs
+	// and checks for the presence of the conversion.
+	// The user said: "It should fail for now... I just want the test implemented first."
+
+	// We want to verify that for Float16 it generates: hwy.Float32ToFloat16(x.Float32() + 1)
+	// We'll check for the function name for float16.
+	if !strings.Contains(generatedContent, "BaseOnePlus_fallback_Float16") {
+		t.Errorf("Missing generated function for float16: BaseOnePlus_fallback_Float16")
+	}
+
+	// And check for the conversion
+	expectedConversion := "hwy.Float32ToFloat16(x.Float32() + 1)"
+	// We normalize spaces for check
+	normalizedContent := strings.ReplaceAll(generatedContent, " ", "")
+	normalizedExpected := strings.ReplaceAll(expectedConversion, " ", "")
+
+	if !strings.Contains(normalizedContent, normalizedExpected) {
+		t.Errorf("Result missing Float16 conversion.\nWant (approx): %s\nGot:\n%s", expectedConversion, generatedContent)
+	}
+}
