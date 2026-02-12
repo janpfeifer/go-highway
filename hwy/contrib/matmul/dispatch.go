@@ -157,7 +157,7 @@ func MatMulKLastAuto[T hwy.Floats](pool *workerpool.Pool, a, b, c []T, m, n, k i
 }
 
 // =============================================================================
-// Parallel Fused NF4/Int4 MatMul dispatch
+// Parallel Fused MatMul dispatch
 // =============================================================================
 
 // ParallelFusedNF4MatMul performs fused NF4 dequantization + matrix multiplication
@@ -174,13 +174,46 @@ var ParallelFusedNF4MatMul func(input []float32, packed []uint8, scales []float3
 // On other platforms, this falls back to the serial implementation.
 var ParallelFusedInt4MatMul func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int)
 
+// ParallelFusedInt8MatMul performs fused Int8 dequantization + matrix multiplication
+// with parallel execution for large matrices.
+// On platforms with SME, this uses tiled parallel execution.
+// On other platforms, this falls back to the serial implementation.
+var ParallelFusedInt8MatMul func(input []float32, weights []int8, scales []float32, output []float32, M, K, N, groupSize int)
+
+// ParallelFusedNF4MatMulSiLU performs parallel fused NF4 + SiLU for large matrices.
+var ParallelFusedNF4MatMulSiLU func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int)
+
+// ParallelFusedNF4MatMulGELU performs parallel fused NF4 + GELU for large matrices.
+var ParallelFusedNF4MatMulGELU func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int)
+
+// ParallelFusedInt4MatMulSiLU performs parallel fused Int4 + SiLU for large matrices.
+var ParallelFusedInt4MatMulSiLU func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int)
+
+// ParallelFusedInt4MatMulGELU performs parallel fused Int4 + GELU for large matrices.
+var ParallelFusedInt4MatMulGELU func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int)
+
 func init() {
 	// Default parallel implementations just call the serial versions.
-	// SME-enabled platforms override these in matmul_fused_nf4_sme.go init().
+	// SME-enabled platforms override these in z_matmul_arm64.go init().
 	ParallelFusedNF4MatMul = func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int) {
 		FusedNF4MatMul(input, packed, scales, output, M, K, N, groupSize)
 	}
 	ParallelFusedInt4MatMul = func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int) {
 		FusedInt4MatMul(input, packed, scales, output, M, K, N, groupSize)
+	}
+	ParallelFusedInt8MatMul = func(input []float32, weights []int8, scales []float32, output []float32, M, K, N, groupSize int) {
+		FusedInt8MatMul(input, weights, scales, output, M, K, N, groupSize)
+	}
+	ParallelFusedNF4MatMulSiLU = func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int) {
+		FusedNF4MatMulSiLU(input, packed, scales, output, M, K, N, groupSize)
+	}
+	ParallelFusedNF4MatMulGELU = func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int) {
+		FusedNF4MatMulGELU(input, packed, scales, output, M, K, N, groupSize)
+	}
+	ParallelFusedInt4MatMulSiLU = func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int) {
+		FusedInt4MatMulSiLU(input, packed, scales, output, M, K, N, groupSize)
+	}
+	ParallelFusedInt4MatMulGELU = func(input []float32, packed []uint8, scales []float32, output []float32, M, K, N, groupSize int) {
+		FusedInt4MatMulGELU(input, packed, scales, output, M, K, N, groupSize)
 	}
 }

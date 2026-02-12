@@ -255,7 +255,7 @@ func neonF32Profile() *CIntrinsicProfile {
 		ReduceMinFn:       map[string]string{"q": "vminvq_f32"},
 		ReduceMaxFn:       map[string]string{"q": "vmaxvq_f32"},
 
-		InlineHelpers: []string{
+		InlineHelpers: append([]string{
 			`static inline unsigned int float_to_bits(float f) {
     unsigned int bits;
     __builtin_memcpy(&bits, &f, 4);
@@ -266,7 +266,7 @@ func neonF32Profile() *CIntrinsicProfile {
     __builtin_memcpy(&f, &bits, 4);
     return f;
 }`,
-		},
+		}, append(neonF32MathHelpers, scalarF64MathHelpers...)...),
 
 		MathStrategy:   "native",
 		FmaArgOrder:    "acc_first",
@@ -322,6 +322,8 @@ func neonF64Profile() *CIntrinsicProfile {
 		MaskType:          map[string]string{"q": "uint64x2_t"},
 		ReduceMinFn:       map[string]string{"q": "vminvq_f64"},
 		ReduceMaxFn:       map[string]string{"q": "vmaxvq_f64"},
+
+		InlineHelpers: neonF64MathHelpers,
 
 		MathStrategy:   "native",
 		FmaArgOrder:    "acc_first",
@@ -431,6 +433,7 @@ func neonF16Profile() *CIntrinsicProfile {
 
 		NativeArithmetic: true,
 		ScalarArithType:  "float16_t",
+		InlineHelpers:    append(neonF32MathHelpers, scalarF64MathHelpers...), // f16 promotes to f32 for transcendentals; f64 scalars for stdmath
 		MathStrategy:     "promoted",
 		PromoteFn:      "vcvt_f32_f16",
 		DemoteFn:       "vcvt_f16_f32(%s)",
@@ -510,6 +513,7 @@ func neonBF16Profile() *CIntrinsicProfile {
 		//          then vreinterpretq_f32_u32
 		// Demote:  round-to-nearest-even + vmovn_u32 + vcombine_u16
 		//          then vreinterpretq_bf16_u16
+		InlineHelpers:  append(neonF32MathHelpers, scalarF64MathHelpers...), // bf16 promotes to f32 for transcendentals; f64 scalars for stdmath
 		MathStrategy:   "promoted",
 		PromoteFn:      "vshll_n_u16(..., 16) + vreinterpretq_f32_u32",
 		DemoteFn:       "round_bias_vmovn_bf16(%s)", // placeholder: inline bf16 demote sequence

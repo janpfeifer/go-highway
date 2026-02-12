@@ -41,6 +41,11 @@ type CASTTranslator struct {
 	// Used to resolve type conversions like T(2) to the concrete C type.
 	typeParamNames map[string]bool
 
+	// Package-level array globals (e.g., nf4LookupTable).
+	// Set via SetPackageGlobals before TranslateToC.
+	packageGlobals    map[string]*PackageGlobal // name → global
+	referencedGlobals map[string]bool           // globals actually used in function body
+
 	buf      *bytes.Buffer
 	indent   int
 	tmpCount int // counter for unique temporary variable names
@@ -108,6 +113,16 @@ func NewCASTTranslator(profile *CIntrinsicProfile, elemType string) *CASTTransla
 	}
 }
 
+// SetPackageGlobals provides the translator with package-level array globals
+// that may be referenced in the function body. Referenced globals are emitted
+// as static const arrays in the generated C file.
+func (t *CASTTranslator) SetPackageGlobals(globals []PackageGlobal) {
+	t.packageGlobals = make(map[string]*PackageGlobal, len(globals))
+	for i := range globals {
+		t.packageGlobals[globals[i].Name] = &globals[i]
+	}
+}
+
 // primaryTier returns the first non-scalar tier name and its lane count.
 func primaryTier(p *CIntrinsicProfile) (string, int) {
 	for _, t := range p.Tiers {
@@ -139,6 +154,13 @@ func (t *CASTTranslator) TranslateToC(pf *ParsedFunc) (string, error) {
 	if pf.Body != nil {
 		t.discoverStructFields(pf.Body)
 	}
+
+	// Discover referenced package-level globals and emit as static const
+	t.referencedGlobals = make(map[string]bool)
+	if pf.Body != nil && len(t.packageGlobals) > 0 {
+		t.discoverReferencedGlobals(pf.Body)
+	}
+	t.emitStaticConstGlobals()
 
 	// Emit struct typedefs if needed
 	t.emitStructTypedefs()
@@ -343,6 +365,86 @@ func (t *CASTTranslator) emitStructTypedefs() {
 	}
 }
 
+// discoverReferencedGlobals walks the function body to find identifiers
+// matching known package-level globals (e.g., nf4LookupTable).
+func (t *CASTTranslator) discoverReferencedGlobals(body *ast.BlockStmt) {
+	ast.Inspect(body, func(n ast.Node) bool {
+		ident, ok := n.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if _, known := t.packageGlobals[ident.Name]; !known {
+			return true
+		}
+		// Skip if it's a local variable or parameter
+		if _, isVar := t.vars[ident.Name]; isVar {
+			return true
+		}
+		if _, isParam := t.params[ident.Name]; isParam {
+			return true
+		}
+		t.referencedGlobals[ident.Name] = true
+		return true
+	})
+}
+
+// emitStaticConstGlobals emits static const array declarations for any
+// package-level globals referenced in the function body.
+func (t *CASTTranslator) emitStaticConstGlobals() {
+	if len(t.referencedGlobals) == 0 {
+		return
+	}
+
+	// Sort for deterministic output
+	names := make([]string, 0, len(t.referencedGlobals))
+	for name := range t.referencedGlobals {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		pg := t.packageGlobals[name]
+		cElemType := goPkgGlobalElemToCType(pg.ElemType)
+		suffix := ""
+		if pg.ElemType == "float32" {
+			suffix = "f"
+		}
+
+		t.writefRaw("static const %s %s[%d] = { ", cElemType, pg.Name, pg.Size)
+		for i, val := range pg.Values {
+			if i > 0 {
+				t.buf.WriteString(", ")
+			}
+			// Ensure float literals have the proper suffix
+			t.buf.WriteString(val)
+			if suffix != "" && !strings.HasSuffix(val, suffix) {
+				t.buf.WriteString(suffix)
+			}
+		}
+		t.buf.WriteString(" };\n\n")
+	}
+}
+
+// goPkgGlobalElemToCType maps Go element types to C types for static const arrays.
+func goPkgGlobalElemToCType(goType string) string {
+	switch goType {
+	case "float32":
+		return "float"
+	case "float64":
+		return "double"
+	case "int32":
+		return "int"
+	case "int64", "int":
+		return "long"
+	case "uint32":
+		return "unsigned int"
+	case "uint64":
+		return "unsigned long"
+	default:
+		return "float"
+	}
+}
+
 // buildParamMap creates cParamInfo entries for each Go parameter.
 func (t *CASTTranslator) buildParamMap(pf *ParsedFunc) {
 	for _, p := range pf.Params {
@@ -466,6 +568,12 @@ func goSliceElemToCType(elemType string, profile *CIntrinsicProfile) string {
 		return "long"
 	case "int32":
 		return "int"
+	case "int16":
+		return "short"
+	case "int8":
+		return "signed char"
+	case "uint16":
+		return "unsigned short"
 	case "T":
 		if profile.ScalarArithType != "" {
 			return profile.ScalarArithType
@@ -480,7 +588,7 @@ func goSliceElemToCType(elemType string, profile *CIntrinsicProfile) string {
 func isScalarCType(cType string) bool {
 	switch cType {
 	case "long", "int", "unsigned long", "unsigned int", "unsigned char",
-		"float", "double", "short", "unsigned short":
+		"float", "double", "short", "unsigned short", "signed char":
 		return true
 	default:
 		return false
@@ -1508,53 +1616,106 @@ func (t *CASTTranslator) translateCallExpr(e *ast.CallExpr) string {
 		}
 	}
 
-	// Check for math/stdmath function calls
-	if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+	// Check for math/stdmath function calls (handles both plain and generic calls)
+	if sel := extractSelectorExpr(e.Fun); sel != nil {
 		if pkg, ok := sel.X.(*ast.Ident); ok && (pkg.Name == "math" || pkg.Name == "stdmath") {
-			switch sel.Sel.Name {
-			case "Float32bits":
+			name := sel.Sel.Name
+
+			// Single-arg functions that map directly to C stdlib: f64 name / f32 namef.
+			// Covers stdmath (Sqrt, Exp, Log, Erf, …) and contrib/math Vec wrappers.
+			if cName, ok := mathFuncToC[name]; ok {
 				if len(e.Args) == 1 {
 					arg := t.translateExpr(e.Args[0])
-					return fmt.Sprintf("float_to_bits(%s)", arg)
+					// Use GOAT-safe inline polynomial helpers when available.
+					// expf/erff are C library calls that GOAT can't link, so
+					// both contrib/math Base*Vec and stdmath (Exp, Erf) route
+					// through _v_/_s_ helpers. Sqrt/Abs/Max/Min map to HW
+					// instructions and are not in goatSafeMathHelper.
+					if goatSafeMathHelper[cName] {
+						// stdmath (Go's math package) always operates on float64,
+						// so force _f64 suffix for precision. contrib/math Vec
+						// functions use the element type (f16/bf16 promote to f32).
+						suffix := goatMathSuffix(t.elemType)
+						if pkg.Name == "stdmath" && suffix != "" {
+							suffix = "_f64"
+						}
+						if suffix != "" {
+							argInfo := t.inferType(e.Args[0])
+							if argInfo.isVector {
+								return fmt.Sprintf("_v_%s%s(%s)", cName, suffix, arg)
+							}
+							return fmt.Sprintf("_s_%s%s(%s)", cName, suffix, arg)
+						}
+					}
+					if t.elemType == "float64" {
+						return fmt.Sprintf("%s(%s)", cName, arg)
+					}
+					return fmt.Sprintf("%sf(%s)", cName, arg)
+				}
+			}
+
+			// Special cases that don't fit the single-arg pattern.
+			switch name {
+			case "Float32bits":
+				if len(e.Args) == 1 {
+					return fmt.Sprintf("float_to_bits(%s)", t.translateExpr(e.Args[0]))
 				}
 			case "Float32frombits":
 				if len(e.Args) == 1 {
-					arg := t.translateExpr(e.Args[0])
-					return fmt.Sprintf("bits_to_float(%s)", arg)
+					return fmt.Sprintf("bits_to_float(%s)", t.translateExpr(e.Args[0]))
 				}
-			case "Sqrt":
+			case "Abs":
 				if len(e.Args) == 1 {
 					arg := t.translateExpr(e.Args[0])
-					if t.elemType == "float64" {
-						return fmt.Sprintf("sqrt(%s)", arg)
-					}
-					return fmt.Sprintf("sqrtf(%s)", arg)
+					// Use ternary to avoid <math.h> dependency (GOAT-safe).
+					return fmt.Sprintf("((%s) < 0 ? -(%s) : (%s))", arg, arg, arg)
 				}
-			case "Exp":
-				if len(e.Args) == 1 {
-					arg := t.translateExpr(e.Args[0])
-					if t.elemType == "float64" {
-						return fmt.Sprintf("exp(%s)", arg)
-					}
-					return fmt.Sprintf("expf(%s)", arg)
+			case "Max":
+				if len(e.Args) == 2 {
+					a, b := t.translateExpr(e.Args[0]), t.translateExpr(e.Args[1])
+					// Use ternary to avoid <math.h> dependency (GOAT-safe).
+					return fmt.Sprintf("((%s) > (%s) ? (%s) : (%s))", a, b, a, b)
 				}
-			case "Log":
-				if len(e.Args) == 1 {
-					arg := t.translateExpr(e.Args[0])
-					if t.elemType == "float64" {
-						return fmt.Sprintf("log(%s)", arg)
-					}
-					return fmt.Sprintf("logf(%s)", arg)
+			case "Min":
+				if len(e.Args) == 2 {
+					a, b := t.translateExpr(e.Args[0]), t.translateExpr(e.Args[1])
+					// Use ternary to avoid <math.h> dependency (GOAT-safe).
+					return fmt.Sprintf("((%s) < (%s) ? (%s) : (%s))", a, b, a, b)
 				}
 			case "Inf":
 				if len(e.Args) == 1 {
 					arg := t.translateExpr(e.Args[0])
 					// Use constant expressions to avoid <math.h> dependency (GOAT-safe)
-					// math.Inf(1) → positive infinity, math.Inf(-1) → negative infinity
 					if strings.HasPrefix(arg, "-") {
 						return "(-1.0f/0.0f)"
 					}
 					return "(1.0f/0.0f)"
+				}
+			case "BaseSigmoidVec":
+				// sigmoid(x) = 1 / (1 + exp(-x))
+				if len(e.Args) == 1 {
+					arg := t.translateExpr(e.Args[0])
+					// Use GOAT-safe inline helpers for all precisions.
+					if suffix := goatMathSuffix(t.elemType); suffix != "" {
+						argInfo := t.inferType(e.Args[0])
+						if argInfo.isVector {
+							return fmt.Sprintf("_v_sigmoid%s(%s)", suffix, arg)
+						}
+						return fmt.Sprintf("_s_sigmoid%s(%s)", suffix, arg)
+					}
+					// Fallback for unsupported types.
+					if t.elemType == "float64" {
+						return fmt.Sprintf("(1.0 / (1.0 + exp(-(%s))))", arg)
+					}
+					return fmt.Sprintf("(1.0f / (1.0f + expf(-(%s))))", arg)
+				}
+			case "BaseExp10Vec":
+				if len(e.Args) == 1 {
+					arg := t.translateExpr(e.Args[0])
+					if t.elemType == "float64" {
+						return fmt.Sprintf("pow(10.0, %s)", arg)
+					}
+					return fmt.Sprintf("powf(10.0f, %s)", arg)
 				}
 			}
 		}
@@ -2359,12 +2520,18 @@ func (t *CASTTranslator) goTypeConvToCType(name string) string {
 		return "unsigned long"
 	case "uint32":
 		return "unsigned int"
+	case "uint16":
+		return "unsigned short"
 	case "uint8", "byte":
 		return "unsigned char"
 	case "int64":
 		return "long"
 	case "int32":
 		return "int"
+	case "int16":
+		return "short"
+	case "int8":
+		return "signed char"
 	case "int":
 		return "long"
 	case "uint":
@@ -2381,6 +2548,32 @@ func (t *CASTTranslator) goTypeConvToCType(name string) string {
 		}
 		return ""
 	}
+}
+
+// mathFuncToC maps single-arg Go math/stdmath functions and contrib/math Vec
+// functions to their C stdlib equivalents. The f32 variant is formed by appending "f".
+// Special cases (multi-arg, composite, non-standard naming) are handled in the switch.
+var mathFuncToC = map[string]string{
+	// stdmath
+	"Sqrt": "sqrt",
+	"Exp":  "exp",
+	"Log":  "log",
+	"Erf":  "erf",
+	// contrib/math Vec wrappers
+	"BaseExpVec":   "exp",
+	"BaseExp2Vec":  "exp2",
+	"BaseLogVec":   "log",
+	"BaseLog2Vec":  "log2",
+	"BaseLog10Vec": "log10",
+	"BaseSinVec":   "sin",
+	"BaseCosVec":   "cos",
+	"BaseTanhVec":  "tanh",
+	"BaseSinhVec":  "sinh",
+	"BaseCoshVec":  "cosh",
+	"BaseAsinhVec": "asinh",
+	"BaseAcoshVec": "acosh",
+	"BaseAtanhVec": "atanh",
+	"BaseErfVec":   "erf",
 }
 
 // bitsOnesCountToBuiltin maps Go math/bits popcount functions to GCC builtins.
@@ -2425,6 +2618,8 @@ func (t *CASTTranslator) inferType(expr ast.Expr) cVarInfo {
 			return cVarInfo{cType: strings.TrimSpace(elemType)}
 		}
 		return cVarInfo{cType: t.profile.CType}
+	case *ast.ParenExpr:
+		return t.inferType(e.X)
 	case *ast.BinaryExpr:
 		// Infer from left operand to propagate type through expressions
 		left := t.inferType(e.X)
@@ -2551,15 +2746,21 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 		}
 	}
 
-	// Check for math/stdmath functions
-	if sel, ok := e.Fun.(*ast.SelectorExpr); ok {
+	// Check for math/stdmath functions (use extractSelectorExpr to handle
+	// IndexExpr wrappers like math.BaseSigmoidVec[float32](...)).
+	if sel := extractSelectorExpr(e.Fun); sel != nil {
 		if pkg, ok := sel.X.(*ast.Ident); ok && (pkg.Name == "math" || pkg.Name == "stdmath") {
 			switch sel.Sel.Name {
 			case "Float32bits":
 				return cVarInfo{cType: "unsigned int"}
 			case "Float32frombits":
 				return cVarInfo{cType: "float"}
-			case "Sqrt", "Exp", "Log":
+			case "Sqrt", "Exp", "Log", "Erf", "Abs":
+				if t.elemType == "float64" {
+					return cVarInfo{cType: "double"}
+				}
+				return cVarInfo{cType: "float"}
+			case "Max", "Min":
 				if t.elemType == "float64" {
 					return cVarInfo{cType: "double"}
 				}
@@ -2569,6 +2770,18 @@ func (t *CASTTranslator) inferCallType(e *ast.CallExpr) cVarInfo {
 					return cVarInfo{cType: "double"}
 				}
 				return cVarInfo{cType: "float"}
+			default:
+				// Base*Vec functions (BaseSigmoidVec, BaseExpVec, BaseErfVec, etc.)
+				// return vector types when given vector arguments.
+				if strings.HasPrefix(sel.Sel.Name, "Base") && strings.HasSuffix(sel.Sel.Name, "Vec") {
+					if len(e.Args) > 0 && t.inferType(e.Args[0]).isVector {
+						return cVarInfo{cType: t.profile.VecTypes[t.tier], isVector: true}
+					}
+					if t.elemType == "float64" {
+						return cVarInfo{cType: "double"}
+					}
+					return cVarInfo{cType: "float"}
+				}
 			}
 		}
 	}
@@ -2623,8 +2836,14 @@ func (t *CASTTranslator) goTypeToCType(goType string) string {
 		return "unsigned long"
 	case "uint32":
 		return "unsigned int"
+	case "uint16":
+		return "unsigned short"
 	case "uint8", "byte":
 		return "unsigned char"
+	case "int16":
+		return "short"
+	case "int8":
+		return "signed char"
 	case "T":
 		if t.profile.ScalarArithType != "" {
 			return t.profile.ScalarArithType

@@ -183,6 +183,7 @@ func (g *Generator) runCModeInternal(result *ParseResult, targets []Target, asmM
 				}
 				emitter := NewCEmitter(g.PackageOut, elemType, target)
 				emitter.profile = profile
+				emitter.packageGlobals = result.PackageGlobals
 				cFile, err := emitter.EmitASTTranslatedC(&pf, cOutputDir)
 				if err != nil {
 					return nil, fmt.Errorf("emit AST C for %s (%s, %s): %w", pf.Name, elemType, target.Name, err)
@@ -282,7 +283,7 @@ func (g *Generator) runCModeInternal(result *ParseResult, targets []Target, asmM
 					allAdapters = append(allAdapters, AsmAdapterInfo{
 						TargetName:  target.Name,
 						Arch:        target.Arch(),
-						DispatchVar: buildDispatchVarName(pf.Name, elemType),
+						DispatchVar: buildDispatchVarName(pf.Name, elemType, len(pf.TypeParams) > 0),
 						AdapterFunc: buildAdapterFuncName(pf.Name, elemType),
 					})
 				}
@@ -669,14 +670,17 @@ func runGOAT(cFile string, profile *CIntrinsicProfile) error {
 	}
 
 	if profile != nil {
-		args = append(args, fmt.Sprintf("-e=--target=%s", profile.GoatTarget))
+		// Don't pass --target via -e: GOAT already derives the correct
+		// target triple (e.g. arm64-apple-darwin) from the -t flag and
+		// the host OS. Overriding it with a bare "arm64" causes clang
+		// to emit ELF-style assembly on macOS, which breaks GOAT's
+		// Mach-O constant pool rewriting.
 		for _, flag := range profile.GoatExtraFlags {
 			args = append(args, "-e="+flag)
 		}
 	} else {
 		// Fallback to arm64 NEON
 		args = append(args,
-			"-e=--target=arm64",
 			"-e=-march=armv8-a+simd+fp",
 		)
 	}
@@ -918,7 +922,11 @@ func (g *Generator) emitCWrappers(funcs []ParsedFunc, target Target, outputDir s
 	}
 
 	// Format and write
-	filename := filepath.Join(outputDir, fmt.Sprintf("c_wrappers_%s_%s.gen.go", targetSuffix, archSuffix))
+	wrapperDispPrefix := g.DispatchPrefix
+	if wrapperDispPrefix == "" {
+		wrapperDispPrefix = "dispatch"
+	}
+	filename := filepath.Join(outputDir, fmt.Sprintf("c_wrappers_%s_%s_%s.gen.go", wrapperDispPrefix, targetSuffix, archSuffix))
 	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write wrappers: %w", err)
 	}
@@ -1018,6 +1026,18 @@ func sveRuntimeGuard(target Target) string {
 	}
 }
 
+// neonSMESkipGuard returns a guard expression for NEON asm targets that
+// causes the init() to skip dispatch overrides when SME is available.
+// SME dispatch (in *_sme.go files) provides better implementations;
+// without this guard the NEON asm overrides would clobber them because
+// z_c_slices*.gen.go sorts after *_sme.go alphabetically.
+func neonSMESkipGuard(target Target) string {
+	if target.Name == "NEON" {
+		return "hwy.HasSME()"
+	}
+	return ""
+}
+
 // emitZCDispatch generates a z_c_*.gen.go file in the parent package that
 // overrides dispatch variables with assembly implementations. It creates adapter
 // functions that convert generic struct pointers (e.g., *Image[T]) to C-compatible
@@ -1044,6 +1064,10 @@ func (g *Generator) emitZCDispatch(funcs []ParsedFunc, target Target) error {
 	// init() generation, so only need hwy for half-precision types. Non-streaming
 	// SVE targets (Linux) generate init() with a runtime guard (hwy.HasSVE()).
 	needsHwy := isSVETarget(target) && !isSVEStreamingTarget(target)
+	// NEON asm targets need hwy for the SME skip guard (hwy.HasSME()).
+	if !needsHwy && neonSMESkipGuard(target) != "" {
+		needsHwy = true
+	}
 	if !needsHwy {
 		// Check if we need the hwy import for half-precision types
 		for _, pf := range funcs {
@@ -1088,6 +1112,11 @@ func (g *Generator) emitZCDispatch(funcs []ParsedFunc, target Target) error {
 			fmt.Fprintf(&buf, "\t\treturn\n")
 			fmt.Fprintf(&buf, "\t}\n")
 		}
+		if skipGuard := neonSMESkipGuard(target); skipGuard != "" {
+			fmt.Fprintf(&buf, "\tif %s {\n", skipGuard)
+			fmt.Fprintf(&buf, "\t\treturn\n")
+			fmt.Fprintf(&buf, "\t}\n")
+		}
 		for _, pf := range funcs {
 			for _, elemType := range getCElemTypes(&pf) {
 				profile := GetCProfile(target.Name, elemType)
@@ -1097,7 +1126,7 @@ func (g *Generator) emitZCDispatch(funcs []ParsedFunc, target Target) error {
 				if profile.MathStrategy == "promoted" && !profile.NativeArithmetic {
 					continue
 				}
-				dispatchVar := buildDispatchVarName(pf.Name, elemType)
+				dispatchVar := buildDispatchVarName(pf.Name, elemType, len(pf.TypeParams) > 0)
 				adapterName := buildAdapterFuncName(pf.Name, elemType)
 				fmt.Fprintf(&buf, "\t%s = %s\n", dispatchVar, adapterName)
 			}
@@ -1119,7 +1148,11 @@ func (g *Generator) emitZCDispatch(funcs []ParsedFunc, target Target) error {
 		}
 	}
 
-	filename := filepath.Join(g.OutputDir, fmt.Sprintf("z_c_%s_%s.gen.go", targetSuffix, archSuffix))
+	dispPrefix := g.DispatchPrefix
+	if dispPrefix == "" {
+		dispPrefix = "dispatch"
+	}
+	filename := filepath.Join(g.OutputDir, fmt.Sprintf("z_c_%s_%s_%s.gen.go", dispPrefix, targetSuffix, archSuffix))
 	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write z_c dispatch: %w", err)
 	}
@@ -1225,7 +1258,11 @@ func (g *Generator) emitSliceAsmPassthrough(funcs []ParsedFunc, target Target, a
 		}
 	}
 
-	filename := filepath.Join(asmDir, fmt.Sprintf("c_slice_passthrough_%s_%s.gen.go", targetSuffix, archSuffix))
+	ptDispPrefix := g.DispatchPrefix
+	if ptDispPrefix == "" {
+		ptDispPrefix = "dispatch"
+	}
+	filename := filepath.Join(asmDir, fmt.Sprintf("c_slice_passthrough_%s_%s_%s.gen.go", ptDispPrefix, targetSuffix, archSuffix))
 	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write slice asm passthrough: %w", err)
 	}
@@ -1276,6 +1313,10 @@ func (g *Generator) emitZCDispatchForSlices(funcs []ParsedFunc, target Target) e
 	// init() generation, so only need hwy for half-precision types. Non-streaming
 	// SVE targets (Linux) generate init() with a runtime guard (hwy.HasSVE()).
 	needsHwy := isSVETarget(target) && !isSVEStreamingTarget(target)
+	// NEON asm targets need hwy for the SME skip guard (hwy.HasSME()).
+	if !needsHwy && neonSMESkipGuard(target) != "" {
+		needsHwy = true
+	}
 	if !needsHwy {
 		// Check if we need the hwy import for half-precision types
 		for _, pf := range funcs {
@@ -1320,6 +1361,11 @@ func (g *Generator) emitZCDispatchForSlices(funcs []ParsedFunc, target Target) e
 			fmt.Fprintf(&buf, "\t\treturn\n")
 			fmt.Fprintf(&buf, "\t}\n")
 		}
+		if skipGuard := neonSMESkipGuard(target); skipGuard != "" {
+			fmt.Fprintf(&buf, "\tif %s {\n", skipGuard)
+			fmt.Fprintf(&buf, "\t\treturn\n")
+			fmt.Fprintf(&buf, "\t}\n")
+		}
 		for _, pf := range funcs {
 			for _, elemType := range getCElemTypes(&pf) {
 				profile := GetCProfile(target.Name, elemType)
@@ -1329,7 +1375,7 @@ func (g *Generator) emitZCDispatchForSlices(funcs []ParsedFunc, target Target) e
 				if profile.MathStrategy == "promoted" && !profile.NativeArithmetic {
 					continue
 				}
-				dispatchVar := buildDispatchVarName(pf.Name, elemType)
+				dispatchVar := buildDispatchVarName(pf.Name, elemType, len(pf.TypeParams) > 0)
 				adapterName := buildAdapterFuncName(pf.Name, elemType)
 				fmt.Fprintf(&buf, "\t%s = %s\n", dispatchVar, adapterName)
 			}
@@ -1351,7 +1397,11 @@ func (g *Generator) emitZCDispatchForSlices(funcs []ParsedFunc, target Target) e
 		}
 	}
 
-	filename := filepath.Join(g.OutputDir, fmt.Sprintf("z_c_slices_%s_%s.gen.go", targetSuffix, archSuffix))
+	dispPrefix2 := g.DispatchPrefix
+	if dispPrefix2 == "" {
+		dispPrefix2 = "dispatch"
+	}
+	filename := filepath.Join(g.OutputDir, fmt.Sprintf("z_c_slices_%s_%s_%s.gen.go", dispPrefix2, targetSuffix, archSuffix))
 	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write z_c slice dispatch: %w", err)
 	}
@@ -1524,10 +1574,14 @@ func structAsmExportedName(baseName, elemType string) string {
 }
 
 // buildDispatchVarName builds the dispatch variable name from a base function name.
-// E.g., BaseForwardICT + float32 → ForwardICTFloat32
-func buildDispatchVarName(baseName, elemType string) string {
+// For generic functions: BaseForwardICT + float32 → ForwardICTFloat32
+// For non-generic functions: BaseFusedInt8MatMul + float32 → FusedInt8MatMul (no suffix)
+func buildDispatchVarName(baseName, elemType string, isGeneric bool) string {
 	name := strings.TrimPrefix(baseName, "Base")
-	return name + typeNameToDispatchSuffix(elemType)
+	if isGeneric {
+		return name + typeNameToDispatchSuffix(elemType)
+	}
+	return name
 }
 
 // buildAdapterFuncName builds the unexported adapter function name.
@@ -2368,6 +2422,12 @@ func goTypeName(elemType string) string {
 // function signatures: "a, b, c []float32, m, n, k int" instead of
 // "a []float32, b []float32, c []float32, m int, n int, k int".
 func groupGoParams(pf *ParsedFunc, goSliceType, elemType string) string {
+	// Build set of type parameter names for generic substitution.
+	typeParamNames := make(map[string]bool, len(pf.TypeParams))
+	for _, tp := range pf.TypeParams {
+		typeParamNames[tp.Name] = true
+	}
+
 	var groups []string
 	var currentNames []string
 	var currentType string
@@ -2375,10 +2435,17 @@ func groupGoParams(pf *ParsedFunc, goSliceType, elemType string) string {
 	for _, p := range pf.Params {
 		var paramType string
 		if strings.HasPrefix(p.Type, "[]") {
-			paramType = goSliceType
+			sliceElem := strings.TrimPrefix(p.Type, "[]")
+			if typeParamNames[sliceElem] {
+				// Generic slice (e.g. []T) — substitute with profile type.
+				paramType = goSliceType
+			} else {
+				// Concrete slice (e.g. []int8) — preserve actual type.
+				paramType = p.Type
+			}
 		} else if p.Type == "int" || p.Type == "int64" {
 			paramType = "int"
-		} else if p.Type == "T" {
+		} else if typeParamNames[p.Type] {
 			paramType = astWrapperGoScalarType(elemType)
 		} else {
 			paramType = p.Type

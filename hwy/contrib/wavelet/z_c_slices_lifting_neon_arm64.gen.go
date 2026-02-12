@@ -11,6 +11,9 @@ import (
 )
 
 func init() {
+	if hwy.HasSME() {
+		return
+	}
 	LiftUpdate53Int32 = liftUpdate53AsmS32
 	LiftUpdate53Int64 = liftUpdate53AsmS64
 	LiftPredict53Int32 = liftPredict53AsmS32

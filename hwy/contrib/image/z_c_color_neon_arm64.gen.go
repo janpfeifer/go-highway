@@ -11,6 +11,9 @@ import (
 )
 
 func init() {
+	if hwy.HasSME() {
+		return
+	}
 	ForwardRCTInt32 = forwardRCTAsmS32
 	ForwardRCTInt64 = forwardRCTAsmS64
 	InverseRCTInt32 = inverseRCTAsmS32

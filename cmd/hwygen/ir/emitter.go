@@ -588,11 +588,101 @@ func (e *Emitter) emitScalarArith(op *IRNode, scalarType string) {
 	e.varTypes[varName] = scalarType
 }
 
-// emitCall emits a cross-package function call.
+// scalarizableCallToC maps contrib/math Vec function base names to their C stdlib
+// equivalents. The float32 variant is formed by appending "f" (e.g. "exp" → "expf").
+var scalarizableCallToC = map[string]string{
+	"BaseExpVec":   "exp",
+	"BaseExp2Vec":  "exp2",
+	"BaseLogVec":   "log",
+	"BaseLog2Vec":  "log2",
+	"BaseLog10Vec": "log10",
+	"BaseSinVec":   "sin",
+	"BaseCosVec":   "cos",
+	"BaseTanhVec":  "tanh",
+	"BaseSinhVec":  "sinh",
+	"BaseCoshVec":  "cosh",
+	"BaseAsinhVec": "asinh",
+	"BaseAcoshVec": "acosh",
+	"BaseAtanhVec": "atanh",
+	"BaseErfVec":   "erf",
+}
+
+// emitCall emits a cross-package function call, scalarizing contrib/math Vec
+// functions to their C stdlib equivalents.
 func (e *Emitter) emitCall(op *IRNode) {
-	// Cross-package calls are inlined by the resolver
-	// This should only be reached for unresolved calls
+	target := op.CallTarget
+	isFloat := e.profile.GetScalarType() == "float"
+
+	// Extract the function base name from "package.FuncName".
+	baseName := target
+	if idx := strings.LastIndex(target, "."); idx >= 0 {
+		baseName = target[idx+1:]
+	}
+
+	// Try the simple single-arg map first.
+	if cName, ok := scalarizableCallToC[baseName]; ok {
+		if len(op.Inputs) >= 1 || len(op.InputNames) >= 1 {
+			input := e.resolveInput(op, 0)
+			fn := cName
+			if isFloat {
+				fn += "f"
+			}
+			if len(op.Outputs) > 0 {
+				varName := op.Outputs[0]
+				scalarType := e.profile.GetScalarType()
+				if !e.emittedVars[varName] {
+					e.writef("%s %s = %s(%s);\n", scalarType, varName, fn, input)
+					e.emittedVars[varName] = true
+				} else {
+					e.writef("%s = %s(%s);\n", varName, fn, input)
+				}
+				e.varTypes[varName] = scalarType
+			} else {
+				e.writef("%s(%s);\n", fn, input)
+			}
+			return
+		}
+	}
+
+	// BaseSigmoidVec: sigmoid(x) = 1 / (1 + exp(-x))
+	if baseName == "BaseSigmoidVec" {
+		if len(op.Inputs) >= 1 || len(op.InputNames) >= 1 {
+			input := e.resolveInput(op, 0)
+			expFn := "exp"
+			one := "1.0"
+			if isFloat {
+				expFn = "expf"
+				one = "1.0f"
+			}
+			if len(op.Outputs) > 0 {
+				varName := op.Outputs[0]
+				scalarType := e.profile.GetScalarType()
+				if !e.emittedVars[varName] {
+					e.writef("%s %s = %s / (%s + %s(-(%s)));\n", scalarType, varName, one, one, expFn, input)
+					e.emittedVars[varName] = true
+				} else {
+					e.writef("%s = %s / (%s + %s(-(%s)));\n", varName, one, one, expFn, input)
+				}
+				e.varTypes[varName] = scalarType
+			}
+			return
+		}
+	}
+
+	// Unresolved call — emit a comment so the generated code is clearly incomplete.
 	e.writef("// TODO: inline %s\n", op.CallTarget)
+}
+
+// resolveInput returns the C expression for the i-th input of an IRNode,
+// checking Inputs (linked nodes) first, then InputNames (string references).
+func (e *Emitter) resolveInput(op *IRNode, i int) string {
+	if i < len(op.Inputs) && op.Inputs[i] != nil && len(op.Inputs[i].Outputs) > 0 {
+		return op.Inputs[i].Outputs[0]
+	}
+	if i < len(op.InputNames) {
+		return op.InputNames[i]
+	}
+	return "/* unknown input */"
 }
 
 // emitControl emits control flow.
