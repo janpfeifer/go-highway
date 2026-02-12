@@ -514,6 +514,30 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 			// Transform return statements: return x → return hwy.Float32ToFloat16(x)
 			// Handle expressions that compute in float32 (including tracked variables and expressions rewritten by wrapHalfPrecisionExpr)
 			for i, result := range node.Results {
+				// Optimization: if returning a simple half-precision variable, don't wrap/unwrap
+				// Check if it's a simple identifier (unwrap parens)
+				var unwrapped ast.Expr = result
+				for {
+					if p, ok := unwrapped.(*ast.ParenExpr); ok {
+						unwrapped = p.X
+					} else {
+						break
+					}
+				}
+
+				isSimpleHalfPrec := false
+				if ident, ok := unwrapped.(*ast.Ident); ok {
+					if ctx.halfPrecisionScalarVars != nil && ctx.halfPrecisionScalarVars[ident.Name] {
+						isSimpleHalfPrec = true
+					}
+				}
+
+				if isSimpleHalfPrec {
+					// Just return the variable directly (it's already the right type)
+					// No need to wrap with .Float32() and then convert back
+					continue
+				}
+
 				// First, apply standard expression wrapping (e.g. input[i] -> input[i].Float32())
 				newResult := wrapHalfPrecisionExpr(result, ctx, toFloat32Method)
 
