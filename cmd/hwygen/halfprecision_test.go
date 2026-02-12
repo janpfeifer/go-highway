@@ -124,7 +124,7 @@ func BasePrintPlusOne[T hwy.Floats](x T) {
 }
 `,
 			expected: []string{
-				// `fmt.Printf("%g\n", float64(v.Float32()))`,
+				`fmt.Printf("%g\n", float64(v.Float32()))`,
 				`Print(hwy.Float32ToFloat16(x.Float32() + 1))`,
 				`Print(hwy.Float32ToBFloat16(x.Float32() + 1))`,
 			},
