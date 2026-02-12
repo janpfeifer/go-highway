@@ -1835,7 +1835,7 @@ func TestASTCWrapperGeneration(t *testing.T) {
 	}
 
 	// Read the generated wrapper file
-	wrapperPath := filepath.Join(tmpDir, "c_wrappers_neon_arm64.gen.go")
+	wrapperPath := filepath.Join(tmpDir, "c_wrappers_dispatch_neon_arm64.gen.go")
 	wrapperContent, err := os.ReadFile(wrapperPath)
 	if err != nil {
 		t.Fatalf("read wrapper file: %v", err)
@@ -4406,14 +4406,14 @@ func BaseMathOps(data []float32, n int) {
 		t.Error("missing sqrtf() for stdmath.Sqrt with float32")
 	}
 
-	// Verify expf for float32
-	if !strings.Contains(cCode, "expf(") {
-		t.Error("missing expf() for stdmath.Exp with float32")
+	// Verify GOAT-safe exp helper (stdmath.Exp always uses f64 for precision)
+	if !strings.Contains(cCode, "_s_exp_f64(") {
+		t.Error("missing _s_exp_f64() for stdmath.Exp (always float64)")
 	}
 
-	// Verify logf for float32
-	if !strings.Contains(cCode, "logf(") {
-		t.Error("missing logf() for stdmath.Log with float32")
+	// Verify GOAT-safe log helper (stdmath.Log always uses f64 for precision)
+	if !strings.Contains(cCode, "_s_log_f64(") {
+		t.Error("missing _s_log_f64() for stdmath.Log (always float64)")
 	}
 
 	// Verify Inf → (1.0f/0.0f)
@@ -4703,7 +4703,8 @@ func TestASTWrapperGoScalarType(t *testing.T) {
 func TestGroupGoParams_ScalarT(t *testing.T) {
 	// Test that groupGoParams maps T params to concrete Go types
 	pf := &ParsedFunc{
-		Name: "BaseLiftStep",
+		Name:       "BaseLiftStep",
+		TypeParams: []TypeParam{{Name: "T", Constraint: "hwy.Floats"}},
 		Params: []Param{
 			{Name: "target", Type: "[]T"},
 			{Name: "tLen", Type: "int"},
@@ -4722,5 +4723,30 @@ func TestGroupGoParams_ScalarT(t *testing.T) {
 	// Slices should use the provided slice type
 	if !strings.Contains(sig, "[]hwy.Float16") {
 		t.Errorf("groupGoParams did not use []hwy.Float16 for slices: %q", sig)
+	}
+}
+
+func TestGroupGoParams_MixedSliceTypes(t *testing.T) {
+	// Non-generic functions should preserve concrete slice element types.
+	pf := &ParsedFunc{
+		Name: "BaseFusedInt8MatMul",
+		Params: []Param{
+			{Name: "input", Type: "[]float32"},
+			{Name: "weights", Type: "[]int8"},
+			{Name: "scales", Type: "[]float32"},
+			{Name: "output", Type: "[]float32"},
+			{Name: "M", Type: "int"},
+			{Name: "K", Type: "int"},
+			{Name: "N", Type: "int"},
+			{Name: "groupSize", Type: "int"},
+		},
+	}
+
+	sig := groupGoParams(pf, "[]float32", "float32")
+	if !strings.Contains(sig, "weights []int8") {
+		t.Errorf("groupGoParams should preserve concrete []int8 type: %q", sig)
+	}
+	if !strings.Contains(sig, "input []float32") {
+		t.Errorf("groupGoParams should preserve concrete []float32 type: %q", sig)
 	}
 }

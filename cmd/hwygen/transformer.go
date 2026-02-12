@@ -1709,6 +1709,10 @@ func transformCallExpr(call *ast.CallExpr, ctx *transformContext) {
 			suffix = suffix + "_BFloat16"
 		}
 		selExpr.Sel.Name = funcName + suffix
+		// Strip the IndexExpr (type parameter) if present, since the
+		// target-specific variant is a concrete function, not generic.
+		// e.g., math.BaseSigmoidVec[float32](x) -> math.BaseSigmoidVec_neon(x)
+		call.Fun = selExpr
 		return
 	}
 

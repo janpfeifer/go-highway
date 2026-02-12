@@ -19,8 +19,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -109,6 +111,15 @@ type ConditionalBlock struct {
 	EndLine         int              // Line number of //hwy:endif
 }
 
+// PackageGlobal represents a package-level variable with a fixed-size array type
+// and constant initializers. Used to emit `static const` in generated C code.
+type PackageGlobal struct {
+	Name     string   // e.g., "nf4LookupTable"
+	ElemType string   // e.g., "float32"
+	Size     int      // e.g., 16
+	Values   []string // raw Go literal values, e.g., ["-1.0", "0.0", "0.07958..."]
+}
+
 // ParseResult contains all parsed information from a source file.
 type ParseResult struct {
 	Funcs              []ParsedFunc
@@ -118,6 +129,7 @@ type ParseResult struct {
 	ConditionalBlocks  []ConditionalBlock
 	FileSet            *token.FileSet    // For converting positions to line numbers
 	Imports            map[string]string // map[local_name]import_path (e.g., "math" -> "math", "stdmath" -> "math")
+	PackageGlobals     []PackageGlobal   // package-level array variables from all files in the package
 }
 
 // Parse parses a Go source file and extracts functions with hwy operations.
@@ -266,6 +278,9 @@ func Parse(filename string) (*ParseResult, error) {
 			}
 		}
 	}
+
+	// Scan sibling .go files for package-level array variables (e.g., nf4LookupTable)
+	result.PackageGlobals = scanPackageGlobals(filename)
 
 	return result, nil
 }
@@ -983,4 +998,127 @@ func GetTypeSuffix(elemType string) string {
 	default:
 		return "f32"
 	}
+}
+
+// scanPackageGlobals scans all .go files in the same directory as filename
+// for package-level var declarations with fixed-size array types and constant
+// initializers. These are emitted as static const arrays in generated C code.
+func scanPackageGlobals(filename string) []PackageGlobal {
+	dir := filepath.Dir(filename)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var globals []PackageGlobal
+	fset := token.NewFileSet()
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		// Skip test files and generated files
+		if strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".gen.go") {
+			continue
+		}
+
+		path := filepath.Join(dir, name)
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			continue
+		}
+
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				if pg := extractPackageGlobal(spec); pg != nil {
+					globals = append(globals, *pg)
+				}
+			}
+		}
+	}
+	return globals
+}
+
+// extractPackageGlobal checks if a ValueSpec is a fixed-size array var with
+// constant initializers and returns a PackageGlobal, or nil.
+func extractPackageGlobal(spec ast.Spec) *PackageGlobal {
+	vs, ok := spec.(*ast.ValueSpec)
+	if !ok || len(vs.Names) != 1 || len(vs.Values) != 1 {
+		return nil
+	}
+
+	comp, ok := vs.Values[0].(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+
+	arrType, ok := comp.Type.(*ast.ArrayType)
+	if !ok || arrType.Len == nil {
+		return nil // skip slices (no length)
+	}
+
+	// Extract array length
+	lenLit, ok := arrType.Len.(*ast.BasicLit)
+	if !ok || lenLit.Kind != token.INT {
+		return nil
+	}
+	size, err := strconv.Atoi(lenLit.Value)
+	if err != nil {
+		return nil
+	}
+
+	// Extract element type
+	elemIdent, ok := arrType.Elt.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	elemType := elemIdent.Name
+	// Only support numeric types
+	switch elemType {
+	case "float32", "float64", "int32", "int64", "int", "uint32", "uint64":
+	default:
+		return nil
+	}
+
+	// Extract values
+	values := make([]string, 0, len(comp.Elts))
+	for _, elt := range comp.Elts {
+		val, ok := extractLiteralValue(elt)
+		if !ok {
+			return nil // bail if any element isn't a simple literal
+		}
+		values = append(values, val)
+	}
+
+	return &PackageGlobal{
+		Name:     vs.Names[0].Name,
+		ElemType: elemType,
+		Size:     size,
+		Values:   values,
+	}
+}
+
+// extractLiteralValue extracts a string representation from a basic literal
+// or negated literal expression.
+func extractLiteralValue(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind == token.FLOAT || e.Kind == token.INT {
+			return e.Value, true
+		}
+	case *ast.UnaryExpr:
+		if e.Op == token.SUB {
+			if lit, ok := e.X.(*ast.BasicLit); ok {
+				if lit.Kind == token.FLOAT || lit.Kind == token.INT {
+					return "-" + lit.Value, true
+				}
+			}
+		}
+	}
+	return "", false
 }

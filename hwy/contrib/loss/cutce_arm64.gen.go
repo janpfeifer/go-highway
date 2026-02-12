@@ -22,14 +22,13 @@ func init() {
 }
 
 func initCutceNEON() {
-	// Use base implementations - they use hwy.* which provides SIMD acceleration
-	CutCrossEntropy = BaseCutCrossEntropy
-	CutCrossEntropyGrad = BaseCutCrossEntropyGrad
-	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits
+	CutCrossEntropy = BaseCutCrossEntropy_neon
+	CutCrossEntropyGrad = BaseCutCrossEntropyGrad_neon
+	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits_neon
 }
 
 func initCutceFallback() {
-	CutCrossEntropy = BaseCutCrossEntropy
-	CutCrossEntropyGrad = BaseCutCrossEntropyGrad
-	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits
+	CutCrossEntropy = BaseCutCrossEntropy_fallback
+	CutCrossEntropyGrad = BaseCutCrossEntropyGrad_fallback
+	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits_fallback
 }

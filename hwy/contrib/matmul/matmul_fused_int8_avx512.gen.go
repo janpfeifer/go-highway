@@ -6,6 +6,7 @@ package matmul
 
 import (
 	"simd/archsimd"
+	"unsafe"
 )
 
 func BaseFusedInt8MatMul_avx512(input []float32, weights []int8, scales []float32, output []float32, M int, K int, N int, groupSize int) {
@@ -33,10 +34,10 @@ func BaseFusedInt8MatMul_avx512(input []float32, weights []int8, scales []float3
 					scale := scales[scaleBase+groupIdx]
 					dequantBuf[lane] = val * scale
 				}
-				dequantWeights := archsimd.LoadFloat32x16Slice(dequantBuf[:])
+				dequantWeights := archsimd.LoadFloat32x16((*[16]float32)(unsafe.Pointer(&dequantBuf[0])))
 				acc = inputVal.MulAdd(dequantWeights, acc)
 			}
-			acc.StoreSlice(outputRow[n:])
+			acc.Store((*[16]float32)(unsafe.Pointer(&outputRow[n])))
 		}
 		for ; n < N; n++ {
 			groupIdx := n / groupSize

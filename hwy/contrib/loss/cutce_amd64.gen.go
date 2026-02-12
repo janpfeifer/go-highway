@@ -31,21 +31,19 @@ func init() {
 }
 
 func initCutceAVX2() {
-	// Use base implementations - they use hwy.* which provides SIMD acceleration
-	CutCrossEntropy = BaseCutCrossEntropy
-	CutCrossEntropyGrad = BaseCutCrossEntropyGrad
-	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits
+	CutCrossEntropy = BaseCutCrossEntropy_avx2
+	CutCrossEntropyGrad = BaseCutCrossEntropyGrad_avx2
+	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits_avx2
 }
 
 func initCutceAVX512() {
-	// Use base implementations - they use hwy.* which provides SIMD acceleration
-	CutCrossEntropy = BaseCutCrossEntropy
-	CutCrossEntropyGrad = BaseCutCrossEntropyGrad
-	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits
+	CutCrossEntropy = BaseCutCrossEntropy_avx512
+	CutCrossEntropyGrad = BaseCutCrossEntropyGrad_avx512
+	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits_avx512
 }
 
 func initCutceFallback() {
-	CutCrossEntropy = BaseCutCrossEntropy
-	CutCrossEntropyGrad = BaseCutCrossEntropyGrad
-	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits
+	CutCrossEntropy = BaseCutCrossEntropy_fallback
+	CutCrossEntropyGrad = BaseCutCrossEntropyGrad_fallback
+	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits_fallback
 }

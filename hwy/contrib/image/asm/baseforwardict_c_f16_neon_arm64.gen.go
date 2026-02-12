@@ -3,7 +3,7 @@
 // versions:
 // 	clang   21.1.8
 // 	objdump 2.45.1
-// flags: --target=arm64 -march=armv8.2-a+fp16+simd -fno-builtin-memset -O3
+// flags: -march=armv8.2-a+fp16+simd -fno-builtin-memset -O3
 // source: /Users/ajroetker/go/src/github.com/ajroetker/go-highway/hwy/contrib/image/asm/baseforwardict_c_f16_neon_arm64.c
 
 package asm

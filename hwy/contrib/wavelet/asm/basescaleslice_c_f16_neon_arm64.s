@@ -3,7 +3,7 @@
 // versions:
 // 	clang   21.1.8
 // 	objdump 2.45.1
-// flags: --target=arm64 -march=armv8.2-a+fp16+simd -fno-builtin-memset -O3
+// flags: -march=armv8.2-a+fp16+simd -fno-builtin-memset -O3
 // source: /Users/ajroetker/go/src/github.com/ajroetker/go-highway/hwy/contrib/wavelet/asm/basescaleslice_c_f16_neon_arm64.c
 
 TEXT ·scaleslice_c_f16_neon(SB), $0-18
@@ -11,26 +11,26 @@ TEXT ·scaleslice_c_f16_neon(SB), $0-18
 	MOVD  pn+8(FP), R1
 	MOVHU scale+16(FP), R9
 	FMOVS R9, F0
-	WORD  $0xb4000320      // cbz	x0, .LBB0_9
+	WORD  $0xb4000320      // cbz	x0, LBB0_9
 	WORD  $0xf9400028      // ldr	x8, [x1]
-	WORD  $0xb40002e8      // cbz	x8, .LBB0_9
+	WORD  $0xb40002e8      // cbz	x8, LBB0_9
 	WORD  $0xf100211f      // cmp	x8, #8
 	BGE   BB0_4
-	WORD  $0xaa1f03eb      // mov	x11, xzr
+	WORD  $0xd280000b      // mov	x11, #0                         ; =0x0
 	B     BB0_6
 
 BB0_4:
-	WORD $0xaa1f03ea // mov	x10, xzr
+	WORD $0xd280000a // mov	x10, #0                         ; =0x0
 	WORD $0xaa0003e9 // mov	x9, x0
 
 BB0_5:
 	WORD $0x3dc00121 // ldr	q1, [x9]
-	WORD $0x9100414c // add	x12, x10, #16
-	WORD $0x9100214b // add	x11, x10, #8
-	WORD $0xeb08019f // cmp	x12, x8
-	WORD $0xaa0b03ea // mov	x10, x11
-	WORD $0x4f009021 // fmul	v1.8h, v1.8h, v0.h[0]
+	WORD $0x4f009021 // fmul.8h	v1, v1, v0[0]
 	WORD $0x3c810521 // str	q1, [x9], #16
+	WORD $0x9100214b // add	x11, x10, #8
+	WORD $0x9100414c // add	x12, x10, #16
+	WORD $0xaa0b03ea // mov	x10, x11
+	WORD $0xeb08019f // cmp	x12, x8
 	BLE  BB0_5
 
 BB0_6:
@@ -40,9 +40,9 @@ BB0_6:
 
 BB0_8:
 	WORD $0x7d400121 // ldr	h1, [x9]
-	WORD $0xf1000508 // subs	x8, x8, #1
 	WORD $0x1ee10801 // fmul	h1, h0, h1
 	WORD $0x7c002521 // str	h1, [x9], #2
+	WORD $0xf1000508 // subs	x8, x8, #1
 	BNE  BB0_8
 
 BB0_9:

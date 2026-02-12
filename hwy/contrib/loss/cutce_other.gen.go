@@ -18,7 +18,7 @@ func init() {
 }
 
 func initCutceFallback() {
-	CutCrossEntropy = BaseCutCrossEntropy
-	CutCrossEntropyGrad = BaseCutCrossEntropyGrad
-	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits
+	CutCrossEntropy = BaseCutCrossEntropy_fallback
+	CutCrossEntropyGrad = BaseCutCrossEntropyGrad_fallback
+	CutCrossEntropyWithLogits = BaseCutCrossEntropyWithLogits_fallback
 }

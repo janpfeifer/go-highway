@@ -12,10 +12,11 @@ import (
 // The generated C code can be compiled with GOAT to produce Go assembly.
 // Supports NEON, AVX2, and AVX-512 targets with f16/bf16/f32/f64 element types.
 type CEmitter struct {
-	pkgName  string
-	elemType string // "float32", "float64", "hwy.Float16", "hwy.BFloat16"
-	target   Target
-	profile  *CIntrinsicProfile // target+type specific intrinsics (nil = use legacy if/else)
+	pkgName        string
+	elemType       string // "float32", "float64", "hwy.Float16", "hwy.BFloat16"
+	target         Target
+	profile        *CIntrinsicProfile // target+type specific intrinsics (nil = use legacy if/else)
+	packageGlobals []PackageGlobal    // package-level array vars for static const emission
 }
 
 // NewCEmitter creates a new C emitter for the given element type.
@@ -1698,6 +1699,9 @@ func (e *CEmitter) EmitASTTranslatedC(pf *ParsedFunc, outPath string) (string, e
 	}
 
 	translator := NewCASTTranslator(e.profile, e.elemType)
+	if len(e.packageGlobals) > 0 {
+		translator.SetPackageGlobals(e.packageGlobals)
+	}
 	cCode, err := translator.TranslateToC(pf)
 	if err != nil {
 		return "", fmt.Errorf("AST translate %s: %w", pf.Name, err)

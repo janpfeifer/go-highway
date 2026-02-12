@@ -15,18 +15,13 @@
 // Package loss provides SIMD-accelerated loss function kernels.
 package loss
 
-// NOTE: Code generation is disabled because hwygen cannot properly transform
-// generic function calls like math.BaseSigmoidVec[float32]() to target-specific
-// versions. The base implementation uses portable hwy.* operations which already
-// provide SIMD acceleration across all platforms.
-// go:generate go run ../../../cmd/hwygen -input cut_cross_entropy.go -dispatch cutce -output . -targets avx2,avx512,neon,fallback
+//go:generate go run ../../../cmd/hwygen -input cut_cross_entropy.go -dispatch cutce -output . -targets avx2,avx512,neon:asm,fallback
 
 import (
 	stdmath "math"
 	"sync"
 
 	"github.com/ajroetker/go-highway/hwy"
-	"github.com/ajroetker/go-highway/hwy/contrib/math"
 )
 
 // BaseCutCrossEntropy computes cross-entropy loss WITHOUT materializing the full logits matrix.
@@ -127,18 +122,11 @@ func BaseCutCrossEntropyGrad(
 	if numPositions == 0 || hiddenDim == 0 || vocabSize == 0 {
 		return
 	}
-	// Input validation
-	if len(hiddenStates) < numPositions*hiddenDim ||
-		len(embeddings) < vocabSize*hiddenDim ||
-		len(labels) < numPositions ||
-		len(gradOutput) < numPositions*hiddenDim {
-		return
-	}
 
 	// Count valid positions for mean
 	validCount := 0
-	for _, label := range labels[:numPositions] {
-		if label >= 0 && int(label) < vocabSize {
+	for i := 0; i < numPositions; i++ {
+		if labels[i] >= 0 && int(labels[i]) < vocabSize {
 			validCount++
 		}
 	}
@@ -164,8 +152,45 @@ func BaseCutCrossEntropyGrad(
 
 		hsOffset := pos * hiddenDim
 
-		// Compute logsumexp for this position (needed for softmax denominator)
-		lse := streamingLogsumexp(hiddenStates[hsOffset:hsOffset+hiddenDim], embeddings, hiddenDim, vocabSize)
+		// Inline streamingLogsumexp: compute log(sum_v(exp(h · e_v)))
+		// Initialize from first logit for numerical stability
+		firstDotAcc := hwy.Zero[float32]()
+		var fi int
+		for fi = 0; fi+lanes <= hiddenDim; fi += lanes {
+			va := hwy.Load(hiddenStates[hsOffset+fi:])
+			vb := hwy.Load(embeddings[fi:])
+			firstDotAcc = hwy.MulAdd(va, vb, firstDotAcc)
+		}
+		firstDotSum := hwy.ReduceSum(firstDotAcc)
+		for ; fi < hiddenDim; fi++ {
+			firstDotSum += hiddenStates[hsOffset+fi] * embeddings[fi]
+		}
+		currentMax := float64(firstDotSum)
+		sumExp := float64(1.0)
+
+		for v := 1; v < vocabSize; v++ {
+			embOff := v * hiddenDim
+			dotAcc := hwy.Zero[float32]()
+			var di int
+			for di = 0; di+lanes <= hiddenDim; di += lanes {
+				va := hwy.Load(hiddenStates[hsOffset+di:])
+				vb := hwy.Load(embeddings[embOff+di:])
+				dotAcc = hwy.MulAdd(va, vb, dotAcc)
+			}
+			dotSum := hwy.ReduceSum(dotAcc)
+			for ; di < hiddenDim; di++ {
+				dotSum += hiddenStates[hsOffset+di] * embeddings[embOff+di]
+			}
+			logit := float64(dotSum)
+
+			if logit > currentMax {
+				sumExp = sumExp*stdmath.Exp(currentMax-logit) + 1.0
+				currentMax = logit
+			} else {
+				sumExp += stdmath.Exp(logit - currentMax)
+			}
+		}
+		lse := currentMax + stdmath.Log(sumExp)
 
 		// Compute gradient: sum_v(softmax_v * e_v) - e_{label}
 		// Initialize gradient to -e_{label}
@@ -184,12 +209,20 @@ func BaseCutCrossEntropyGrad(
 		// Add softmax-weighted embedding contributions
 		for v := 0; v < vocabSize; v++ {
 			embOffset := v * hiddenDim
-			logit := float64(simdDotProduct(
-				hiddenStates[hsOffset:hsOffset+hiddenDim],
-				embeddings[embOffset:embOffset+hiddenDim],
-				hiddenDim,
-			))
-			softmaxWeight := float32(stdmath.Exp(logit - lse)) * invN
+			// Inline dot product
+			dotAcc := hwy.Zero[float32]()
+			var di int
+			for di = 0; di+lanes <= hiddenDim; di += lanes {
+				va := hwy.Load(hiddenStates[hsOffset+di:])
+				vb := hwy.Load(embeddings[embOffset+di:])
+				dotAcc = hwy.MulAdd(va, vb, dotAcc)
+			}
+			dotSum := hwy.ReduceSum(dotAcc)
+			for ; di < hiddenDim; di++ {
+				dotSum += hiddenStates[hsOffset+di] * embeddings[embOffset+di]
+			}
+			logit := float64(dotSum)
+			softmaxWeight := float32(stdmath.Exp(logit-lse)) * invN
 
 			// gradOutput[pos] += softmaxWeight * embeddings[v]
 			vWeight := hwy.Set(softmaxWeight)
@@ -372,16 +405,6 @@ func BaseCutCrossEntropyWithLogits(
 	}
 
 	return float32(totalLoss / float64(validCount))
-}
-
-// BaseSwiGLUVec computes SwiGLU in-place on paired gate/up vectors.
-// This is a helper used by the fused matmul+activation kernels.
-//
-// SwiGLU(gate, up) = SiLU(gate) * up = (gate * sigmoid(gate)) * up
-func BaseSwiGLUVec(gate, up hwy.Vec[float32]) hwy.Vec[float32] {
-	sig := math.BaseSigmoidVec[float32](gate)
-	silu := hwy.Mul(gate, sig)
-	return hwy.Mul(silu, up)
 }
 
 // CutCrossEntropyParallel computes cross-entropy loss with parallelism over positions.
