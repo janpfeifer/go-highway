@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func DisabledTestHalfPrecisionPromotionAndCastGeneration(t *testing.T) {
+func TestHalfPrecisionPromotionAndCastGeneration(t *testing.T) {
 	// Create a temporary directory for test
 	tmpDir := t.TempDir()
 

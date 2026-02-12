@@ -510,16 +510,77 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 
 		case *ast.ReturnStmt:
 			// Transform return statements: return x → return hwy.Float32ToFloat16(x)
-			// Only wrap values that we know are float32 (from ReduceSum or float32 computations)
+			// Handle expressions that compute in float32 (including tracked variables and expressions rewritten by wrapHalfPrecisionExpr)
 			for i, result := range node.Results {
-				if ident, ok := result.(*ast.Ident); ok {
-					// Only wrap if we tracked this variable as being float32
-					if reduceSumVars[ident.Name] || float32ComputedVars[ident.Name] {
-						node.Results[i] = &ast.CallExpr{
-							Fun:  parseTypeExpr(fromFloat32Func),
-							Args: []ast.Expr{ident},
+				// First, apply standard expression wrapping (e.g. input[i] -> input[i].Float32())
+				newResult := wrapHalfPrecisionExpr(result, ctx, toFloat32Method)
+
+				shouldWrap := false
+
+				// Helper to check if a node is a tracked float32 variable
+				var isTrackedVar func(ast.Expr) bool
+				isTrackedVar = func(e ast.Expr) bool {
+					switch t := e.(type) {
+					case *ast.ParenExpr:
+						return isTrackedVar(t.X)
+					case *ast.Ident:
+						return reduceSumVars[t.Name] || float32ComputedVars[t.Name]
+					}
+					return false
+				}
+
+				if isTrackedVar(result) {
+					shouldWrap = true
+				}
+
+				// Check if the transformed expression is a float32 operation
+				// Recursive check for paren unwrap
+				var checkType func(ast.Expr) bool
+				checkType = func(e ast.Expr) bool {
+					switch t := e.(type) {
+					case *ast.BinaryExpr:
+						switch t.Op {
+						case token.ADD, token.SUB, token.MUL, token.QUO:
+							return true
+						}
+					case *ast.UnaryExpr:
+						if t.Op == token.SUB || t.Op == token.ADD {
+							return true
+						}
+					case *ast.CallExpr:
+						// Check for .Float32() calls
+						if sel, ok := t.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == toFloat32Method {
+							return true
+						}
+						// Check for float32() conversions
+						if ident, ok := t.Fun.(*ast.Ident); ok && ident.Name == "float32" {
+							return true
+						}
+					case *ast.ParenExpr:
+						return checkType(t.X)
+					}
+					return false
+				}
+
+				if !shouldWrap && checkType(newResult) {
+					shouldWrap = true
+				}
+
+				if shouldWrap {
+					// Optimization: If newResult is explicit float32(...) cast, strip it
+					// because Float32ToFloat16 takes float32.
+					arg := newResult
+					if call, ok := newResult.(*ast.CallExpr); ok {
+						if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "float32" && len(call.Args) == 1 {
+							arg = call.Args[0]
 						}
 					}
+					node.Results[i] = &ast.CallExpr{
+						Fun:  parseTypeExpr(fromFloat32Func),
+						Args: []ast.Expr{arg},
+					}
+				} else {
+					node.Results[i] = newResult
 				}
 			}
 
