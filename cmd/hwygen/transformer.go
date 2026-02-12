@@ -743,6 +743,7 @@ func findMainSimdLoop(body *ast.BlockStmt, loopInfo *LoopInfo) *ast.ForStmt {
 	return nil
 }
 
+// transformContext stores context information for a function transformation process.
 type transformContext struct {
 	target                  Target
 	elemType                string
@@ -7476,7 +7477,6 @@ func generateScalarCountIf(pf *ParsedFunc, elemType string) *ast.BlockStmt {
 		},
 	}
 }
-
 
 // inlineHelperCalls recursively inlines local helper function calls in a block.
 // Local helpers are non-Base* functions defined in the same file that use hwy operations.

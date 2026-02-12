@@ -13,11 +13,11 @@ import (
 //
 // If the content is not prefixed with "package", this function automatically prefixes it
 // with a package name and importing of the "hwy" package.
-func checkFallbackGeneration(t *testing.T, content string, expected []string) {
+func checkFallbackGeneration(t *testing.T, content string, expected, mistakes []string) {
 	t.Helper()
 
 	if !strings.HasPrefix(content, "package ") {
-		content = "package testcast\n\nimport \"github.com/ajroetker/go-highway/hwy\"\n\n" + content
+		content = "package checkfallbackgeneration\n\nimport \"github.com/ajroetker/go-highway/hwy\"\n\n" + content
 	}
 
 	// Create a temporary directory for test
@@ -62,7 +62,13 @@ func checkFallbackGeneration(t *testing.T, content string, expected []string) {
 	for _, exp := range expected {
 		normalizedExpected := strings.ReplaceAll(exp, " ", "")
 		if !strings.Contains(normalizedContent, normalizedExpected) {
-			t.Errorf("Result missing expected string.\nWant (approx): %s\nGot:\n%s", exp, generatedContent)
+			t.Errorf("Result missing expected string.\n- Want (approx): %s\n- Got:\n%s", exp, generatedContent)
+		}
+	}
+	for _, mistake := range mistakes {
+		normalizedMistake := strings.ReplaceAll(mistake, " ", "")
+		if strings.Contains(normalizedContent, normalizedMistake) {
+			t.Errorf("Result should not contain string.\n- Mistake (approx): %s\n- Got:\n%s", mistake, generatedContent)
 		}
 	}
 }
@@ -72,6 +78,7 @@ func TestHalfPrecision(t *testing.T) {
 		name     string
 		content  string
 		expected []string
+		mistakes []string
 	}{
 		{
 			name: "Return statement with cast",
@@ -86,17 +93,22 @@ func BaseOnePlus[T hwy.Floats](x T) T {
 			},
 		},
 		{
-			name: "Return converted back",
+			name: "Conversion and casting",
 			content: `
 func BaseOnePlus[T hwy.Floats](x T) T {
 	y := x+1
-	return T(y)
+	z := T(y)
+	return z
 }
 `,
 			expected: []string{
 				"y := x.Float32() + 1",
-				"hwy.Float32ToFloat16(y)",
-				"hwy.Float32ToBFloat16(y)",
+				"z := hwy.Float32ToFloat16(y)",
+				"z := hwy.Float32ToBFloat16(y)",
+			},
+			mistakes: []string{
+				"return hwy.Float32ToFloat16(z.Float32())",
+				"return hwy.Float32ToBFloat16(z.Float32())",
 			},
 		},
 		{
@@ -106,7 +118,7 @@ func BasePrint[T hwy.Floats](v T) T {
 	fmt.Printf("%g\n", v)
 }
 
-func BasePrintPlusOne[T hwy.Floats](x T) T {
+func BasePrintPlusOne[T hwy.Floats](x T) {
 	Print(T(x+1))
 }
 `,
@@ -120,7 +132,7 @@ func BasePrintPlusOne[T hwy.Floats](x T) T {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			checkFallbackGeneration(t, tt.content, tt.expected)
+			checkFallbackGeneration(t, tt.content, tt.expected, tt.mistakes)
 		})
 	}
 }

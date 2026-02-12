@@ -231,7 +231,6 @@ func transformGetBitMethodHalfPrecision(call *ast.CallExpr, maskExpr, indexExpr 
 // - Type conversions: hwy.Float16(1.0) → float32(1.0)
 // - hwy.ReduceSum calls: x := hwy.ReduceSum(v) → x := hwy.ReduceSum(v).Float32()
 // - Return statements: return x → return hwy.Float32ToFloat16(x)
-// - Scalar expressions: x+1 -> x.Float32()+1
 func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) {
 	// Get the conversion function name
 	var toFloat32Method string = "Float32"
@@ -292,7 +291,7 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 							len(ident.Name) == 1
 						if isHalfPrecisionConv {
 							if varName != "" && assign.Tok == token.DEFINE {
-								float32ComputedVars[varName] = true
+								halfPrecisionScalarVars[varName] = true
 							}
 						}
 					}
@@ -423,6 +422,9 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 	// Transform the AST
 	ast.Inspect(body, func(n ast.Node) bool {
 		switch node := n.(type) {
+		case *ast.ExprStmt:
+			node.X = wrapHalfPrecisionExpr(node.X, ctx, toFloat32Method)
+
 		case *ast.DeclStmt:
 			// Transform: var expSum hwy.Float16 → var expSum float32
 			if genDecl, ok := node.Decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
@@ -713,7 +715,12 @@ func transformHalfPrecisionAssignment(stmt *ast.AssignStmt, ctx *transformContex
 				if ctx.halfPrecisionScalarVars != nil && ctx.halfPrecisionScalarVars[ident.Name] {
 					// Don't convert the slice read - keep the variable as Float16
 					// It will be converted later when used in scalar arithmetic
-					skipConversion = true
+					// Only skip for IndexExpr (slice read) or Ident (var copy) to allow
+					// type conversions T(...) to be processed.
+					switch rhs.(type) {
+					case *ast.IndexExpr, *ast.Ident:
+						skipConversion = true
+					}
 				}
 			}
 		}
@@ -748,6 +755,31 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 	}
 
 	switch e := expr.(type) {
+	case *ast.ParenExpr:
+		return &ast.ParenExpr{
+			Lparen: e.Lparen,
+			X:      wrapHalfPrecisionExpr(e.X, ctx, toFloat32Method),
+			Rparen: e.Rparen,
+		}
+
+	case *ast.UnaryExpr:
+		return &ast.UnaryExpr{
+			OpPos: e.OpPos,
+			Op:    e.Op,
+			X:     wrapHalfPrecisionExpr(e.X, ctx, toFloat32Method),
+		}
+
+	case *ast.Ident:
+		if ctx.halfPrecisionScalarVars != nil && ctx.halfPrecisionScalarVars[e.Name] {
+			return &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   cloneExpr(e),
+					Sel: ast.NewIdent(toFloat32Method),
+				},
+			}
+		}
+		return e
+
 	case *ast.IndexExpr:
 		// Check if this is reading from a half-precision slice
 		if isHalfPrecisionSliceExpr(e, ctx) {
@@ -788,8 +820,15 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 				if pkgIdent.Name == "hwy" {
 					// Check for type conversion
 					if funcName == "Float16" || funcName == "BFloat16" {
-						// Transform: hwy.Float16(1.0) to float32(1.0)
-						e.Fun = ast.NewIdent("float32")
+						// Transform: hwy.Float16(x) to hwy.Float32ToFloat16(float_x)
+						var convertFunc string
+						if funcName == "Float16" {
+							convertFunc = "hwy.Float32ToFloat16"
+						} else {
+							convertFunc = "hwy.Float32ToBFloat16"
+						}
+						e.Fun = parseTypeExpr(convertFunc)
+
 						// Recurse into arguments to wrap any half-precision scalars
 						for i, arg := range e.Args {
 							e.Args[i] = wrapHalfPrecisionExpr(arg, ctx, toFloat32Method)
@@ -814,8 +853,15 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 		}
 		// Also check for simple type conversions like hwy.Float16(x)
 		if ident, ok := e.Fun.(*ast.Ident); ok {
-			if ident.Name == ctx.elemType || ident.Name == "hwy.Float16" || ident.Name == "hwy.BFloat16" {
-				e.Fun = ast.NewIdent("float32")
+			var convertFunc string
+			if isFloat16Type(ident.Name) || (ident.Name == ctx.elemType && isFloat16Type(ctx.elemType)) {
+				convertFunc = "hwy.Float32ToFloat16"
+			} else if isBFloat16Type(ident.Name) || (ident.Name == ctx.elemType && isBFloat16Type(ctx.elemType)) {
+				convertFunc = "hwy.Float32ToBFloat16"
+			}
+
+			if convertFunc != "" {
+				e.Fun = parseTypeExpr(convertFunc)
 				// Recurse into arguments to wrap any half-precision scalars
 				for i, arg := range e.Args {
 					e.Args[i] = wrapHalfPrecisionExpr(arg, ctx, toFloat32Method)
@@ -831,28 +877,6 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 		// Recurse into call arguments for type conversions like float64(input[i] - maxVal)
 		for i, arg := range e.Args {
 			e.Args[i] = wrapHalfPrecisionExpr(arg, ctx, toFloat32Method)
-		}
-		return e
-
-	case *ast.ParenExpr:
-		return &ast.ParenExpr{X: wrapHalfPrecisionExpr(e.X, ctx, toFloat32Method)}
-
-	case *ast.UnaryExpr:
-		return &ast.UnaryExpr{
-			Op: e.Op,
-			X:  wrapHalfPrecisionExpr(e.X, ctx, toFloat32Method),
-		}
-
-	case *ast.Ident:
-		// Check if this is a half-precision scalar variable
-		if ctx.halfPrecisionScalarVars != nil && ctx.halfPrecisionScalarVars[e.Name] {
-			// Wrap with .Float32(): aik → aik.Float32()
-			return &ast.CallExpr{
-				Fun: &ast.SelectorExpr{
-					X:   cloneExpr(e),
-					Sel: ast.NewIdent(toFloat32Method),
-				},
-			}
 		}
 		return e
 
