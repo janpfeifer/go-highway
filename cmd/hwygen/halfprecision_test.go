@@ -112,20 +112,25 @@ func BaseOnePlus[T hwy.Floats](x T) T {
 			},
 		},
 		{
-			name: "Call converted",
+			name: "Call",
 			content: `
 func BasePrint[T hwy.Floats](v T) T {
-	fmt.Printf("%g\n", v)
+	fmt.Printf("%g\n", float64(v))
 }
 
 func BasePrintPlusOne[T hwy.Floats](x T) {
+	Print(x)
 	Print(T(x+1))
 }
 `,
 			expected: []string{
-				`fmt.Printf("%g\n", v.Float32())`,
-				"Print(hwy.Float32ToFloat16(x.Float32() + 1))",
-				"Print(hwy.Float32ToBFloat16(x.Float32() + 1))",
+				// `fmt.Printf("%g\n", float64(v.Float32()))`,
+				`Print(hwy.Float32ToFloat16(x.Float32() + 1))`,
+				`Print(hwy.Float32ToBFloat16(x.Float32() + 1))`,
+			},
+			mistakes: []string{
+				// Without an expression or explicit cast, it shouldn't try to promote the half-precision.
+				`Print(x.Float32())`,
 			},
 		},
 	}

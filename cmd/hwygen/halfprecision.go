@@ -899,7 +899,19 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 			}
 		}
 		// Recurse into call arguments for type conversions like float64(input[i] - maxVal)
+		isBasicType := false
+		if ident, ok := e.Fun.(*ast.Ident); ok {
+			isBasicType = isBasicNumericType(ident.Name)
+		}
+
 		for i, arg := range e.Args {
+			// If not a basic type conversion (like float64(x), int(x)),
+			// skip wrapping simple half-precision arguments (identifiers, slice reads).
+			// This allows passing half-precision values to functions directly without
+			// promotion to float32.
+			if !isBasicType && isSimpleHalfPrecision(arg, ctx) {
+				continue
+			}
 			e.Args[i] = wrapHalfPrecisionExpr(arg, ctx, toFloat32Method)
 		}
 		return e
@@ -980,6 +992,39 @@ func isHalfPrecisionSliceExpr(indexExpr *ast.IndexExpr, ctx *transformContext) b
 	// Get the slice variable name
 	if ident, ok := indexExpr.X.(*ast.Ident); ok {
 		return ctx.halfPrecisionSlices[ident.Name]
+	}
+	return false
+}
+
+// isBasicNumericType returns true if the name corresponds to a Go basic numeric type.
+func isBasicNumericType(name string) bool {
+	switch name {
+	case "float32", "float64", "complex64", "complex128",
+		"int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64",
+		"uintptr", "byte", "rune":
+		return true
+	}
+	return false
+}
+
+// isSimpleHalfPrecision returns true if the expression represents a direct usage
+// of a half-precision value (variable or slice read) without any computation.
+func isSimpleHalfPrecision(expr ast.Expr, ctx *transformContext) bool {
+	// Unwrap parens
+	for {
+		if p, ok := expr.(*ast.ParenExpr); ok {
+			expr = p.X
+		} else {
+			break
+		}
+	}
+
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return ctx.halfPrecisionScalarVars != nil && ctx.halfPrecisionScalarVars[e.Name]
+	case *ast.IndexExpr:
+		return isHalfPrecisionSliceExpr(e, ctx)
 	}
 	return false
 }
