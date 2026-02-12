@@ -27,7 +27,7 @@ import (
 // [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15] -> [15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0]
 func Reverse_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	result := [16]float32{
 		data[15], data[14], data[13], data[12],
 		data[11], data[10], data[9], data[8],
@@ -41,7 +41,7 @@ func Reverse_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 // [0,1,2,3,4,5,6,7] -> [7,6,5,4,3,2,1,0]
 func Reverse_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	result := [8]float64{data[7], data[6], data[5], data[4], data[3], data[2], data[1], data[0]}
 	return archsimd.LoadFloat64x8Slice(result[:])
 }
@@ -49,7 +49,7 @@ func Reverse_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 // Reverse2_AVX512_F32x16 reverses pairs of lanes.
 func Reverse2_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 16; i += 2 {
 		data[i], data[i+1] = data[i+1], data[i]
 	}
@@ -59,7 +59,7 @@ func Reverse2_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 // Reverse2_AVX512_F64x8 reverses pairs of lanes.
 func Reverse2_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i += 2 {
 		data[i], data[i+1] = data[i+1], data[i]
 	}
@@ -69,7 +69,7 @@ func Reverse2_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 // Reverse4_AVX512_F32x16 reverses groups of 4 lanes.
 func Reverse4_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 16; i += 4 {
 		data[i], data[i+1], data[i+2], data[i+3] = data[i+3], data[i+2], data[i+1], data[i]
 	}
@@ -79,7 +79,7 @@ func Reverse4_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 // Reverse4_AVX512_F64x8 reverses groups of 4 lanes.
 func Reverse4_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i += 4 {
 		data[i], data[i+1], data[i+2], data[i+3] = data[i+3], data[i+2], data[i+1], data[i]
 	}
@@ -89,7 +89,7 @@ func Reverse4_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 // Reverse8_AVX512_F32x16 reverses groups of 8 lanes.
 func Reverse8_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 16; i += 8 {
 		for j := 0; j < 4; j++ {
 			data[i+j], data[i+7-j] = data[i+7-j], data[i+j]
@@ -109,7 +109,7 @@ func GetLane_AVX512_F32x16(v archsimd.Float32x16, idx int) float32 {
 		return 0
 	}
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	return data[idx]
 }
 
@@ -119,7 +119,7 @@ func GetLane_AVX512_F64x8(v archsimd.Float64x8, idx int) float64 {
 		return 0
 	}
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	return data[idx]
 }
 
@@ -129,7 +129,7 @@ func GetLane_AVX512_I32x16(v archsimd.Int32x16, idx int) int32 {
 		return 0
 	}
 	var data [16]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	return data[idx]
 }
 
@@ -139,7 +139,7 @@ func GetLane_AVX512_I64x8(v archsimd.Int64x8, idx int) int64 {
 		return 0
 	}
 	var data [8]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	return data[idx]
 }
 
@@ -149,7 +149,7 @@ func InsertLane_AVX512_F32x16(v archsimd.Float32x16, idx int, val float32) archs
 		return v
 	}
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	data[idx] = val
 	return archsimd.LoadFloat32x16Slice(data[:])
 }
@@ -160,7 +160,7 @@ func InsertLane_AVX512_F64x8(v archsimd.Float64x8, idx int, val float64) archsim
 		return v
 	}
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	data[idx] = val
 	return archsimd.LoadFloat64x8Slice(data[:])
 }
@@ -168,8 +168,8 @@ func InsertLane_AVX512_F64x8(v archsimd.Float64x8, idx int, val float64) archsim
 // InterleaveLower_AVX512_F32x16 interleaves lower halves.
 func InterleaveLower_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 	var dataA, dataB [16]float32
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [16]float32
 	for i := 0; i < 8; i++ {
 		result[2*i] = dataA[i]
@@ -181,8 +181,8 @@ func InterleaveLower_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16
 // InterleaveLower_AVX512_F64x8 interleaves lower halves.
 func InterleaveLower_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	var dataA, dataB [8]float64
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [8]float64
 	for i := 0; i < 4; i++ {
 		result[2*i] = dataA[i]
@@ -194,8 +194,8 @@ func InterleaveLower_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 // InterleaveUpper_AVX512_F32x16 interleaves upper halves.
 func InterleaveUpper_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 	var dataA, dataB [16]float32
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [16]float32
 	for i := 0; i < 8; i++ {
 		result[2*i] = dataA[8+i]
@@ -207,8 +207,8 @@ func InterleaveUpper_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16
 // InterleaveUpper_AVX512_F64x8 interleaves upper halves.
 func InterleaveUpper_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	var dataA, dataB [8]float64
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [8]float64
 	for i := 0; i < 4; i++ {
 		result[2*i] = dataA[4+i]
@@ -217,11 +217,63 @@ func InterleaveUpper_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	return archsimd.LoadFloat64x8Slice(result[:])
 }
 
+// InterleaveLower_AVX512_I32x16 interleaves lower halves of int32 vectors.
+func InterleaveLower_AVX512_I32x16(a, b archsimd.Int32x16) archsimd.Int32x16 {
+	var dataA, dataB [16]int32
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [16]int32
+	for i := 0; i < 8; i++ {
+		result[2*i] = dataA[i]
+		result[2*i+1] = dataB[i]
+	}
+	return archsimd.LoadInt32x16(&result)
+}
+
+// InterleaveLower_AVX512_I64x8 interleaves lower halves of int64 vectors.
+func InterleaveLower_AVX512_I64x8(a, b archsimd.Int64x8) archsimd.Int64x8 {
+	var dataA, dataB [8]int64
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [8]int64
+	for i := 0; i < 4; i++ {
+		result[2*i] = dataA[i]
+		result[2*i+1] = dataB[i]
+	}
+	return archsimd.LoadInt64x8(&result)
+}
+
+// InterleaveUpper_AVX512_I32x16 interleaves upper halves of int32 vectors.
+func InterleaveUpper_AVX512_I32x16(a, b archsimd.Int32x16) archsimd.Int32x16 {
+	var dataA, dataB [16]int32
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [16]int32
+	for i := 0; i < 8; i++ {
+		result[2*i] = dataA[8+i]
+		result[2*i+1] = dataB[8+i]
+	}
+	return archsimd.LoadInt32x16(&result)
+}
+
+// InterleaveUpper_AVX512_I64x8 interleaves upper halves of int64 vectors.
+func InterleaveUpper_AVX512_I64x8(a, b archsimd.Int64x8) archsimd.Int64x8 {
+	var dataA, dataB [8]int64
+	a.Store(&dataA)
+	b.Store(&dataB)
+	var result [8]int64
+	for i := 0; i < 4; i++ {
+		result[2*i] = dataA[4+i]
+		result[2*i+1] = dataB[4+i]
+	}
+	return archsimd.LoadInt64x8(&result)
+}
+
 // ConcatLowerLower_AVX512_F32x16 concatenates lower halves.
 func ConcatLowerLower_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 	var dataA, dataB [16]float32
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [16]float32
 	copy(result[:8], dataA[:8])
 	copy(result[8:], dataB[:8])
@@ -231,8 +283,8 @@ func ConcatLowerLower_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x1
 // ConcatLowerLower_AVX512_F64x8 concatenates lower halves.
 func ConcatLowerLower_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	var dataA, dataB [8]float64
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [8]float64
 	copy(result[:4], dataA[:4])
 	copy(result[4:], dataB[:4])
@@ -242,8 +294,8 @@ func ConcatLowerLower_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 // OddEven_AVX512_F32x16 combines odd lanes from a with even lanes from b.
 func OddEven_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 	var dataA, dataB [16]float32
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [16]float32
 	for i := 0; i < 16; i++ {
 		if i%2 == 0 {
@@ -258,8 +310,8 @@ func OddEven_AVX512_F32x16(a, b archsimd.Float32x16) archsimd.Float32x16 {
 // OddEven_AVX512_F64x8 combines odd lanes from a with even lanes from b.
 func OddEven_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 	var dataA, dataB [8]float64
-	a.StoreSlice(dataA[:])
-	b.StoreSlice(dataB[:])
+	a.Store(&dataA)
+	b.Store(&dataB)
 	var result [8]float64
 	for i := 0; i < 8; i++ {
 		if i%2 == 0 {
@@ -274,7 +326,7 @@ func OddEven_AVX512_F64x8(a, b archsimd.Float64x8) archsimd.Float64x8 {
 // DupEven_AVX512_F32x16 duplicates even lanes.
 func DupEven_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [16]float32
 	for i := 0; i < 16; i += 2 {
 		result[i] = data[i]
@@ -286,7 +338,7 @@ func DupEven_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 // DupEven_AVX512_F64x8 duplicates even lanes.
 func DupEven_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [8]float64
 	for i := 0; i < 8; i += 2 {
 		result[i] = data[i]
@@ -298,7 +350,7 @@ func DupEven_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 // DupOdd_AVX512_F32x16 duplicates odd lanes.
 func DupOdd_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [16]float32
 	for i := 0; i < 16; i += 2 {
 		result[i] = data[i+1]
@@ -310,7 +362,7 @@ func DupOdd_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 // DupOdd_AVX512_F64x8 duplicates odd lanes.
 func DupOdd_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [8]float64
 	for i := 0; i < 8; i += 2 {
 		result[i] = data[i+1]
@@ -323,7 +375,7 @@ func DupOdd_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 // Each 128-bit block = 4 float32 lanes
 func SwapAdjacentBlocks_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16 {
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	// Swap blocks: [0-3] <-> [4-7], [8-11] <-> [12-15]
 	var result [16]float32
 	copy(result[0:4], data[4:8])
@@ -337,7 +389,7 @@ func SwapAdjacentBlocks_AVX512_F32x16(v archsimd.Float32x16) archsimd.Float32x16
 // Each 128-bit block = 2 float64 lanes
 func SwapAdjacentBlocks_AVX512_F64x8(v archsimd.Float64x8) archsimd.Float64x8 {
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	// Swap blocks: [0-1] <-> [2-3], [4-5] <-> [6-7]
 	var result [8]float64
 	copy(result[0:2], data[2:4])
@@ -358,7 +410,7 @@ func SlideUpLanes_AVX512_F32x16(v archsimd.Float32x16, offset int) archsimd.Floa
 		return archsimd.Float32x16{}
 	}
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [16]float32
 	copy(result[offset:], data[:16-offset])
 	return archsimd.LoadFloat32x16Slice(result[:])
@@ -373,7 +425,7 @@ func SlideUpLanes_AVX512_F64x8(v archsimd.Float64x8, offset int) archsimd.Float6
 		return archsimd.Float64x8{}
 	}
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [8]float64
 	copy(result[offset:], data[:8-offset])
 	return archsimd.LoadFloat64x8Slice(result[:])
@@ -388,7 +440,7 @@ func SlideUpLanes_AVX512_I32x16(v archsimd.Int32x16, offset int) archsimd.Int32x
 		return archsimd.Int32x16{}
 	}
 	var data [16]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [16]int32
 	copy(result[offset:], data[:16-offset])
 	return archsimd.LoadInt32x16Slice(result[:])
@@ -403,7 +455,7 @@ func SlideUpLanes_AVX512_I64x8(v archsimd.Int64x8, offset int) archsimd.Int64x8 
 		return archsimd.Int64x8{}
 	}
 	var data [8]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [8]int64
 	copy(result[offset:], data[:8-offset])
 	return archsimd.LoadInt64x8Slice(result[:])
@@ -418,7 +470,7 @@ func SlideUpLanes_AVX512_Uint32x16(v archsimd.Uint32x16, offset int) archsimd.Ui
 		return archsimd.Uint32x16{}
 	}
 	var data [16]uint32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [16]uint32
 	copy(result[offset:], data[:16-offset])
 	return archsimd.LoadUint32x16Slice(result[:])
@@ -433,7 +485,7 @@ func SlideUpLanes_AVX512_Uint64x8(v archsimd.Uint64x8, offset int) archsimd.Uint
 		return archsimd.Uint64x8{}
 	}
 	var data [8]uint64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [8]uint64
 	copy(result[offset:], data[:8-offset])
 	return archsimd.LoadUint64x8Slice(result[:])
@@ -448,7 +500,7 @@ func SlideDownLanes_AVX512_F32x16(v archsimd.Float32x16, offset int) archsimd.Fl
 		return archsimd.Float32x16{}
 	}
 	var data [16]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [16]float32
 	copy(result[:16-offset], data[offset:])
 	return archsimd.LoadFloat32x16Slice(result[:])
@@ -463,7 +515,7 @@ func SlideDownLanes_AVX512_F64x8(v archsimd.Float64x8, offset int) archsimd.Floa
 		return archsimd.Float64x8{}
 	}
 	var data [8]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	var result [8]float64
 	copy(result[:8-offset], data[offset:])
 	return archsimd.LoadFloat64x8Slice(result[:])

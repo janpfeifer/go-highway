@@ -43,11 +43,11 @@ func BaseQKVDense_neon_Float16(x []hwy.Float16, wQKV []hwy.Float16, biasQ []hwy.
 			acc3 := asm.ZeroFloat16x8()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vW := asm.LoadFloat16x8Ptr(unsafe.Pointer(&wQKV[wRow+p:][0]))
-				vX0 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[xRow0+p:][0]))
-				vX1 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[xRow1+p:][0]))
-				vX2 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[xRow2+p:][0]))
-				vX3 := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[xRow3+p:][0]))
+				vW := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(wQKV[wRow+p:]))), len(wQKV[wRow+p:])))
+				vX0 := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow0+p:]))), len(x[xRow0+p:])))
+				vX1 := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow1+p:]))), len(x[xRow1+p:])))
+				vX2 := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow2+p:]))), len(x[xRow2+p:])))
+				vX3 := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow3+p:]))), len(x[xRow3+p:])))
 				vX0.MulAddAcc(vW, &acc0)
 				vX1.MulAddAcc(vW, &acc1)
 				vX2.MulAddAcc(vW, &acc2)
@@ -111,8 +111,8 @@ func BaseQKVDense_neon_Float16(x []hwy.Float16, wQKV []hwy.Float16, biasQ []hwy.
 			acc := asm.ZeroFloat16x8()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vX := asm.LoadFloat16x8Ptr(unsafe.Pointer(&x[xRow+p:][0]))
-				vW := asm.LoadFloat16x8Ptr(unsafe.Pointer(&wQKV[wRow+p:][0]))
+				vX := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow+p:]))), len(x[xRow+p:])))
+				vW := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(wQKV[wRow+p:]))), len(wQKV[wRow+p:])))
 				vX.MulAddAcc(vW, &acc)
 			}
 			sum := acc.ReduceSum()
@@ -173,11 +173,11 @@ func BaseQKVDense_neon_BFloat16(x []hwy.BFloat16, wQKV []hwy.BFloat16, biasQ []h
 			acc3 := asm.ZeroBFloat16x8()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vW := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&wQKV[wRow+p:][0]))
-				vX0 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[xRow0+p:][0]))
-				vX1 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[xRow1+p:][0]))
-				vX2 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[xRow2+p:][0]))
-				vX3 := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[xRow3+p:][0]))
+				vW := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(wQKV[wRow+p:]))), len(wQKV[wRow+p:])))
+				vX0 := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow0+p:]))), len(x[xRow0+p:])))
+				vX1 := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow1+p:]))), len(x[xRow1+p:])))
+				vX2 := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow2+p:]))), len(x[xRow2+p:])))
+				vX3 := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow3+p:]))), len(x[xRow3+p:])))
 				vX0.MulAddAcc(vW, &acc0)
 				vX1.MulAddAcc(vW, &acc1)
 				vX2.MulAddAcc(vW, &acc2)
@@ -241,8 +241,8 @@ func BaseQKVDense_neon_BFloat16(x []hwy.BFloat16, wQKV []hwy.BFloat16, biasQ []h
 			acc := asm.ZeroBFloat16x8()
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vX := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&x[xRow+p:][0]))
-				vW := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&wQKV[wRow+p:][0]))
+				vX := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(x[xRow+p:]))), len(x[xRow+p:])))
+				vW := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(wQKV[wRow+p:]))), len(wQKV[wRow+p:])))
 				vX.MulAddAcc(vW, &acc)
 			}
 			sum := acc.ReduceSum()

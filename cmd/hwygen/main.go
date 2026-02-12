@@ -17,6 +17,8 @@
 // Usage:
 //
 //	hwygen -input sigmoid.go -output . -targets avx2,fallback
+//	hwygen -c -input math.go -output . -targets neon          # C code only
+//	hwygen -asm -input math.go -output . -targets neon        # C → Go assembly via GOAT
 //
 // Or via go:generate:
 //
@@ -25,6 +27,10 @@
 // The generator takes Go source files containing hwy.* calls and produces:
 //  1. A dispatcher file with runtime CPU detection
 //  2. Target-specific implementation files (AVX2, AVX512, fallback)
+//
+// The -c flag generates GOAT-compatible C files for inspection.
+// The -asm flag generates C files, compiles them to Go assembly via GOAT,
+// and emits Go wrapper functions.
 package main
 
 import (
@@ -41,7 +47,10 @@ var (
 	targets        = flag.String("targets", "avx2,fallback", "Comma-separated targets ("+strings.Join(AvailableTargets(), ",")+") or 'all'")
 	packageOut     = flag.String("pkg", "", "Output package name (default: same as input)")
 	dispatchPrefix = flag.String("dispatch", "", "Dispatch file prefix (default: derived from function name)")
-	bulkMode       = flag.Bool("bulk", false, "Generate bulk C code for NEON (for GOAT compilation)")
+	cMode          = flag.Bool("c", false, "Generate C code only (supports neon, sve_darwin, sve_linux, avx2, avx512 targets)")
+	asmMode        = flag.Bool("asm", false, "Generate C code and compile to Go assembly via GOAT (supports neon, sve_darwin, sve_linux, avx2, avx512 targets)")
+	fusionMode     = flag.Bool("fusion", false, "Enable IR-based fusion optimization for cross-package function inlining and loop fusion")
+	verboseMode    = flag.Bool("v", false, "Verbose output (show fusion statistics, IR dumps, etc.)")
 )
 
 func main() {
@@ -53,9 +62,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Parse target list
-	targetList := parseTargets(*targets)
-	if len(targetList) == 0 {
+	// Parse target list with per-target mode suffixes
+	targetSpecs, err := parseTargets(*targets, *cMode, *asmMode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	if len(targetSpecs) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: no valid targets specified\n")
 		os.Exit(1)
 	}
@@ -65,10 +78,11 @@ func main() {
 		InputFile:      *inputFile,
 		OutputDir:      *outputDir,
 		OutputPrefix:   *outputPrefix,
-		Targets:        targetList,
+		TargetSpecs:    targetSpecs,
 		PackageOut:     *packageOut,
 		DispatchPrefix: *dispatchPrefix,
-		BulkMode:       *bulkMode,
+		FusionMode:     *fusionMode,
+		Verbose:        *verboseMode,
 	}
 
 	if err := gen.Run(); err != nil {
@@ -76,24 +90,59 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *bulkMode {
-		fmt.Printf("Successfully generated bulk C code for targets: %s\n", strings.Join(targetList, ", "))
-	} else {
-		fmt.Printf("Successfully generated code for targets: %s\n", strings.Join(targetList, ", "))
+	// Build display string
+	var names []string
+	for _, ts := range targetSpecs {
+		name := strings.ToLower(ts.Target.Name)
+		switch ts.Mode {
+		case TargetModeAsm:
+			name += ":asm"
+		case TargetModeC:
+			name += ":c"
+		}
+		names = append(names, name)
 	}
+	fmt.Printf("Successfully generated code for targets: %s\n", strings.Join(names, ", "))
 }
 
-func parseTargets(s string) []string {
+// globalMode returns the TargetMode implied by the global -c and -asm flags.
+func globalMode(globalC, globalAsm bool) TargetMode {
+	if globalAsm {
+		return TargetModeAsm
+	}
+	if globalC {
+		return TargetModeC
+	}
+	return TargetModeGoSimd
+}
+
+// parseTargets parses the comma-separated target string into TargetSpecs.
+// Per-target mode suffixes (e.g., "neon:asm") override the global flags.
+func parseTargets(s string, globalC, globalAsm bool) ([]TargetSpec, error) {
 	parts := strings.Split(s, ",")
-	var result []string
+	var result []TargetSpec
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		if p != "" {
-			result = append(result, p)
+		if p == "" {
+			continue
 		}
+		if p == "all" {
+			for _, name := range AvailableTargets() {
+				t, _ := GetTarget(name)
+				result = append(result, TargetSpec{Target: t, Mode: globalMode(globalC, globalAsm)})
+			}
+			return result, nil
+		}
+		name, mode := parseTargetSpec(p)
+		// Global flags apply when no per-target mode and target isn't fallback
+		if mode == TargetModeGoSimd && name != "fallback" {
+			mode = globalMode(globalC, globalAsm)
+		}
+		t, err := GetTarget(name)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, TargetSpec{Target: t, Mode: mode})
 	}
-	if len(result) == 1 && result[0] == "all" {
-		return AvailableTargets()
-	}
-	return result
+	return result, nil
 }

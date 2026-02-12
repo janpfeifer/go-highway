@@ -65,6 +65,7 @@ func BasePackedMicroKernel4x2[T hwy.Floats](
 	_ = packedB[panelK*nr-1]
 
 	// Main loop: 4x unrolled for better ILP
+	// Use Load for pointer-based access without bounds checking
 	p := 0
 	for ; p+3 < panelK; p += 4 {
 		// --- Step 0 ---
@@ -162,6 +163,7 @@ func BasePackedMicroKernel4x2[T hwy.Floats](
 	}
 
 	// Write accumulators to output
+	// Use Store for pointer-based access without bounds checking
 	outIdx0 := outRowStart*outputStride + outColStart
 	outIdx1 := outIdx0 + outputStride
 	outIdx2 := outIdx1 + outputStride

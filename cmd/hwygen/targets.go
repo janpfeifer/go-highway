@@ -20,6 +20,34 @@ import (
 	"strings"
 )
 
+// TargetMode specifies how code should be generated for a target.
+type TargetMode int
+
+const (
+	TargetModeGoSimd TargetMode = iota // Pure Go simd/archsimd
+	TargetModeAsm                      // C -> GOAT -> Go assembly
+	TargetModeC                        // C only (inspection)
+)
+
+// TargetSpec pairs a Target with its generation mode.
+type TargetSpec struct {
+	Target Target
+	Mode   TargetMode
+}
+
+// parseTargetSpec parses a target spec string like "neon:asm" into its name and mode.
+func parseTargetSpec(spec string) (name string, mode TargetMode) {
+	if idx := strings.Index(spec, ":"); idx > 0 {
+		switch spec[idx+1:] {
+		case "asm":
+			return spec[:idx], TargetModeAsm
+		case "c":
+			return spec[:idx], TargetModeC
+		}
+	}
+	return spec, TargetModeGoSimd
+}
+
 // Target represents an architecture-specific code generation target.
 type Target struct {
 	Name       string            // "AVX2", "AVX512", "NEON", "Fallback"
@@ -60,11 +88,11 @@ func AVX2Target() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x8Slice
-			"LoadFull":  {Name: "LoadFull", IsMethod: false},                  // archsimd.LoadFloat32x8 (pointer based)
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX2_Float32 - 4 separate loads
-			"Store":     {Name: "Store", IsMethod: true},                      // v.StoreSlice
-			"StoreFull": {Name: "StoreFull", IsMethod: true},                  // v.Store (pointer based)
+			"Load":       {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x8 (pointer based, fast)
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},                 // archsimd.LoadFloat32x8Slice (slice based, safe)
+			"Load4":      {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX2_Float32 - 4 separate loads
+			"Store":      {Name: "Store", IsMethod: true},                      // v.Store (pointer based, fast)
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},                 // v.StoreSlice (slice based, safe)
 			"Set":       {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8
 			"Const":     {Name: "Broadcast", IsMethod: false}, // archsimd.BroadcastFloat32x8 (same as Set)
 			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
@@ -270,12 +298,12 @@ func AVX512Target() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},
-			"LoadFull":  {Name: "LoadFull", IsMethod: false},                  // archsimd.LoadFloat32x16 (pointer based)
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX512_Float32 - 4 separate loads
-			"Store":     {Name: "Store", IsMethod: true},
-			"StoreFull": {Name: "StoreFull", IsMethod: true},                  // v.Store (pointer based)
-			"Set":       {Name: "Broadcast", IsMethod: false},
+			"Load":       {Name: "Load", IsMethod: false},                      // archsimd.LoadFloat32x16 (pointer based, fast)
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},                 // archsimd.LoadFloat32x16Slice (slice based, safe)
+			"Load4":      {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4_AVX512_Float32 - 4 separate loads
+			"Store":      {Name: "Store", IsMethod: true},                      // v.Store (pointer based, fast)
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},                 // v.StoreSlice (slice based, safe)
+			"Set":        {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Package: "special", Name: "Zero", IsMethod: false}, // Use Broadcast(0)
 			"MaskLoad":  {Name: "MaskLoad", IsMethod: false},
@@ -482,11 +510,11 @@ func FallbackTarget() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations - use hwy package =====
-			"Load":      {Package: "hwy", Name: "Load", IsMethod: false},
-			"LoadFull":  {Package: "hwy", Name: "LoadFull", IsMethod: false}, // hwy.LoadFull (no bounds checking)
-			"Load4":     {Package: "hwy", Name: "Load4", IsMethod: false}, // hwy.Load4 fallback (4 separate loads)
-			"Store":     {Package: "hwy", Name: "Store", IsMethod: false},
-			"StoreFull": {Package: "hwy", Name: "StoreFull", IsMethod: false}, // hwy.StoreFull (no bounds checking)
+			"Load":       {Package: "hwy", Name: "Load", IsMethod: false},      // hwy.Load (pointer based, fast)
+			"LoadSlice":  {Package: "hwy", Name: "LoadSlice", IsMethod: false}, // hwy.LoadSlice (slice based, safe)
+			"Load4":      {Package: "hwy", Name: "Load4", IsMethod: false},     // hwy.Load4 fallback (4 separate loads)
+			"Store":      {Package: "hwy", Name: "Store", IsMethod: false},     // hwy.Store (pointer based, fast)
+			"StoreSlice": {Package: "hwy", Name: "StoreSlice", IsMethod: false}, // hwy.StoreSlice (slice based, safe)
 			"Set":       {Package: "hwy", Name: "Set", IsMethod: false},
 			"Zero":      {Package: "hwy", Name: "Zero", IsMethod: false},
 			"MaskLoad":  {Package: "hwy", Name: "MaskLoad", IsMethod: false},
@@ -682,11 +710,11 @@ func NEONTarget() Target {
 		},
 		OpMap: map[string]OpInfo{
 			// ===== Load/Store operations =====
-			"Load":      {Name: "Load", IsMethod: false},
-			"LoadFull":  {Name: "LoadFull", IsMethod: false},  // asm.LoadFloat32x4 (pointer based)
-			"Load4":     {Name: "Load4", IsMethod: false},    // asm.Load4Float32x4Slice - single ld1 instruction
-			"Store":     {Name: "Store", IsMethod: true},
-			"StoreFull": {Name: "StoreFull", IsMethod: true}, // v.Store (pointer based)
+			"Load":       {Name: "Load", IsMethod: false},       // asm.LoadFloat32x4 (pointer based, fast)
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},  // asm.LoadFloat32x4Slice (slice based, safe)
+			"Load4":      {Name: "Load4", IsMethod: false},      // asm.Load4Float32x4Slice - single ld1 instruction
+			"Store":      {Name: "Store", IsMethod: true},       // v.Store (pointer based, fast)
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},  // v.StoreSlice (slice based, safe)
 			"Set":       {Name: "Broadcast", IsMethod: false},
 			"Const":     {Name: "Broadcast", IsMethod: false}, // Same as Set
 			"Zero":      {Name: "Zero", IsMethod: false},
@@ -872,12 +900,426 @@ func NEONTarget() Target {
 	}
 }
 
+// SVEDarwinTarget returns the target configuration for SVE on macOS (Apple M4+).
+// Uses SME streaming mode with fixed SVL=512.
+func SVEDarwinTarget() Target {
+	return Target{
+		Name:       "SVE_DARWIN",
+		BuildTag:   "darwin && arm64",
+		VecWidth:   64, // SVL=512 bits on Apple M4
+		VecPackage: "asm",
+		TypeMap: map[string]string{
+			"float32":      "Float32x16",
+			"float64":      "Float64x8",
+			"int32":        "Int32x16",
+			"int64":        "Int64x8",
+			"uint32":       "Uint32x16",
+			"uint64":       "Uint64x8",
+			"hwy.Float16":  "Float16x32",
+			"hwy.BFloat16": "BFloat16x32",
+		},
+		OpMap: map[string]OpInfo{
+			// ===== Load/Store operations =====
+			"Load":       {Name: "Load", IsMethod: false},
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},
+			"Load4":      {Name: "Load4", IsMethod: false},
+			"Store":      {Name: "Store", IsMethod: true},
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},
+			"Set":        {Name: "Broadcast", IsMethod: false},
+			"Const":      {Name: "Broadcast", IsMethod: false},
+			"Zero":       {Name: "Zero", IsMethod: false},
+			"MaskLoad":   {Name: "MaskLoad", IsMethod: false},
+			"MaskStore":  {Name: "MaskStore", IsMethod: true},
+
+			// ===== Arithmetic operations =====
+			"Add": {Name: "Add", IsMethod: true},
+			"Sub": {Name: "Sub", IsMethod: true},
+			"Mul": {Name: "Mul", IsMethod: true},
+			"Div": {Name: "Div", IsMethod: true},
+			"Neg": {Name: "Neg", IsMethod: true},
+			"Abs": {Name: "Abs", IsMethod: true},
+			"Min": {Name: "Min", IsMethod: true},
+			"Max": {Name: "Max", IsMethod: true},
+
+			// ===== Logical operations =====
+			"And":    {Name: "And", IsMethod: true},
+			"Or":     {Name: "Or", IsMethod: true},
+			"Xor":    {Name: "Xor", IsMethod: true},
+			"AndNot": {Name: "AndNot", IsMethod: true},
+			"Not":    {Name: "Not", IsMethod: true},
+
+			// ===== Shuffle operations =====
+			"TableLookupBytes": {Name: "TableLookupBytes", IsMethod: true},
+
+			// ===== Core math operations =====
+			"Sqrt":               {Name: "Sqrt", IsMethod: true},
+			"RSqrt":              {Name: "ReciprocalSqrt", IsMethod: true},
+			"RSqrtNewtonRaphson": {Package: "hwy", Name: "RSqrtNewtonRaphson_SVE_DARWIN", IsMethod: false},
+			"RSqrtPrecise":       {Package: "hwy", Name: "RSqrtPrecise_SVE_DARWIN", IsMethod: false},
+			"FMA":                {Name: "MulAdd", IsMethod: true},
+			"MulAdd":             {Name: "MulAdd", IsMethod: true},
+			"Pow":                {Name: "Pow", IsMethod: true},
+
+			// ===== In-place operations (allocation-free) =====
+			"MulAddAcc":  {Name: "MulAddAcc", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "MulAdd"},
+			"MulAddInto": {Name: "MulAddInto", IsMethod: true, IsInPlace: true, AccArg: 2, InPlaceOf: "MulAdd"},
+			"AddInto":    {Name: "AddInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Add"},
+			"SubInto":    {Name: "SubInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Sub"},
+			"MulInto":    {Name: "MulInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Mul"},
+			"DivInto":    {Name: "DivInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Div"},
+			"MinInto":    {Name: "MinInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Min"},
+			"MaxInto":    {Name: "MaxInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Max"},
+
+			// ===== Rounding operations =====
+			"RoundToEven": {Name: "RoundToEven", IsMethod: true},
+
+			// ===== Type reinterpretation (bit cast, no conversion) =====
+			"AsInt32":   {Name: "AsInt32x16", IsMethod: true},
+			"AsFloat32": {Name: "AsFloat32x16", IsMethod: true},
+			"AsInt64":   {Name: "AsInt64x8", IsMethod: true},
+			"AsFloat64": {Name: "AsFloat64x8", IsMethod: true},
+
+			// ===== Comparison methods (return masks) =====
+			"Greater": {Name: "Greater", IsMethod: true},
+			"Less":    {Name: "Less", IsMethod: true},
+
+			// ===== Mask operations =====
+			"MaskAnd":    {Name: "And", IsMethod: true},
+			"MaskOr":     {Name: "Or", IsMethod: true},
+			"MaskNot":    {Package: "special", Name: "MaskNot", IsMethod: false},
+			"MaskAndNot": {Name: "MaskAndNot", IsMethod: false},
+
+			// ===== Conditional/Blend operations =====
+			"Merge": {Name: "Merge", IsMethod: true},
+
+			// ===== Integer shift operations =====
+			"ShiftAllLeft":  {Name: "ShiftAllLeft", IsMethod: true},
+			"ShiftAllRight": {Name: "ShiftAllRight", IsMethod: true},
+			"ShiftLeft":     {Name: "ShiftAllLeft", IsMethod: true},
+			"ShiftRight":    {Name: "ShiftAllRight", IsMethod: true},
+
+			// ===== Reductions =====
+			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
+			"ReduceMin": {Name: "ReduceMin", IsMethod: true},
+			"ReduceMax": {Name: "ReduceMax", IsMethod: true},
+
+			// ===== Bit manipulation =====
+			"PopCount": {Package: "hwy", Name: "PopCount", IsMethod: false},
+
+			// ===== Comparisons =====
+			"Equal":        {Name: "Equal", IsMethod: true},
+			"NotEqual":     {Name: "NotEqual", IsMethod: true},
+			"LessThan":     {Name: "LessThan", IsMethod: true},
+			"GreaterThan":  {Name: "GreaterThan", IsMethod: true},
+			"LessEqual":    {Name: "LessEqual", IsMethod: true},
+			"GreaterEqual": {Name: "GreaterEqual", IsMethod: true},
+
+			// ===== Conditional =====
+			"IfThenElse": {Name: "IfThenElse", IsMethod: false},
+
+			// ===== Initialization =====
+			"Iota":     {Name: "Iota", IsMethod: false},
+			"SignBit":  {Name: "SignBit", IsMethod: false},
+			"MaxLanes": {Package: "special", Name: "MaxLanes", IsMethod: false},
+			"NumLanes": {Package: "special", Name: "NumLanes", IsMethod: false},
+			"Lanes":    {Package: "special", Name: "Lanes", IsMethod: false},
+
+			// ===== Type references (not functions, but parser captures them) =====
+			"Vec":  {Package: "special", Name: "Vec", IsMethod: false},
+			"Mask": {Package: "special", Name: "Mask", IsMethod: false},
+
+			// ===== Permutation/Shuffle =====
+			"Reverse":            {Name: "Reverse", IsMethod: true},
+			"Reverse2":           {Name: "Reverse2", IsMethod: false},
+			"Reverse4":           {Name: "Reverse4", IsMethod: false},
+			"Broadcast":          {Name: "Broadcast", IsMethod: true},
+			"GetLane":            {Name: "Get", IsMethod: true},
+			"InsertLane":         {Name: "InsertLane", IsMethod: false},
+			"InterleaveLower":    {Package: "hwy", Name: "InterleaveLower", IsMethod: false},
+			"InterleaveUpper":    {Package: "hwy", Name: "InterleaveUpper", IsMethod: false},
+			"ConcatLowerLower":   {Name: "ConcatLowerLower", IsMethod: false},
+			"ConcatUpperUpper":   {Name: "ConcatUpperUpper", IsMethod: false},
+			"ConcatLowerUpper":   {Name: "ConcatLowerUpper", IsMethod: false},
+			"ConcatUpperLower":   {Name: "ConcatUpperLower", IsMethod: false},
+			"OddEven":            {Name: "OddEven", IsMethod: false},
+			"DupEven":            {Name: "DupEven", IsMethod: false},
+			"DupOdd":             {Name: "DupOdd", IsMethod: false},
+			"SwapAdjacentBlocks": {Name: "SwapAdjacentBlocks", IsMethod: false},
+			"SlideUpLanes":       {Package: "asm", Name: "SlideUpLanes", IsMethod: false},
+			"SlideDownLanes":     {Package: "asm", Name: "SlideDownLanes", IsMethod: false},
+
+			// ===== Type Conversions =====
+			"ConvertToInt32":   {Name: "ConvertToInt32", IsMethod: true},
+			"ConvertToFloat32": {Name: "ConvertToFloat32", IsMethod: true},
+			"Round":            {Name: "Round", IsMethod: false},
+			"Trunc":            {Name: "Trunc", IsMethod: false},
+			"Ceil":             {Name: "Ceil", IsMethod: false},
+			"Floor":            {Name: "Floor", IsMethod: false},
+			"NearestInt":       {Name: "NearestInt", IsMethod: false},
+
+			// ===== Compress/Expand =====
+			"Compress":      {Name: "Compress", IsMethod: false},
+			"Expand":        {Name: "Expand", IsMethod: false},
+			"CompressStore": {Name: "CompressStore", IsMethod: false},
+			"CountTrue":     {Name: "CountTrue", IsMethod: false},
+			"AllTrue":       {Name: "AllTrue", IsMethod: false},
+			"AllFalse":      {Name: "AllFalse", IsMethod: false},
+			"FindFirstTrue": {Name: "FindFirstTrue", IsMethod: false},
+			"FindLastTrue":  {Name: "FindLastTrue", IsMethod: false},
+			"FirstN":        {Name: "FirstN", IsMethod: false},
+			"LastN":         {Name: "LastN", IsMethod: false},
+			"BitsFromMask":  {Package: "hwy", Name: "BitsFromMask", IsMethod: false},
+
+			// ===== IEEE 754 Exponent/Mantissa operations =====
+			"GetExponent": {Name: "GetExponent", IsMethod: true},
+			"GetMantissa": {Name: "GetMantissa", IsMethod: true},
+
+			// ===== contrib/math: Transcendental functions =====
+			"Exp":     {Package: "math", SubPackage: "math", Name: "BaseExpVec", IsMethod: false},
+			"Exp2":    {Package: "math", SubPackage: "math", Name: "BaseExp2Vec", IsMethod: false},
+			"Exp10":   {Package: "math", SubPackage: "math", Name: "BaseExp10Vec", IsMethod: false},
+			"Log":     {Package: "math", SubPackage: "math", Name: "BaseLogVec", IsMethod: false},
+			"Log2":    {Package: "math", SubPackage: "math", Name: "BaseLog2Vec", IsMethod: false},
+			"Log10":   {Package: "math", SubPackage: "math", Name: "BaseLog10Vec", IsMethod: false},
+			"Sin":     {Package: "math", SubPackage: "math", Name: "BaseSinVec", IsMethod: false},
+			"Cos":     {Package: "math", SubPackage: "math", Name: "BaseCosVec", IsMethod: false},
+			"SinCos":  {Package: "math", SubPackage: "math", Name: "BaseSinCosVec", IsMethod: false},
+			"Tanh":    {Package: "math", SubPackage: "math", Name: "BaseTanhVec", IsMethod: false},
+			"Sinh":    {Package: "math", SubPackage: "math", Name: "BaseSinhVec", IsMethod: false},
+			"Cosh":    {Package: "math", SubPackage: "math", Name: "BaseCoshVec", IsMethod: false},
+			"Asinh":   {Package: "math", SubPackage: "math", Name: "BaseAsinhVec", IsMethod: false},
+			"Acosh":   {Package: "math", SubPackage: "math", Name: "BaseAcoshVec", IsMethod: false},
+			"Atanh":   {Package: "math", SubPackage: "math", Name: "BaseAtanhVec", IsMethod: false},
+			"Sigmoid": {Package: "math", SubPackage: "math", Name: "BaseSigmoidVec", IsMethod: false},
+			"Erf":     {Package: "math", SubPackage: "math", Name: "BaseErfVec", IsMethod: false},
+
+			// ===== contrib/vec: Dot product operations =====
+			"Dot": {Package: "vec", SubPackage: "vec", Name: "Dot", IsMethod: false},
+
+			// ===== IEEE 754 Operations =====
+			"Pow2": {Name: "Pow2", IsMethod: true},
+
+			// ===== Special float checks =====
+			"IsInf": {Package: "special", Name: "IsInf", IsMethod: true},
+			"IsNaN": {Package: "special", Name: "IsNaN", IsMethod: true},
+		},
+	}
+}
+
+// SVELinuxTarget returns the target configuration for SVE on Linux (Graviton 3/4, Neoverse).
+// Uses native SVE with dynamic vector length.
+func SVELinuxTarget() Target {
+	return Target{
+		Name:       "SVE_LINUX",
+		BuildTag:   "linux && arm64",
+		VecWidth:   64, // 512-bit default (dynamic at runtime, code generator handles the dynamic part)
+		VecPackage: "asm",
+		TypeMap: map[string]string{
+			"float32":      "Float32x16",
+			"float64":      "Float64x8",
+			"int32":        "Int32x16",
+			"int64":        "Int64x8",
+			"uint32":       "Uint32x16",
+			"uint64":       "Uint64x8",
+			"hwy.Float16":  "Float16x32",
+			"hwy.BFloat16": "BFloat16x32",
+		},
+		OpMap: map[string]OpInfo{
+			// ===== Load/Store operations =====
+			"Load":       {Name: "Load", IsMethod: false},
+			"LoadSlice":  {Name: "LoadSlice", IsMethod: false},
+			"Load4":      {Name: "Load4", IsMethod: false},
+			"Store":      {Name: "Store", IsMethod: true},
+			"StoreSlice": {Name: "StoreSlice", IsMethod: true},
+			"Set":        {Name: "Broadcast", IsMethod: false},
+			"Const":      {Name: "Broadcast", IsMethod: false},
+			"Zero":       {Name: "Zero", IsMethod: false},
+			"MaskLoad":   {Name: "MaskLoad", IsMethod: false},
+			"MaskStore":  {Name: "MaskStore", IsMethod: true},
+
+			// ===== Arithmetic operations =====
+			"Add": {Name: "Add", IsMethod: true},
+			"Sub": {Name: "Sub", IsMethod: true},
+			"Mul": {Name: "Mul", IsMethod: true},
+			"Div": {Name: "Div", IsMethod: true},
+			"Neg": {Name: "Neg", IsMethod: true},
+			"Abs": {Name: "Abs", IsMethod: true},
+			"Min": {Name: "Min", IsMethod: true},
+			"Max": {Name: "Max", IsMethod: true},
+
+			// ===== Logical operations =====
+			"And":    {Name: "And", IsMethod: true},
+			"Or":     {Name: "Or", IsMethod: true},
+			"Xor":    {Name: "Xor", IsMethod: true},
+			"AndNot": {Name: "AndNot", IsMethod: true},
+			"Not":    {Name: "Not", IsMethod: true},
+
+			// ===== Shuffle operations =====
+			"TableLookupBytes": {Name: "TableLookupBytes", IsMethod: true},
+
+			// ===== Core math operations =====
+			"Sqrt":               {Name: "Sqrt", IsMethod: true},
+			"RSqrt":              {Name: "ReciprocalSqrt", IsMethod: true},
+			"RSqrtNewtonRaphson": {Package: "hwy", Name: "RSqrtNewtonRaphson_SVE_LINUX", IsMethod: false},
+			"RSqrtPrecise":       {Package: "hwy", Name: "RSqrtPrecise_SVE_LINUX", IsMethod: false},
+			"FMA":                {Name: "MulAdd", IsMethod: true},
+			"MulAdd":             {Name: "MulAdd", IsMethod: true},
+			"Pow":                {Name: "Pow", IsMethod: true},
+
+			// ===== In-place operations (allocation-free) =====
+			"MulAddAcc":  {Name: "MulAddAcc", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "MulAdd"},
+			"MulAddInto": {Name: "MulAddInto", IsMethod: true, IsInPlace: true, AccArg: 2, InPlaceOf: "MulAdd"},
+			"AddInto":    {Name: "AddInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Add"},
+			"SubInto":    {Name: "SubInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Sub"},
+			"MulInto":    {Name: "MulInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Mul"},
+			"DivInto":    {Name: "DivInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Div"},
+			"MinInto":    {Name: "MinInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Min"},
+			"MaxInto":    {Name: "MaxInto", IsMethod: true, IsInPlace: true, AccArg: 1, InPlaceOf: "Max"},
+
+			// ===== Rounding operations =====
+			"RoundToEven": {Name: "RoundToEven", IsMethod: true},
+
+			// ===== Type reinterpretation (bit cast, no conversion) =====
+			"AsInt32":   {Name: "AsInt32x16", IsMethod: true},
+			"AsFloat32": {Name: "AsFloat32x16", IsMethod: true},
+			"AsInt64":   {Name: "AsInt64x8", IsMethod: true},
+			"AsFloat64": {Name: "AsFloat64x8", IsMethod: true},
+
+			// ===== Comparison methods (return masks) =====
+			"Greater": {Name: "Greater", IsMethod: true},
+			"Less":    {Name: "Less", IsMethod: true},
+
+			// ===== Mask operations =====
+			"MaskAnd":    {Name: "And", IsMethod: true},
+			"MaskOr":     {Name: "Or", IsMethod: true},
+			"MaskNot":    {Package: "special", Name: "MaskNot", IsMethod: false},
+			"MaskAndNot": {Name: "MaskAndNot", IsMethod: false},
+
+			// ===== Conditional/Blend operations =====
+			"Merge": {Name: "Merge", IsMethod: true},
+
+			// ===== Integer shift operations =====
+			"ShiftAllLeft":  {Name: "ShiftAllLeft", IsMethod: true},
+			"ShiftAllRight": {Name: "ShiftAllRight", IsMethod: true},
+			"ShiftLeft":     {Name: "ShiftAllLeft", IsMethod: true},
+			"ShiftRight":    {Name: "ShiftAllRight", IsMethod: true},
+
+			// ===== Reductions =====
+			"ReduceSum": {Name: "ReduceSum", IsMethod: true},
+			"ReduceMin": {Name: "ReduceMin", IsMethod: true},
+			"ReduceMax": {Name: "ReduceMax", IsMethod: true},
+
+			// ===== Bit manipulation =====
+			"PopCount": {Package: "hwy", Name: "PopCount", IsMethod: false},
+
+			// ===== Comparisons =====
+			"Equal":        {Name: "Equal", IsMethod: true},
+			"NotEqual":     {Name: "NotEqual", IsMethod: true},
+			"LessThan":     {Name: "LessThan", IsMethod: true},
+			"GreaterThan":  {Name: "GreaterThan", IsMethod: true},
+			"LessEqual":    {Name: "LessEqual", IsMethod: true},
+			"GreaterEqual": {Name: "GreaterEqual", IsMethod: true},
+
+			// ===== Conditional =====
+			"IfThenElse": {Name: "IfThenElse", IsMethod: false},
+
+			// ===== Initialization =====
+			"Iota":     {Name: "Iota", IsMethod: false},
+			"SignBit":  {Name: "SignBit", IsMethod: false},
+			"MaxLanes": {Package: "special", Name: "MaxLanes", IsMethod: false},
+			"NumLanes": {Package: "special", Name: "NumLanes", IsMethod: false},
+			"Lanes":    {Package: "special", Name: "Lanes", IsMethod: false},
+
+			// ===== Type references (not functions, but parser captures them) =====
+			"Vec":  {Package: "special", Name: "Vec", IsMethod: false},
+			"Mask": {Package: "special", Name: "Mask", IsMethod: false},
+
+			// ===== Permutation/Shuffle =====
+			"Reverse":            {Name: "Reverse", IsMethod: true},
+			"Reverse2":           {Name: "Reverse2", IsMethod: false},
+			"Reverse4":           {Name: "Reverse4", IsMethod: false},
+			"Broadcast":          {Name: "Broadcast", IsMethod: true},
+			"GetLane":            {Name: "Get", IsMethod: true},
+			"InsertLane":         {Name: "InsertLane", IsMethod: false},
+			"InterleaveLower":    {Package: "hwy", Name: "InterleaveLower", IsMethod: false},
+			"InterleaveUpper":    {Package: "hwy", Name: "InterleaveUpper", IsMethod: false},
+			"ConcatLowerLower":   {Name: "ConcatLowerLower", IsMethod: false},
+			"ConcatUpperUpper":   {Name: "ConcatUpperUpper", IsMethod: false},
+			"ConcatLowerUpper":   {Name: "ConcatLowerUpper", IsMethod: false},
+			"ConcatUpperLower":   {Name: "ConcatUpperLower", IsMethod: false},
+			"OddEven":            {Name: "OddEven", IsMethod: false},
+			"DupEven":            {Name: "DupEven", IsMethod: false},
+			"DupOdd":             {Name: "DupOdd", IsMethod: false},
+			"SwapAdjacentBlocks": {Name: "SwapAdjacentBlocks", IsMethod: false},
+			"SlideUpLanes":       {Package: "asm", Name: "SlideUpLanes", IsMethod: false},
+			"SlideDownLanes":     {Package: "asm", Name: "SlideDownLanes", IsMethod: false},
+
+			// ===== Type Conversions =====
+			"ConvertToInt32":   {Name: "ConvertToInt32", IsMethod: true},
+			"ConvertToFloat32": {Name: "ConvertToFloat32", IsMethod: true},
+			"Round":            {Name: "Round", IsMethod: false},
+			"Trunc":            {Name: "Trunc", IsMethod: false},
+			"Ceil":             {Name: "Ceil", IsMethod: false},
+			"Floor":            {Name: "Floor", IsMethod: false},
+			"NearestInt":       {Name: "NearestInt", IsMethod: false},
+
+			// ===== Compress/Expand =====
+			"Compress":      {Name: "Compress", IsMethod: false},
+			"Expand":        {Name: "Expand", IsMethod: false},
+			"CompressStore": {Name: "CompressStore", IsMethod: false},
+			"CountTrue":     {Name: "CountTrue", IsMethod: false},
+			"AllTrue":       {Name: "AllTrue", IsMethod: false},
+			"AllFalse":      {Name: "AllFalse", IsMethod: false},
+			"FindFirstTrue": {Name: "FindFirstTrue", IsMethod: false},
+			"FindLastTrue":  {Name: "FindLastTrue", IsMethod: false},
+			"FirstN":        {Name: "FirstN", IsMethod: false},
+			"LastN":         {Name: "LastN", IsMethod: false},
+			"BitsFromMask":  {Package: "hwy", Name: "BitsFromMask", IsMethod: false},
+
+			// ===== IEEE 754 Exponent/Mantissa operations =====
+			"GetExponent": {Name: "GetExponent", IsMethod: true},
+			"GetMantissa": {Name: "GetMantissa", IsMethod: true},
+
+			// ===== contrib/math: Transcendental functions =====
+			"Exp":     {Package: "math", SubPackage: "math", Name: "BaseExpVec", IsMethod: false},
+			"Exp2":    {Package: "math", SubPackage: "math", Name: "BaseExp2Vec", IsMethod: false},
+			"Exp10":   {Package: "math", SubPackage: "math", Name: "BaseExp10Vec", IsMethod: false},
+			"Log":     {Package: "math", SubPackage: "math", Name: "BaseLogVec", IsMethod: false},
+			"Log2":    {Package: "math", SubPackage: "math", Name: "BaseLog2Vec", IsMethod: false},
+			"Log10":   {Package: "math", SubPackage: "math", Name: "BaseLog10Vec", IsMethod: false},
+			"Sin":     {Package: "math", SubPackage: "math", Name: "BaseSinVec", IsMethod: false},
+			"Cos":     {Package: "math", SubPackage: "math", Name: "BaseCosVec", IsMethod: false},
+			"SinCos":  {Package: "math", SubPackage: "math", Name: "BaseSinCosVec", IsMethod: false},
+			"Tanh":    {Package: "math", SubPackage: "math", Name: "BaseTanhVec", IsMethod: false},
+			"Sinh":    {Package: "math", SubPackage: "math", Name: "BaseSinhVec", IsMethod: false},
+			"Cosh":    {Package: "math", SubPackage: "math", Name: "BaseCoshVec", IsMethod: false},
+			"Asinh":   {Package: "math", SubPackage: "math", Name: "BaseAsinhVec", IsMethod: false},
+			"Acosh":   {Package: "math", SubPackage: "math", Name: "BaseAcoshVec", IsMethod: false},
+			"Atanh":   {Package: "math", SubPackage: "math", Name: "BaseAtanhVec", IsMethod: false},
+			"Sigmoid": {Package: "math", SubPackage: "math", Name: "BaseSigmoidVec", IsMethod: false},
+			"Erf":     {Package: "math", SubPackage: "math", Name: "BaseErfVec", IsMethod: false},
+
+			// ===== contrib/vec: Dot product operations =====
+			"Dot": {Package: "vec", SubPackage: "vec", Name: "Dot", IsMethod: false},
+
+			// ===== IEEE 754 Operations =====
+			"Pow2": {Name: "Pow2", IsMethod: true},
+
+			// ===== Special float checks =====
+			"IsInf": {Package: "special", Name: "IsInf", IsMethod: true},
+			"IsNaN": {Package: "special", Name: "IsNaN", IsMethod: true},
+		},
+	}
+}
+
 // targetRegistry maps target names to their constructor functions.
 var targetRegistry = map[string]func() Target{
-	"avx2":     AVX2Target,
-	"avx512":   AVX512Target,
-	"neon":     NEONTarget,
-	"fallback": FallbackTarget,
+	"avx2":       AVX2Target,
+	"avx512":     AVX512Target,
+	"neon":       NEONTarget,
+	"sve_darwin": SVEDarwinTarget,
+	"sve_linux":  SVELinuxTarget,
+	"fallback":   FallbackTarget,
 }
 
 // AvailableTargets returns a sorted list of valid target names.
@@ -908,6 +1350,10 @@ func (t Target) Suffix() string {
 		return "_avx512"
 	case "NEON":
 		return "_neon"
+	case "SVE_DARWIN":
+		return "_sve_darwin"
+	case "SVE_LINUX":
+		return "_sve_linux"
 	case "Fallback":
 		return "_fallback"
 	default:
@@ -920,7 +1366,7 @@ func (t Target) Arch() string {
 	switch t.Name {
 	case "AVX2", "AVX512":
 		return "amd64"
-	case "NEON":
+	case "NEON", "SVE_DARWIN", "SVE_LINUX":
 		return "arm64"
 	default:
 		return ""

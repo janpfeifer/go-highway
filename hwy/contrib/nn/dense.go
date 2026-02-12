@@ -65,9 +65,9 @@ func addBias[T hwy.Floats](output, bias []T, batchSize, outFeatures int) {
 		off := i * outFeatures
 		j := 0
 		for ; j+lanes <= outFeatures; j += lanes {
-			o := hwy.LoadFull(output[off+j:])
-			b := hwy.LoadFull(bias[j:])
-			hwy.StoreFull(hwy.Add(o, b), output[off+j:])
+			o := hwy.Load(output[off+j:])
+			b := hwy.Load(bias[j:])
+			hwy.Store(hwy.Add(o, b), output[off+j:])
 		}
 		for ; j < outFeatures; j++ {
 			output[off+j] += bias[j]

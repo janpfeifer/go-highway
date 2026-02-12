@@ -16,12 +16,12 @@ func BaseDecodeGroupVarint32_fallback(src []byte) (values [4]uint32, consumed in
 		return [4]uint32{}, 0
 	}
 	if len(src) >= 17 {
-		dataVec := hwy.Load[uint8](src[1:17])
+		dataVec := hwy.LoadSlice[uint8](src[1:17])
 		maskSlice := groupVarint32ShuffleMasks[control][:]
-		maskVec := hwy.Load[uint8](maskSlice)
+		maskVec := hwy.LoadSlice[uint8](maskSlice)
 		shuffled := hwy.TableLookupBytes(dataVec, maskVec)
 		var result [16]uint8
-		hwy.Store(shuffled, result[:])
+		hwy.StoreSlice(shuffled, result[:])
 		values[0] = uint32(result[0]) | uint32(result[1])<<8 | uint32(result[2])<<16 | uint32(result[3])<<24
 		values[1] = uint32(result[4]) | uint32(result[5])<<8 | uint32(result[6])<<16 | uint32(result[7])<<24
 		values[2] = uint32(result[8]) | uint32(result[9])<<8 | uint32(result[10])<<16 | uint32(result[11])<<24

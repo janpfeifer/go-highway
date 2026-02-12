@@ -392,6 +392,196 @@ func TestSDPAAuto64(t *testing.T) {
 	}
 }
 
+func TestMultiHeadSDPAStrided(t *testing.T) {
+	tests := []struct {
+		name       string
+		batchSize  int
+		numHeads   int
+		numKVHeads int
+		seqLen     int
+		kvLen      int
+		headDim    int
+		causal     bool
+	}{
+		{"b2_h4_kv2_s8_d16/non_causal", 2, 4, 2, 8, 8, 16, false},
+		{"b2_h4_kv2_s8_d16/causal", 2, 4, 2, 8, 8, 16, true},
+		{"b1_h2_kv2_s4_d8/non_causal", 1, 2, 2, 4, 8, 8, false},
+		{"b1_h2_kv2_s4_d8/causal", 1, 2, 2, 4, 8, 8, true},
+		{"b1_h4_kv4_s16_d32/non_causal", 1, 4, 4, 16, 16, 32, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testMultiHeadSDPAStridedType[float32](t, tt.batchSize, tt.numHeads, tt.numKVHeads,
+				tt.seqLen, tt.kvLen, tt.headDim, tt.causal, 1e-3)
+		})
+		t.Run(tt.name+"/f64", func(t *testing.T) {
+			testMultiHeadSDPAStridedType[float64](t, tt.batchSize, tt.numHeads, tt.numKVHeads,
+				tt.seqLen, tt.kvLen, tt.headDim, tt.causal, 1e-8)
+		})
+	}
+}
+
+// testMultiHeadSDPAStridedType tests that MultiHeadSDPAStridedAuto with BSHD strides
+// produces the same result as MultiHeadSDPAAuto with BHSD data.
+func testMultiHeadSDPAStridedType[T interface{ ~float32 | ~float64 }](
+	t *testing.T,
+	batchSize, numHeads, numKVHeads, seqLen, kvLen, headDim int,
+	causal bool, tol float64,
+) {
+	t.Helper()
+	scale := T(1.0 / stdmath.Sqrt(float64(headDim)))
+
+	// Create data in BSHD layout [batch, seq, heads, dim].
+	qBSHD := make([]T, batchSize*seqLen*numHeads*headDim)
+	kBSHD := make([]T, batchSize*kvLen*numKVHeads*headDim)
+	vBSHD := make([]T, batchSize*kvLen*numKVHeads*headDim)
+
+	for i := range qBSHD {
+		qBSHD[i] = T(float64(i)*0.01 - 0.5)
+	}
+	for i := range kBSHD {
+		kBSHD[i] = T(float64(i)*0.008 - 0.4)
+	}
+	for i := range vBSHD {
+		vBSHD[i] = T(float64(i)*0.006 - 0.3)
+	}
+
+	// Manually permute BSHD → BHSD for reference.
+	qBHSD := make([]T, len(qBSHD))
+	kBHSD := make([]T, len(kBSHD))
+	vBHSD := make([]T, len(vBSHD))
+
+	// Q: [batch, seq, heads, dim] → [batch, heads, seq, dim]
+	for b := range batchSize {
+		for s := range seqLen {
+			for h := range numHeads {
+				for d := range headDim {
+					srcIdx := b*seqLen*numHeads*headDim + s*numHeads*headDim + h*headDim + d
+					dstIdx := b*numHeads*seqLen*headDim + h*seqLen*headDim + s*headDim + d
+					qBHSD[dstIdx] = qBSHD[srcIdx]
+				}
+			}
+		}
+	}
+	// K/V: [batch, kvLen, kvHeads, dim] → [batch, kvHeads, kvLen, dim]
+	for b := range batchSize {
+		for s := range kvLen {
+			for h := range numKVHeads {
+				for d := range headDim {
+					srcIdx := b*kvLen*numKVHeads*headDim + s*numKVHeads*headDim + h*headDim + d
+					dstIdx := b*numKVHeads*kvLen*headDim + h*kvLen*headDim + s*headDim + d
+					kBHSD[dstIdx] = kBSHD[srcIdx]
+					vBHSD[dstIdx] = vBSHD[srcIdx]
+				}
+			}
+		}
+	}
+
+	// Reference: MultiHeadSDPAAuto on BHSD data.
+	refOutput := make([]T, batchSize*numHeads*seqLen*headDim)
+	MultiHeadSDPAAuto(nil, qBHSD, kBHSD, vBHSD, nil, refOutput,
+		batchSize, numHeads, numKVHeads, seqLen, kvLen, headDim,
+		0, 0, scale, causal)
+
+	// Strided: MultiHeadSDPAStridedAuto on BSHD data.
+	stridedOutput := make([]T, len(qBSHD))
+
+	// BSHD strides.
+	qBatchStride := seqLen * numHeads * headDim
+	qHeadStride := headDim
+	qSeqStride := numHeads * headDim
+	kvBatchStride := kvLen * numKVHeads * headDim
+	kvHeadStride := headDim
+	kvSeqStride := numKVHeads * headDim
+
+	MultiHeadSDPAStridedAuto(nil,
+		qBSHD, kBSHD, vBSHD, nil, stridedOutput,
+		batchSize, numHeads, numKVHeads, seqLen, kvLen, headDim,
+		qBatchStride, qHeadStride, qSeqStride,
+		kvBatchStride, kvHeadStride, kvSeqStride,
+		0, 0,
+		scale, causal,
+	)
+
+	// Permute strided output (BSHD) → BHSD for comparison.
+	stridedBHSD := make([]T, len(stridedOutput))
+	for b := range batchSize {
+		for s := range seqLen {
+			for h := range numHeads {
+				for d := range headDim {
+					srcIdx := b*seqLen*numHeads*headDim + s*numHeads*headDim + h*headDim + d
+					dstIdx := b*numHeads*seqLen*headDim + h*seqLen*headDim + s*headDim + d
+					stridedBHSD[dstIdx] = stridedOutput[srcIdx]
+				}
+			}
+		}
+	}
+
+	// Compare.
+	for i := range refOutput {
+		diff := stdmath.Abs(float64(refOutput[i] - stridedBHSD[i]))
+		relTol := stdmath.Max(tol, tol*stdmath.Abs(float64(refOutput[i])))
+		if diff > relTol {
+			t.Errorf("output[%d]: ref=%v, strided=%v, diff=%v", i, refOutput[i], stridedBHSD[i], diff)
+		}
+	}
+}
+
+func BenchmarkMultiHeadSDPAStrided(b *testing.B) {
+	batchSize := 2
+	numHeads := 8
+	numKVHeads := 2
+	seqLen := 64
+	kvLen := 64
+	headDim := 64
+	scale := float32(1.0 / stdmath.Sqrt(float64(headDim)))
+
+	qSize := batchSize * seqLen * numHeads * headDim
+	kvSize := batchSize * kvLen * numKVHeads * headDim
+
+	q := make([]float32, qSize)
+	k := make([]float32, kvSize)
+	v := make([]float32, kvSize)
+	output := make([]float32, qSize)
+
+	for i := range q {
+		q[i] = float32(i) * 0.001
+	}
+	for i := range k {
+		k[i] = float32(i) * 0.001
+	}
+	for i := range v {
+		v[i] = float32(i) * 0.001
+	}
+
+	// BHSD strides (contiguous fast path).
+	b.Run("BHSD_fastpath", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			MultiHeadSDPAStridedAuto(nil, q, k, v, nil, output,
+				batchSize, numHeads, numKVHeads, seqLen, kvLen, headDim,
+				numHeads*seqLen*headDim, seqLen*headDim, headDim,
+				numKVHeads*kvLen*headDim, kvLen*headDim, headDim,
+				0, 0,
+				scale, false,
+			)
+		}
+	})
+
+	// BSHD strides (gather/scatter path).
+	b.Run("BSHD_strided", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			MultiHeadSDPAStridedAuto(nil, q, k, v, nil, output,
+				batchSize, numHeads, numKVHeads, seqLen, kvLen, headDim,
+				seqLen*numHeads*headDim, headDim, numHeads*headDim,
+				kvLen*numKVHeads*headDim, headDim, numKVHeads*headDim,
+				0, 0,
+				scale, false,
+			)
+		}
+	})
+}
+
 func BenchmarkSDPA(b *testing.B) {
 	configs := []struct {
 		seqLen, kvLen, headDim int
@@ -442,3 +632,4 @@ func BenchmarkSDPA(b *testing.B) {
 		})
 	}
 }
+

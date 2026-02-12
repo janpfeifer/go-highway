@@ -48,8 +48,8 @@ func BaseEncodeFloat32s(dst []byte, src []float32) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](srcBytes[i:])
-		hwy.Store(v, dst[i:])
+		v := hwy.Load[uint8](srcBytes[i:])
+		hwy.StoreSlice(v, dst[i:])
 	}
 
 	// Scalar tail
@@ -84,8 +84,8 @@ func BaseDecodeFloat32s(dst []float32, src []byte) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](src[i:])
-		hwy.Store(v, dstBytes[i:])
+		v := hwy.Load[uint8](src[i:])
+		hwy.StoreSlice(v, dstBytes[i:])
 	}
 
 	// Scalar tail
@@ -116,8 +116,8 @@ func BaseEncodeFloat64s(dst []byte, src []float64) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](srcBytes[i:])
-		hwy.Store(v, dst[i:])
+		v := hwy.Load[uint8](srcBytes[i:])
+		hwy.StoreSlice(v, dst[i:])
 	}
 
 	// Scalar tail
@@ -148,8 +148,8 @@ func BaseDecodeFloat64s(dst []float64, src []byte) {
 
 	// Process full vectors
 	for ; i+lanes <= totalBytes; i += lanes {
-		v := hwy.LoadFull[uint8](src[i:])
-		hwy.Store(v, dstBytes[i:])
+		v := hwy.Load[uint8](src[i:])
+		hwy.StoreSlice(v, dstBytes[i:])
 	}
 
 	// Scalar tail

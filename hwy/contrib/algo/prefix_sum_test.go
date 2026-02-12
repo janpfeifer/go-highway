@@ -281,7 +281,7 @@ func TestDeltaEncodeDecodeRoundtrip_LargeSlice(t *testing.T) {
 func TestBasePrefixSumVec(t *testing.T) {
 	// Test the vector-level prefix sum directly
 	input := []int64{1, 2, 3, 4}
-	v := hwy.Load(input)
+	v := hwy.LoadSlice(input)
 	result := BasePrefixSumVec(v)
 
 	expected := []int64{1, 3, 6, 10}

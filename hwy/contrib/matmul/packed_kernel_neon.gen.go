@@ -173,8 +173,8 @@ func BasePackedMicroKernel_neon(packedA []float32, packedB []float32, c []float3
 		vA1 := asm.BroadcastFloat32x4(a1)
 		vA2 := asm.BroadcastFloat32x4(a2)
 		vA3 := asm.BroadcastFloat32x4(a3)
-		vB0 := asm.LoadFloat32x4Slice(packedB[bIdx:])
-		vB1 := asm.LoadFloat32x4Slice(packedB[bIdx+lanes:])
+		vB0 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&packedB[bIdx])))
+		vB1 := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&packedB[bIdx+lanes])))
 		bIdx += nr
 		vA0.MulAddAcc(vB0, &acc00)
 		vA0.MulAddAcc(vB1, &acc01)
@@ -189,30 +189,30 @@ func BasePackedMicroKernel_neon(packedA []float32, packedB []float32, c []float3
 	cRow1 := (ir + 1) * n
 	cRow2 := (ir + 2) * n
 	cRow3 := (ir + 3) * n
-	vC := asm.LoadFloat32x4Slice(c[cRow0+jr:])
+	vC := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow0+jr])))
 	vC = vC.Add(acc00)
-	vC.StoreSlice(c[cRow0+jr:])
-	vC = asm.LoadFloat32x4Slice(c[cRow0+jr+lanes:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow0+jr])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow0+jr+lanes])))
 	vC = vC.Add(acc01)
-	vC.StoreSlice(c[cRow0+jr+lanes:])
-	vC = asm.LoadFloat32x4Slice(c[cRow1+jr:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow0+jr+lanes])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow1+jr])))
 	vC = vC.Add(acc10)
-	vC.StoreSlice(c[cRow1+jr:])
-	vC = asm.LoadFloat32x4Slice(c[cRow1+jr+lanes:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow1+jr])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow1+jr+lanes])))
 	vC = vC.Add(acc11)
-	vC.StoreSlice(c[cRow1+jr+lanes:])
-	vC = asm.LoadFloat32x4Slice(c[cRow2+jr:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow1+jr+lanes])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow2+jr])))
 	vC = vC.Add(acc20)
-	vC.StoreSlice(c[cRow2+jr:])
-	vC = asm.LoadFloat32x4Slice(c[cRow2+jr+lanes:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow2+jr])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow2+jr+lanes])))
 	vC = vC.Add(acc21)
-	vC.StoreSlice(c[cRow2+jr+lanes:])
-	vC = asm.LoadFloat32x4Slice(c[cRow3+jr:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow2+jr+lanes])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow3+jr])))
 	vC = vC.Add(acc30)
-	vC.StoreSlice(c[cRow3+jr:])
-	vC = asm.LoadFloat32x4Slice(c[cRow3+jr+lanes:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow3+jr])))
+	vC = asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRow3+jr+lanes])))
 	vC = vC.Add(acc31)
-	vC.StoreSlice(c[cRow3+jr+lanes:])
+	vC.Store((*[4]float32)(unsafe.Pointer(&c[cRow3+jr+lanes])))
 }
 
 func BasePackedMicroKernel_neon_Float64(packedA []float64, packedB []float64, c []float64, n int, ir int, jr int, kc int, mr int, nr int) {
@@ -241,8 +241,8 @@ func BasePackedMicroKernel_neon_Float64(packedA []float64, packedB []float64, c 
 		vA1 := asm.BroadcastFloat64x2(a1)
 		vA2 := asm.BroadcastFloat64x2(a2)
 		vA3 := asm.BroadcastFloat64x2(a3)
-		vB0 := asm.LoadFloat64x2Slice(packedB[bIdx:])
-		vB1 := asm.LoadFloat64x2Slice(packedB[bIdx+lanes:])
+		vB0 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&packedB[bIdx])))
+		vB1 := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&packedB[bIdx+lanes])))
 		bIdx += nr
 		vA0.MulAddAcc(vB0, &acc00)
 		vA0.MulAddAcc(vB1, &acc01)
@@ -257,30 +257,30 @@ func BasePackedMicroKernel_neon_Float64(packedA []float64, packedB []float64, c 
 	cRow1 := (ir + 1) * n
 	cRow2 := (ir + 2) * n
 	cRow3 := (ir + 3) * n
-	vC := asm.LoadFloat64x2Slice(c[cRow0+jr:])
+	vC := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow0+jr])))
 	vC = vC.Add(acc00)
-	vC.StoreSlice(c[cRow0+jr:])
-	vC = asm.LoadFloat64x2Slice(c[cRow0+jr+lanes:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow0+jr])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow0+jr+lanes])))
 	vC = vC.Add(acc01)
-	vC.StoreSlice(c[cRow0+jr+lanes:])
-	vC = asm.LoadFloat64x2Slice(c[cRow1+jr:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow0+jr+lanes])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow1+jr])))
 	vC = vC.Add(acc10)
-	vC.StoreSlice(c[cRow1+jr:])
-	vC = asm.LoadFloat64x2Slice(c[cRow1+jr+lanes:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow1+jr])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow1+jr+lanes])))
 	vC = vC.Add(acc11)
-	vC.StoreSlice(c[cRow1+jr+lanes:])
-	vC = asm.LoadFloat64x2Slice(c[cRow2+jr:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow1+jr+lanes])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow2+jr])))
 	vC = vC.Add(acc20)
-	vC.StoreSlice(c[cRow2+jr:])
-	vC = asm.LoadFloat64x2Slice(c[cRow2+jr+lanes:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow2+jr])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow2+jr+lanes])))
 	vC = vC.Add(acc21)
-	vC.StoreSlice(c[cRow2+jr+lanes:])
-	vC = asm.LoadFloat64x2Slice(c[cRow3+jr:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow2+jr+lanes])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow3+jr])))
 	vC = vC.Add(acc30)
-	vC.StoreSlice(c[cRow3+jr:])
-	vC = asm.LoadFloat64x2Slice(c[cRow3+jr+lanes:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow3+jr])))
+	vC = asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRow3+jr+lanes])))
 	vC = vC.Add(acc31)
-	vC.StoreSlice(c[cRow3+jr+lanes:])
+	vC.Store((*[2]float64)(unsafe.Pointer(&c[cRow3+jr+lanes])))
 }
 
 func basePackedMicroKernelGeneral_neon_Float16(packedA []hwy.Float16, packedB []hwy.Float16, c []hwy.Float16, n int, ir int, jr int, kc int, mr int, nr int) {
@@ -347,12 +347,12 @@ func basePackedMicroKernelGeneral_neon(packedA []float32, packedB []float32, c [
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat32x4(aVal)
-				vB := asm.LoadFloat32x4Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat32x4Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < nr; col++ {
 			var sum float32
@@ -374,12 +374,12 @@ func basePackedMicroKernelGeneral_neon_Float64(packedA []float64, packedB []floa
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat64x2(aVal)
-				vB := asm.LoadFloat64x2Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat64x2Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < nr; col++ {
 			var sum float64
@@ -455,12 +455,12 @@ func BasePackedMicroKernelPartial_neon(packedA []float32, packedB []float32, c [
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat32x4(aVal)
-				vB := asm.LoadFloat32x4Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat32x4Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat32x4((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[4]float32)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < activeCols; col++ {
 			var sum float32
@@ -482,12 +482,12 @@ func BasePackedMicroKernelPartial_neon_Float64(packedA []float64, packedB []floa
 			for p := 0; p < kc; p++ {
 				aVal := packedA[p*mr+r]
 				vA := asm.BroadcastFloat64x2(aVal)
-				vB := asm.LoadFloat64x2Slice(packedB[p*nr+col:])
+				vB := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&packedB[p*nr+col])))
 				vA.MulAddAcc(vB, &acc)
 			}
-			vC := asm.LoadFloat64x2Slice(c[cRowStart+jr+col:])
+			vC := asm.LoadFloat64x2((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 			vC = vC.Add(acc)
-			vC.StoreSlice(c[cRowStart+jr+col:])
+			vC.Store((*[2]float64)(unsafe.Pointer(&c[cRowStart+jr+col])))
 		}
 		for ; col < activeCols; col++ {
 			var sum float64

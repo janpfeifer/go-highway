@@ -19,16 +19,16 @@ func BaseBitProduct_fallback(code []uint64, q1 []uint64, q2 []uint64, q3 []uint6
 	stride := lanes * 2
 	var i int
 	for i = 0; i+stride <= n; i += stride {
-		codeVec0 := hwy.Load(code[i:])
-		q1Vec0 := hwy.Load(q1[i:])
-		q2Vec0 := hwy.Load(q2[i:])
-		q3Vec0 := hwy.Load(q3[i:])
-		q4Vec0 := hwy.Load(q4[i:])
-		codeVec1 := hwy.Load(code[i+lanes:])
-		q1Vec1 := hwy.Load(q1[i+lanes:])
-		q2Vec1 := hwy.Load(q2[i+lanes:])
-		q3Vec1 := hwy.Load(q3[i+lanes:])
-		q4Vec1 := hwy.Load(q4[i+lanes:])
+		codeVec0 := hwy.LoadSlice(code[i:])
+		q1Vec0 := hwy.LoadSlice(q1[i:])
+		q2Vec0 := hwy.LoadSlice(q2[i:])
+		q3Vec0 := hwy.LoadSlice(q3[i:])
+		q4Vec0 := hwy.LoadSlice(q4[i:])
+		codeVec1 := hwy.LoadSlice(code[i+lanes:])
+		q1Vec1 := hwy.LoadSlice(q1[i+lanes:])
+		q2Vec1 := hwy.LoadSlice(q2[i+lanes:])
+		q3Vec1 := hwy.LoadSlice(q3[i+lanes:])
+		q4Vec1 := hwy.LoadSlice(q4[i+lanes:])
 		and1_0 := hwy.And(codeVec0, q1Vec0)
 		and1_1 := hwy.And(codeVec1, q1Vec1)
 		pop1_0 := hwy.PopCount(and1_0)
@@ -55,11 +55,11 @@ func BaseBitProduct_fallback(code []uint64, q1 []uint64, q2 []uint64, q3 []uint6
 		sum8_1 += uint64(hwy.ReduceSum(pop8_1))
 	}
 	for i+lanes <= n {
-		codeVec := hwy.Load(code[i:])
-		q1Vec := hwy.Load(q1[i:])
-		q2Vec := hwy.Load(q2[i:])
-		q3Vec := hwy.Load(q3[i:])
-		q4Vec := hwy.Load(q4[i:])
+		codeVec := hwy.LoadSlice(code[i:])
+		q1Vec := hwy.LoadSlice(q1[i:])
+		q2Vec := hwy.LoadSlice(q2[i:])
+		q3Vec := hwy.LoadSlice(q3[i:])
+		q4Vec := hwy.LoadSlice(q4[i:])
 		pop1 := hwy.PopCount(hwy.And(codeVec, q1Vec))
 		pop2 := hwy.PopCount(hwy.And(codeVec, q2Vec))
 		pop4 := hwy.PopCount(hwy.And(codeVec, q3Vec))
@@ -96,7 +96,7 @@ func BaseQuantizeVectors_fallback(unitVectors []float32, codes []uint64, dotProd
 		lanes := hwy.Zero[float32]().NumLanes()
 		dim := 0
 		for dim+lanes <= dims {
-			vecData := hwy.Load(vec[dim:])
+			vecData := hwy.LoadSlice(vec[dim:])
 			zeroVec := hwy.Zero[float32]()
 			negMask := hwy.LessThan(vecData, zeroVec)
 			posMultVec := hwy.Set[float32](sqrtDimsInv)

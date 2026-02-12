@@ -134,8 +134,8 @@ func BaseIsSorted_fallback(data []float32) bool {
 	lanes := hwy.MaxLanes[float32]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
-		v1 := hwy.LoadFull(data[i:])
-		v2 := hwy.LoadFull(data[i+1:])
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
 		mask := hwy.GreaterThan(v1, v2)
 		if hwy.FindFirstTrue(mask) >= 0 {
 			return false
@@ -157,8 +157,8 @@ func BaseIsSorted_fallback_Float64(data []float64) bool {
 	lanes := hwy.MaxLanes[float64]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
-		v1 := hwy.LoadFull(data[i:])
-		v2 := hwy.LoadFull(data[i+1:])
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
 		mask := hwy.GreaterThan(v1, v2)
 		if hwy.FindFirstTrue(mask) >= 0 {
 			return false
@@ -180,8 +180,8 @@ func BaseIsSorted_fallback_Int32(data []int32) bool {
 	lanes := hwy.MaxLanes[int32]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
-		v1 := hwy.LoadFull(data[i:])
-		v2 := hwy.LoadFull(data[i+1:])
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
 		mask := hwy.GreaterThan(v1, v2)
 		if hwy.FindFirstTrue(mask) >= 0 {
 			return false
@@ -203,8 +203,8 @@ func BaseIsSorted_fallback_Int64(data []int64) bool {
 	lanes := hwy.MaxLanes[int64]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
-		v1 := hwy.LoadFull(data[i:])
-		v2 := hwy.LoadFull(data[i+1:])
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
 		mask := hwy.GreaterThan(v1, v2)
 		if hwy.FindFirstTrue(mask) >= 0 {
 			return false
@@ -226,8 +226,8 @@ func BaseIsSorted_fallback_Uint32(data []uint32) bool {
 	lanes := hwy.MaxLanes[uint32]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
-		v1 := hwy.LoadFull(data[i:])
-		v2 := hwy.LoadFull(data[i+1:])
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
 		mask := hwy.GreaterThan(v1, v2)
 		if hwy.FindFirstTrue(mask) >= 0 {
 			return false
@@ -249,8 +249,8 @@ func BaseIsSorted_fallback_Uint64(data []uint64) bool {
 	lanes := hwy.MaxLanes[uint64]()
 	i := 0
 	for ; i+lanes < n; i += lanes {
-		v1 := hwy.LoadFull(data[i:])
-		v2 := hwy.LoadFull(data[i+1:])
+		v1 := hwy.Load(data[i:])
+		v2 := hwy.Load(data[i+1:])
 		mask := hwy.GreaterThan(v1, v2)
 		if hwy.FindFirstTrue(mask) >= 0 {
 			return false

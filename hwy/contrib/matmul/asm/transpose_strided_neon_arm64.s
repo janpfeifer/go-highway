@@ -722,7 +722,7 @@ TEXT ·transpose_strided_neon_f16(SB), $80-48
 	MOVD pRowEnd+24(FP), R3
 	MOVD pk+32(FP), R4
 	MOVD pDstM+40(FP), R5
-	WORD $0xf8000ff9          // str	x25, [sp, #-80]!                ; 8-byte Folded Spill [transformed]
+	WORD $0xf80003f9          // str	x25, [sp, #-80]!                ; 8-byte Folded Spill [transformed]
 	WORD $0xa9015ff8          // stp	x24, x23, [sp, #16]             ; 16-byte Folded Spill
 	WORD $0xa90257f6          // stp	x22, x21, [sp, #32]             ; 16-byte Folded Spill
 	WORD $0xa9034ff4          // stp	x20, x19, [sp, #48]             ; 16-byte Folded Spill
@@ -1042,7 +1042,7 @@ BB2_39:
 	WORD $0xa9434ff4 // ldp	x20, x19, [sp, #48]             ; 16-byte Folded Reload
 	WORD $0xa94257f6 // ldp	x22, x21, [sp, #32]             ; 16-byte Folded Reload
 	WORD $0xa9415ff8 // ldp	x24, x23, [sp, #16]             ; 16-byte Folded Reload
-	WORD $0xf94007f9 // ldr	x25, [sp], #80                  ; 8-byte Folded Reload [transformed]
+	WORD $0xf84003f9 // ldr	x25, [sp], #80                  ; 8-byte Folded Reload [transformed]
 	RET
 
 BB2_40:
@@ -1148,7 +1148,7 @@ TEXT ·transpose_strided_neon_bf16(SB), $80-48
 	MOVD pRowEnd+24(FP), R3
 	MOVD pk+32(FP), R4
 	MOVD pDstM+40(FP), R5
-	WORD $0xf8000ff9          // str	x25, [sp, #-80]!                ; 8-byte Folded Spill [transformed]
+	WORD $0xf80003f9          // str	x25, [sp, #-80]!                ; 8-byte Folded Spill [transformed]
 	WORD $0xa9015ff8          // stp	x24, x23, [sp, #16]             ; 16-byte Folded Spill
 	WORD $0xa90257f6          // stp	x22, x21, [sp, #32]             ; 16-byte Folded Spill
 	WORD $0xa9034ff4          // stp	x20, x19, [sp, #48]             ; 16-byte Folded Spill
@@ -1468,7 +1468,7 @@ BB3_39:
 	WORD $0xa9434ff4 // ldp	x20, x19, [sp, #48]             ; 16-byte Folded Reload
 	WORD $0xa94257f6 // ldp	x22, x21, [sp, #32]             ; 16-byte Folded Reload
 	WORD $0xa9415ff8 // ldp	x24, x23, [sp, #16]             ; 16-byte Folded Reload
-	WORD $0xf94007f9 // ldr	x25, [sp], #80                  ; 8-byte Folded Reload [transformed]
+	WORD $0xf84003f9 // ldr	x25, [sp], #80                  ; 8-byte Folded Reload [transformed]
 	RET
 
 BB3_40:

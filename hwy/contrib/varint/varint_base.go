@@ -67,17 +67,18 @@ func BaseFindVarintEnds(src []byte) uint32 {
 
 	// SIMD path: process 32 bytes using two 16-byte operations
 	// This works for both NEON (16-byte vectors) and AVX2/AVX512 (which can also use 16-byte ops)
+	// Use LoadSlice since we're explicitly working with 16-byte chunks regardless of vector width
 	if n == 32 {
 		// Create threshold for comparison: bytes < 0x80 are terminators
 		threshold := hwy.Set[uint8](0x80)
 
 		// Process first 16 bytes
-		v0 := hwy.Load[uint8](src[:16])
+		v0 := hwy.LoadSlice[uint8](src[:16])
 		isTerminator0 := hwy.LessThan(v0, threshold)
 		mask0 := uint32(hwy.BitsFromMask(isTerminator0))
 
 		// Process second 16 bytes
-		v1 := hwy.Load[uint8](src[16:32])
+		v1 := hwy.LoadSlice[uint8](src[16:32])
 		isTerminator1 := hwy.LessThan(v1, threshold)
 		mask1 := uint32(hwy.BitsFromMask(isTerminator1))
 
@@ -87,7 +88,7 @@ func BaseFindVarintEnds(src []byte) uint32 {
 
 	// Scalar fallback for partial buffers
 	var mask uint32
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if src[i] < 0x80 {
 			mask |= 1 << uint(i)
 		}
@@ -201,7 +202,7 @@ func BaseDecode5Uvarint64(src []byte) (values [5]uint64, consumed int) {
 	}
 
 	pos := 0
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if pos >= len(src) {
 			return [5]uint64{}, 0
 		}

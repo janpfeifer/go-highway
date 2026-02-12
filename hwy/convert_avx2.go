@@ -59,7 +59,7 @@ func BitCastI64ToF64_AVX2(v archsimd.Int64x4) archsimd.Float64x4 {
 // AVX2 has VROUNDPS but archsimd may not expose it directly.
 func Round_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i++ {
 		data[i] = float32(math.Round(float64(data[i])))
 	}
@@ -69,7 +69,7 @@ func Round_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // Round_AVX2_F64x4 rounds to nearest integer using store/scalar/load pattern.
 func Round_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 4; i++ {
 		data[i] = math.Round(data[i])
 	}
@@ -79,7 +79,7 @@ func Round_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 // Trunc_AVX2_F32x8 truncates toward zero using store/scalar/load pattern.
 func Trunc_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i++ {
 		data[i] = float32(math.Trunc(float64(data[i])))
 	}
@@ -89,7 +89,7 @@ func Trunc_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // Trunc_AVX2_F64x4 truncates toward zero using store/scalar/load pattern.
 func Trunc_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 4; i++ {
 		data[i] = math.Trunc(data[i])
 	}
@@ -99,7 +99,7 @@ func Trunc_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 // Ceil_AVX2_F32x8 rounds up toward positive infinity.
 func Ceil_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i++ {
 		data[i] = float32(math.Ceil(float64(data[i])))
 	}
@@ -109,7 +109,7 @@ func Ceil_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // Ceil_AVX2_F64x4 rounds up toward positive infinity.
 func Ceil_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 4; i++ {
 		data[i] = math.Ceil(data[i])
 	}
@@ -119,7 +119,7 @@ func Ceil_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 // Floor_AVX2_F32x8 rounds down toward negative infinity.
 func Floor_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i++ {
 		data[i] = float32(math.Floor(float64(data[i])))
 	}
@@ -129,7 +129,7 @@ func Floor_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // Floor_AVX2_F64x4 rounds down toward negative infinity.
 func Floor_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 4; i++ {
 		data[i] = math.Floor(data[i])
 	}
@@ -139,7 +139,7 @@ func Floor_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 // NearestInt_AVX2_F32x8 rounds to nearest even integer.
 func NearestInt_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 8; i++ {
 		data[i] = float32(math.RoundToEven(float64(data[i])))
 	}
@@ -149,7 +149,7 @@ func NearestInt_AVX2_F32x8(v archsimd.Float32x8) archsimd.Float32x8 {
 // NearestInt_AVX2_F64x4 rounds to nearest even integer.
 func NearestInt_AVX2_F64x4(v archsimd.Float64x4) archsimd.Float64x4 {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 	for i := 0; i < 4; i++ {
 		data[i] = math.RoundToEven(data[i])
 	}
@@ -175,7 +175,7 @@ func Pow2_AVX2_F64x4(k archsimd.Int32x4) archsimd.Float64x4 {
 	// AVX2 lacks proper 64-bit integer shift, so use scalar
 	var kData [4]int32
 	var result [4]float64
-	k.StoreSlice(kData[:])
+	k.Store(&kData)
 	for i := 0; i < 4; i++ {
 		ki := kData[i]
 		if ki < -1022 {

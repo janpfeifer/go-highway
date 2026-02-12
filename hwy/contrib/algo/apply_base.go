@@ -35,16 +35,16 @@ func BaseApply[T hwy.Floats](in, out []T, fn func(hwy.Vec[T]) hwy.Vec[T]) {
 
 	// Process full vectors
 	for ; i+lanes <= n; i += lanes {
-		x := hwy.LoadFull(in[i:])
-		hwy.StoreFull(fn(x), out[i:])
+		x := hwy.Load(in[i:])
+		hwy.Store(fn(x), out[i:])
 	}
 
 	// Buffer-based tail handling
 	if remaining := n - i; remaining > 0 {
 		buf := make([]T, lanes)
 		copy(buf, in[i:i+remaining])
-		x := hwy.Load(buf)
-		hwy.Store(fn(x), buf)
+		x := hwy.LoadSlice(buf)
+		hwy.StoreSlice(fn(x), buf)
 		copy(out[i:i+remaining], buf[:remaining])
 	}
 }

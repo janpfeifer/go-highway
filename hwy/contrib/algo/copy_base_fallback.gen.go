@@ -16,7 +16,7 @@ func BaseCopyIf_fallback(src []float32, dst []float32, pred func(hwy.Vec[float32
 	dstIdx := 0
 	i := 0
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
 		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
@@ -28,7 +28,7 @@ func BaseCopyIf_fallback(src []float32, dst []float32, pred func(hwy.Vec[float32
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]float32, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 		tailMask := hwy.FirstN[float32](remaining)
 		mask = hwy.MaskAnd(mask, tailMask)
@@ -49,7 +49,7 @@ func BaseCopyIf_fallback_Float64(src []float64, dst []float64, pred func(hwy.Vec
 	dstIdx := 0
 	i := 0
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
 		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
@@ -61,7 +61,7 @@ func BaseCopyIf_fallback_Float64(src []float64, dst []float64, pred func(hwy.Vec
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]float64, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 		tailMask := hwy.FirstN[float64](remaining)
 		mask = hwy.MaskAnd(mask, tailMask)
@@ -82,7 +82,7 @@ func BaseCopyIf_fallback_Int32(src []int32, dst []int32, pred func(hwy.Vec[int32
 	dstIdx := 0
 	i := 0
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
 		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
@@ -94,7 +94,7 @@ func BaseCopyIf_fallback_Int32(src []int32, dst []int32, pred func(hwy.Vec[int32
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]int32, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 		tailMask := hwy.FirstN[int32](remaining)
 		mask = hwy.MaskAnd(mask, tailMask)
@@ -115,7 +115,7 @@ func BaseCopyIf_fallback_Int64(src []int64, dst []int64, pred func(hwy.Vec[int64
 	dstIdx := 0
 	i := 0
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
 		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
@@ -127,7 +127,7 @@ func BaseCopyIf_fallback_Int64(src []int64, dst []int64, pred func(hwy.Vec[int64
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]int64, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 		tailMask := hwy.FirstN[int64](remaining)
 		mask = hwy.MaskAnd(mask, tailMask)
@@ -148,7 +148,7 @@ func BaseCopyIf_fallback_Uint32(src []uint32, dst []uint32, pred func(hwy.Vec[ui
 	dstIdx := 0
 	i := 0
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
 		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
@@ -160,7 +160,7 @@ func BaseCopyIf_fallback_Uint32(src []uint32, dst []uint32, pred func(hwy.Vec[ui
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]uint32, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 		tailMask := hwy.FirstN[uint32](remaining)
 		mask = hwy.MaskAnd(mask, tailMask)
@@ -181,7 +181,7 @@ func BaseCopyIf_fallback_Uint64(src []uint64, dst []uint64, pred func(hwy.Vec[ui
 	dstIdx := 0
 	i := 0
 	for ; i+lanes <= n && dstIdx < dstLen; i += lanes {
-		v := hwy.LoadFull(src[i:])
+		v := hwy.Load(src[i:])
 		mask := pred(v)
 		remaining := dstLen - dstIdx
 		count := min(hwy.CompressStore(v, mask, dst[dstIdx:]), remaining)
@@ -193,7 +193,7 @@ func BaseCopyIf_fallback_Uint64(src []uint64, dst []uint64, pred func(hwy.Vec[ui
 	if remaining := n - i; remaining > 0 && dstIdx < dstLen {
 		buf := make([]uint64, lanes)
 		copy(buf, src[i:i+remaining])
-		v := hwy.Load(buf)
+		v := hwy.LoadSlice(buf)
 		mask := pred(v)
 		tailMask := hwy.FirstN[uint64](remaining)
 		mask = hwy.MaskAnd(mask, tailMask)

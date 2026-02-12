@@ -19,7 +19,7 @@ func BaseArgmax_neon_Float16(v []hwy.Float16) int {
 	if len(v) < lanes {
 		return scalarArgmax(v)
 	}
-	maxVals := asm.LoadFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	maxVals := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	maxIdxs := asm.IotaFloat16x8()
 	i := lanes
 	for ; i+lanes*2 <= len(v); i += lanes * 2 {
@@ -80,7 +80,7 @@ func BaseArgmax_neon_BFloat16(v []hwy.BFloat16) int {
 	if len(v) < lanes {
 		return scalarArgmax(v)
 	}
-	maxVals := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	maxVals := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	maxIdxs := asm.IotaBFloat16x8()
 	i := lanes
 	for ; i+lanes*2 <= len(v); i += lanes * 2 {
@@ -263,7 +263,7 @@ func BaseArgmin_neon_Float16(v []hwy.Float16) int {
 	if len(v) < lanes {
 		return scalarArgmin(v)
 	}
-	minVals := asm.LoadFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	minVals := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	minIdxs := asm.IotaFloat16x8()
 	i := lanes
 	for ; i+lanes*2 <= len(v); i += lanes * 2 {
@@ -324,7 +324,7 @@ func BaseArgmin_neon_BFloat16(v []hwy.BFloat16) int {
 	if len(v) < lanes {
 		return scalarArgmin(v)
 	}
-	minVals := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&v[0]))
+	minVals := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(v))), len(v)))
 	minIdxs := asm.IotaBFloat16x8()
 	i := lanes
 	for ; i+lanes*2 <= len(v); i += lanes * 2 {

@@ -13,10 +13,10 @@ func BaseFindVarintEnds_fallback(src []byte) uint32 {
 	n := min(len(src), 32)
 	if n == 32 {
 		threshold := hwy.Set[uint8](0x80)
-		v0 := hwy.Load[uint8](src[:16])
+		v0 := hwy.LoadSlice[uint8](src[:16])
 		isTerminator0 := hwy.LessThan(v0, threshold)
 		mask0 := uint32(hwy.BitsFromMask(isTerminator0))
-		v1 := hwy.Load[uint8](src[16:32])
+		v1 := hwy.LoadSlice[uint8](src[16:32])
 		isTerminator1 := hwy.LessThan(v1, threshold)
 		mask1 := uint32(hwy.BitsFromMask(isTerminator1))
 		return mask0 | (mask1 << 16)

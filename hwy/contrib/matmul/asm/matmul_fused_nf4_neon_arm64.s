@@ -23,7 +23,7 @@ TEXT ·fused_nf4_matmul_neon(SB), $80-72
 	WORD $0xf94000c9           // ldr	x9, [x6]
 	WORD $0xf100053f           // cmp	x9, #1
 	BLT  BB0_14
-	WORD $0xf8000ffd           // str	x29, [sp, #-80]! [transformed]
+	WORD $0xf80003fd           // str	x29, [sp, #-80]! [transformed]
 	WORD $0xf94000aa           // ldr	x10, [x5]
 	WORD $0xa90167fe           // stp	x30, x25, [sp, #16]
 	WORD $0xa9025ff8           // stp	x24, x23, [sp, #32]
@@ -127,7 +127,7 @@ BB0_13:
 	WORD $0xa94357f6 // ldp	x22, x21, [sp, #48]
 	WORD $0xa9425ff8 // ldp	x24, x23, [sp, #32]
 	WORD $0xa94167fe // ldp	x30, x25, [sp, #16]
-	WORD $0xf94007fd // ldr	x29, [sp], #80 [transformed]
+	WORD $0xf84003fd // ldr	x29, [sp], #80 [transformed]
 
 BB0_14:
 	RET
@@ -149,7 +149,7 @@ TEXT ·fused_int4_matmul_neon(SB), $64-72
 	WORD $0xf94000c9           // ldr	x9, [x6]
 	WORD $0xf100053f           // cmp	x9, #1
 	BLT  BB1_14
-	WORD $0xf8000ff9           // str	x25, [sp, #-64]! [transformed]
+	WORD $0xf80003f9           // str	x25, [sp, #-64]! [transformed]
 	WORD $0xf94000aa           // ldr	x10, [x5]
 	WORD $0xa9015ff8           // stp	x24, x23, [sp, #16]
 	WORD $0xa90257f6           // stp	x22, x21, [sp, #32]
@@ -253,7 +253,7 @@ BB1_13:
 	WORD $0xa9434ff4 // ldp	x20, x19, [sp, #48]
 	WORD $0xa94257f6 // ldp	x22, x21, [sp, #32]
 	WORD $0xa9415ff8 // ldp	x24, x23, [sp, #16]
-	WORD $0xf94007f9 // ldr	x25, [sp], #64 [transformed]
+	WORD $0xf84003f9 // ldr	x25, [sp], #64 [transformed]
 
 BB1_14:
 	RET

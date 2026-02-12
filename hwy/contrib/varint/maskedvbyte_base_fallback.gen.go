@@ -36,7 +36,7 @@ func BaseMaskedVByteDecodeGroup_fallback(src []byte, dst []uint32) (decoded int,
 	if len(src) < 16 || len(dst) < 4 {
 		return 0, 0
 	}
-	srcVec := hwy.Load[uint8](src[:16])
+	srcVec := hwy.LoadSlice[uint8](src[:16])
 	threshold := hwy.Set[uint8](0x80)
 	terminatorMask := hwy.LessThan(srcVec, threshold)
 	pattern := uint16(hwy.BitsFromMask(terminatorMask)) & 0x0FFF
@@ -48,10 +48,10 @@ func BaseMaskedVByteDecodeGroup_fallback(src []byte, dst []uint32) (decoded int,
 		return 0, 0
 	}
 	shuffleMask := maskedVByte12ShuffleMasks[pattern][:]
-	maskVec := hwy.Load[uint8](shuffleMask)
+	maskVec := hwy.LoadSlice[uint8](shuffleMask)
 	shuffled := hwy.TableLookupBytes(srcVec, maskVec)
 	var result [16]uint8
-	hwy.Store(shuffled, result[:])
+	hwy.StoreSlice(shuffled, result[:])
 	dst[0] = uint32(result[0]&0x7f) | uint32(result[1]&0x7f)<<7 | uint32(result[2]&0x7f)<<14 | uint32(result[3])<<21
 	dst[1] = uint32(result[4]&0x7f) | uint32(result[5]&0x7f)<<7 | uint32(result[6]&0x7f)<<14 | uint32(result[7])<<21
 	dst[2] = uint32(result[8]&0x7f) | uint32(result[9]&0x7f)<<7 | uint32(result[10]&0x7f)<<14 | uint32(result[11])<<21

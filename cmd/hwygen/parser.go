@@ -349,7 +349,7 @@ func findHwyCalls(node ast.Node) []HwyCall {
 			// Also handle generic calls like hwy.Pow2[T]()
 			switch fun := expr.Fun.(type) {
 			case *ast.SelectorExpr:
-				// Direct call: hwy.Load(...)
+				// Direct call: hwy.LoadSlice(...)
 				selExpr = fun
 			case *ast.IndexExpr:
 				// Generic call: hwy.Pow2[T](...)
@@ -563,7 +563,7 @@ func isAuxiliaryLoop(body *ast.BlockStmt) bool {
 			}
 		}
 
-		// Check for hwy.Store(v, dst), hwy.Load(src)
+		// Check for hwy.StoreSlice(v, dst), hwy.LoadSlice(src)
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "hwy" {
 				name := sel.Sel.Name

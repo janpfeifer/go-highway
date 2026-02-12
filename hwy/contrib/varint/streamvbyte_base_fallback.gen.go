@@ -68,12 +68,12 @@ func BaseDecodeStreamVByte32GroupSIMD_fallback(ctrl byte, data []uint8, dst []ui
 	if len(data) < 16 {
 		return decodeGroupScalarInto(ctrl, data, dst)
 	}
-	dataVec := hwy.Load[uint8](data[:16])
+	dataVec := hwy.LoadSlice[uint8](data[:16])
 	maskSlice := streamVByte32ShuffleMasks[ctrl][:]
-	maskVec := hwy.Load[uint8](maskSlice)
+	maskVec := hwy.LoadSlice[uint8](maskSlice)
 	shuffled := hwy.TableLookupBytes(dataVec, maskVec)
 	var result [16]uint8
-	hwy.Store(shuffled, result[:])
+	hwy.StoreSlice(shuffled, result[:])
 	dst[0] = uint32(result[0]) | uint32(result[1])<<8 | uint32(result[2])<<16 | uint32(result[3])<<24
 	dst[1] = uint32(result[4]) | uint32(result[5])<<8 | uint32(result[6])<<16 | uint32(result[7])<<24
 	dst[2] = uint32(result[8]) | uint32(result[9])<<8 | uint32(result[10])<<16 | uint32(result[11])<<24
@@ -153,11 +153,11 @@ func BaseEncodeStreamVByte32GroupSIMD_fallback(values []uint32) (ctrl byte, data
 	dataLen := int(streamVByte32DataLen[ctrl])
 	data = make([]byte, dataLen)
 	inputBytes := unsafe.Slice((*uint8)(unsafe.Pointer(&values[0])), 16)
-	inputVec := hwy.Load[uint8](inputBytes[:16])
-	maskVec := hwy.Load[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
+	inputVec := hwy.LoadSlice[uint8](inputBytes[:16])
+	maskVec := hwy.LoadSlice[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
 	shuffled := hwy.TableLookupBytes(inputVec, maskVec)
 	var outputBytes [16]uint8
-	hwy.Store(shuffled, outputBytes[:16])
+	hwy.StoreSlice(shuffled, outputBytes[:16])
 	copy(data, outputBytes[:dataLen])
 	return ctrl, data
 }
@@ -181,9 +181,9 @@ func BaseEncodeStreamVByte32GroupSIMDInto_fallback(values []uint32, dst []uint8)
 	}
 	n = int(streamVByte32DataLen[ctrl])
 	inputBytes := unsafe.Slice((*uint8)(unsafe.Pointer(&values[0])), 16)
-	inputVec := hwy.Load[uint8](inputBytes[:16])
-	maskVec := hwy.Load[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
+	inputVec := hwy.LoadSlice[uint8](inputBytes[:16])
+	maskVec := hwy.LoadSlice[uint8](streamVByte32EncodeShuffleMasks[ctrl][:16])
 	shuffled := hwy.TableLookupBytes(inputVec, maskVec)
-	hwy.Store(shuffled, dst[:16])
+	hwy.StoreSlice(shuffled, dst[:16])
 	return ctrl, n
 }

@@ -19,12 +19,12 @@ func BaseFloatToSortable_neon_Float16(data []hwy.Float16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadFloat16x8Ptr(unsafe.Pointer(&data[i:][0]))
+		v := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		isNeg := v.LessThan(zeroVec)
 		negResult := v.Xor(allOnesVec)
 		posResult := v.Xor(signBitVec)
 		result := asm.IfThenElseFloat16(isNeg, negResult, posResult)
-		result.StorePtr(unsafe.Pointer(&data[i:][0]))
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }
@@ -37,12 +37,12 @@ func BaseFloatToSortable_neon_BFloat16(data []hwy.BFloat16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&data[i:][0]))
+		v := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		isNeg := v.LessThan(zeroVec)
 		negResult := v.Xor(allOnesVec)
 		posResult := v.Xor(signBitVec)
 		result := asm.IfThenElseBFloat16(isNeg, negResult, posResult)
-		result.StorePtr(unsafe.Pointer(&data[i:][0]))
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }
@@ -91,13 +91,13 @@ func BaseSortableToFloat_neon_Float16(data []hwy.Float16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadFloat16x8Ptr(unsafe.Pointer(&data[i:][0]))
+		v := asm.LoadFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		masked := v.And(signBitVec)
 		wasPositive := masked.NotEqual(zeroVec)
 		posResult := v.Xor(signBitVec)
 		negResult := v.Xor(allOnesVec)
 		result := asm.IfThenElseFloat16(wasPositive, posResult, negResult)
-		result.StorePtr(unsafe.Pointer(&data[i:][0]))
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }
@@ -110,13 +110,13 @@ func BaseSortableToFloat_neon_BFloat16(data []hwy.BFloat16) {
 	allOnesVec := zeroVec.Not()
 	i := 0
 	for i+lanes <= n {
-		v := asm.LoadBFloat16x8Ptr(unsafe.Pointer(&data[i:][0]))
+		v := asm.LoadBFloat16x8Slice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		masked := v.And(signBitVec)
 		wasPositive := masked.NotEqual(zeroVec)
 		posResult := v.Xor(signBitVec)
 		negResult := v.Xor(allOnesVec)
 		result := asm.IfThenElseBFloat16(wasPositive, posResult, negResult)
-		result.StorePtr(unsafe.Pointer(&data[i:][0]))
+		result.StoreSlice(unsafe.Slice((*uint16)(unsafe.Pointer(unsafe.SliceData(data[i:]))), len(data[i:])))
 		i += lanes
 	}
 }

@@ -32,7 +32,7 @@ func BaseFloatToSortable[T hwy.Floats](data []T) {
 
 	i := 0
 	for i+lanes <= n {
-		v := hwy.Load(data[i:])
+		v := hwy.LoadSlice(data[i:])
 
 		// Check sign: negative if v < 0
 		isNeg := hwy.LessThan(v, zeroVec)
@@ -42,7 +42,7 @@ func BaseFloatToSortable[T hwy.Floats](data []T) {
 		posResult := hwy.Xor(v, signBitVec)
 		result := hwy.IfThenElse(isNeg, negResult, posResult)
 
-		hwy.Store(result, data[i:])
+		hwy.StoreSlice(result, data[i:])
 		i += lanes
 	}
 
@@ -60,7 +60,7 @@ func BaseSortableToFloat[T hwy.Floats](data []T) {
 
 	i := 0
 	for i+lanes <= n {
-		v := hwy.Load(data[i:])
+		v := hwy.LoadSlice(data[i:])
 
 		// After sorting, values with sign bit set were originally positive
 		masked := hwy.And(v, signBitVec)
@@ -71,7 +71,7 @@ func BaseSortableToFloat[T hwy.Floats](data []T) {
 		negResult := hwy.Xor(v, allOnesVec)
 		result := hwy.IfThenElse(wasPositive, posResult, negResult)
 
-		hwy.Store(result, data[i:])
+		hwy.StoreSlice(result, data[i:])
 		i += lanes
 	}
 

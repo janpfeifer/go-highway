@@ -31,9 +31,9 @@ func BitsFromMask_NEON_Uint8x16(mask asm.Uint8x16) uint64 {
 // Returns a 4-bit mask where bit i is set if lane i has the high bit set.
 func BitsFromMask_NEON_Float32x4(mask asm.Int32x4) uint64 {
 	var buf [4]int32
-	mask.StoreSlice(buf[:])
+	mask.Store(&buf)
 	var result uint64
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if buf[i] < 0 { // high bit set means negative
 			result |= 1 << i
 		}
@@ -46,9 +46,9 @@ func BitsFromMask_NEON_Float32x4(mask asm.Int32x4) uint64 {
 // Returns a 2-bit mask where bit i is set if lane i has the high bit set.
 func BitsFromMask_NEON_Float64x2(mask asm.Int64x2) uint64 {
 	var buf [2]int64
-	mask.StoreSlice(buf[:])
+	mask.Store(&buf)
 	var result uint64
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if buf[i] < 0 { // high bit set means negative
 			result |= 1 << i
 		}
@@ -69,9 +69,9 @@ func BitsFromMask_NEON_Int64x2(mask asm.Int64x2) uint64 {
 // BitsFromMask_NEON_Uint32x4 converts a NEON uint32 comparison result to a bitmask.
 func BitsFromMask_NEON_Uint32x4(mask asm.Uint32x4) uint64 {
 	var buf [4]uint32
-	mask.StoreSlice(buf[:])
+	mask.Store(&buf)
 	var result uint64
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if buf[i]&0x80000000 != 0 {
 			result |= 1 << i
 		}
@@ -82,9 +82,9 @@ func BitsFromMask_NEON_Uint32x4(mask asm.Uint32x4) uint64 {
 // BitsFromMask_NEON_Uint64x2 converts a NEON uint64 comparison result to a bitmask.
 func BitsFromMask_NEON_Uint64x2(mask asm.Uint64x2) uint64 {
 	var buf [2]uint64
-	mask.StoreSlice(buf[:])
+	mask.Store(&buf)
 	var result uint64
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if buf[i]&0x8000000000000000 != 0 {
 			result |= 1 << i
 		}

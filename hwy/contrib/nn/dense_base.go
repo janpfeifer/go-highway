@@ -56,7 +56,7 @@ func BaseDense[T hwy.Floats](x, weight, bias, output []T, batchSize, inFeatures,
 		oRow2 := (i + 2) * outFeatures
 		oRow3 := (i + 3) * outFeatures
 
-		for j := 0; j < outFeatures; j++ {
+		for j := range outFeatures {
 			wRow := j * inFeatures
 
 			acc0 := hwy.Zero[T]()
@@ -66,12 +66,12 @@ func BaseDense[T hwy.Floats](x, weight, bias, output []T, batchSize, inFeatures,
 
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vW := hwy.Load(weight[wRow+p:])
+				vW := hwy.LoadSlice(weight[wRow+p:])
 
-				vX0 := hwy.Load(x[xRow0+p:])
-				vX1 := hwy.Load(x[xRow1+p:])
-				vX2 := hwy.Load(x[xRow2+p:])
-				vX3 := hwy.Load(x[xRow3+p:])
+				vX0 := hwy.LoadSlice(x[xRow0+p:])
+				vX1 := hwy.LoadSlice(x[xRow1+p:])
+				vX2 := hwy.LoadSlice(x[xRow2+p:])
+				vX3 := hwy.LoadSlice(x[xRow3+p:])
 
 				acc0 = hwy.MulAdd(vX0, vW, acc0)
 				acc1 = hwy.MulAdd(vX1, vW, acc1)
@@ -111,14 +111,14 @@ func BaseDense[T hwy.Floats](x, weight, bias, output []T, batchSize, inFeatures,
 		xRow := i * inFeatures
 		oRow := i * outFeatures
 
-		for j := 0; j < outFeatures; j++ {
+		for j := range outFeatures {
 			wRow := j * inFeatures
 			acc := hwy.Zero[T]()
 
 			var p int
 			for p = 0; p+lanes <= inFeatures; p += lanes {
-				vX := hwy.Load(x[xRow+p:])
-				vW := hwy.Load(weight[wRow+p:])
+				vX := hwy.LoadSlice(x[xRow+p:])
+				vW := hwy.LoadSlice(weight[wRow+p:])
 				acc = hwy.MulAdd(vX, vW, acc)
 			}
 

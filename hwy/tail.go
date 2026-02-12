@@ -56,9 +56,9 @@ func TailMask[T Lanes](count int) Mask[T] {
 //	hwy.ProcessWithTail[float32](len(data),
 //	    func(offset int) {
 //	        // Process full vector at data[offset:]
-//	        v := hwy.Load(data[offset:])
+//	        v := hwy.LoadSlice(data[offset:])
 //	        result := hwy.Add(v, v)
-//	        hwy.Store(result, output[offset:])
+//	        hwy.StoreSlice(result, output[offset:])
 //	    },
 //	    func(offset, count int) {
 //	        // Process tail with mask
@@ -92,9 +92,9 @@ func ProcessWithTail[T Lanes](size int, fullFn func(offset int), tailFn func(off
 //
 //	hwy.ProcessWithTailNoMask[float32](len(data),
 //	    func(offset int) {
-//	        v := hwy.Load(data[offset:])
+//	        v := hwy.LoadSlice(data[offset:])
 //	        result := hwy.Add(v, v)
-//	        hwy.Store(result, output[offset:])
+//	        hwy.StoreSlice(result, output[offset:])
 //	    },
 //	)
 func ProcessWithTailNoMask[T Lanes](size int, fullFn func(offset int)) {

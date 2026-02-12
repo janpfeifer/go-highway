@@ -28,7 +28,7 @@ import (
 // GatherIndex_AVX2_F32x8 gathers float32 elements using int32 indices.
 func GatherIndex_AVX2_F32x8(src []float32, indices archsimd.Int32x8) archsimd.Float32x8 {
 	var idxData [8]int32
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var result [8]float32
 	for i := 0; i < 8; i++ {
@@ -43,7 +43,7 @@ func GatherIndex_AVX2_F32x8(src []float32, indices archsimd.Int32x8) archsimd.Fl
 // GatherIndex_AVX2_F64x4 gathers float64 elements using int64 indices.
 func GatherIndex_AVX2_F64x4(src []float64, indices archsimd.Int64x4) archsimd.Float64x4 {
 	var idxData [4]int64
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var result [4]float64
 	for i := 0; i < 4; i++ {
@@ -58,7 +58,7 @@ func GatherIndex_AVX2_F64x4(src []float64, indices archsimd.Int64x4) archsimd.Fl
 // GatherIndex_AVX2_I32x8 gathers int32 elements using int32 indices.
 func GatherIndex_AVX2_I32x8(src []int32, indices archsimd.Int32x8) archsimd.Int32x8 {
 	var idxData [8]int32
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var result [8]int32
 	for i := 0; i < 8; i++ {
@@ -73,7 +73,7 @@ func GatherIndex_AVX2_I32x8(src []int32, indices archsimd.Int32x8) archsimd.Int3
 // GatherIndex_AVX2_I64x4 gathers int64 elements using int64 indices.
 func GatherIndex_AVX2_I64x4(src []int64, indices archsimd.Int64x4) archsimd.Int64x4 {
 	var idxData [4]int64
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var result [4]int64
 	for i := 0; i < 4; i++ {
@@ -88,10 +88,10 @@ func GatherIndex_AVX2_I64x4(src []int64, indices archsimd.Int64x4) archsimd.Int6
 // GatherIndexMasked_AVX2_F32x8 gathers float32 elements with mask.
 func GatherIndexMasked_AVX2_F32x8(src []float32, indices archsimd.Int32x8, mask archsimd.Int32x8) archsimd.Float32x8 {
 	var idxData [8]int32
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var maskData [8]int32
-	mask.StoreSlice(maskData[:])
+	mask.Store(&maskData)
 
 	var result [8]float32
 	for i := 0; i < 8; i++ {
@@ -108,10 +108,10 @@ func GatherIndexMasked_AVX2_F32x8(src []float32, indices archsimd.Int32x8, mask 
 // GatherIndexMasked_AVX2_F64x4 gathers float64 elements with mask.
 func GatherIndexMasked_AVX2_F64x4(src []float64, indices archsimd.Int64x4, mask archsimd.Int64x4) archsimd.Float64x4 {
 	var idxData [4]int64
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var maskData [4]int64
-	mask.StoreSlice(maskData[:])
+	mask.Store(&maskData)
 
 	var result [4]float64
 	for i := 0; i < 4; i++ {
@@ -129,10 +129,10 @@ func GatherIndexMasked_AVX2_F64x4(src []float64, indices archsimd.Int64x4, mask 
 // Note: AVX2 does not have hardware scatter, this is emulated.
 func ScatterIndex_AVX2_F32x8(v archsimd.Float32x8, dst []float32, indices archsimd.Int32x8) {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var idxData [8]int32
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	for i := 0; i < 8; i++ {
 		idx := int(idxData[i])
@@ -145,10 +145,10 @@ func ScatterIndex_AVX2_F32x8(v archsimd.Float32x8, dst []float32, indices archsi
 // ScatterIndex_AVX2_F64x4 scatters float64 elements to indices.
 func ScatterIndex_AVX2_F64x4(v archsimd.Float64x4, dst []float64, indices archsimd.Int64x4) {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var idxData [4]int64
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	for i := 0; i < 4; i++ {
 		idx := int(idxData[i])
@@ -161,10 +161,10 @@ func ScatterIndex_AVX2_F64x4(v archsimd.Float64x4, dst []float64, indices archsi
 // ScatterIndex_AVX2_I32x8 scatters int32 elements to indices.
 func ScatterIndex_AVX2_I32x8(v archsimd.Int32x8, dst []int32, indices archsimd.Int32x8) {
 	var data [8]int32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var idxData [8]int32
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	for i := 0; i < 8; i++ {
 		idx := int(idxData[i])
@@ -177,10 +177,10 @@ func ScatterIndex_AVX2_I32x8(v archsimd.Int32x8, dst []int32, indices archsimd.I
 // ScatterIndex_AVX2_I64x4 scatters int64 elements to indices.
 func ScatterIndex_AVX2_I64x4(v archsimd.Int64x4, dst []int64, indices archsimd.Int64x4) {
 	var data [4]int64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var idxData [4]int64
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	for i := 0; i < 4; i++ {
 		idx := int(idxData[i])
@@ -193,13 +193,13 @@ func ScatterIndex_AVX2_I64x4(v archsimd.Int64x4, dst []int64, indices archsimd.I
 // ScatterIndexMasked_AVX2_F32x8 scatters float32 elements with mask.
 func ScatterIndexMasked_AVX2_F32x8(v archsimd.Float32x8, dst []float32, indices archsimd.Int32x8, mask archsimd.Int32x8) {
 	var data [8]float32
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var idxData [8]int32
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var maskData [8]int32
-	mask.StoreSlice(maskData[:])
+	mask.Store(&maskData)
 
 	for i := 0; i < 8; i++ {
 		if maskData[i] != 0 {
@@ -214,13 +214,13 @@ func ScatterIndexMasked_AVX2_F32x8(v archsimd.Float32x8, dst []float32, indices 
 // ScatterIndexMasked_AVX2_F64x4 scatters float64 elements with mask.
 func ScatterIndexMasked_AVX2_F64x4(v archsimd.Float64x4, dst []float64, indices archsimd.Int64x4, mask archsimd.Int64x4) {
 	var data [4]float64
-	v.StoreSlice(data[:])
+	v.Store(&data)
 
 	var idxData [4]int64
-	indices.StoreSlice(idxData[:])
+	indices.Store(&idxData)
 
 	var maskData [4]int64
-	mask.StoreSlice(maskData[:])
+	mask.Store(&maskData)
 
 	for i := 0; i < 4; i++ {
 		if maskData[i] != 0 {

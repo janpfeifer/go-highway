@@ -33,10 +33,10 @@ func main() {
 
 	hwy.ProcessWithTail[float32](len(data1),
 		func(offset int) {
-			a := hwy.Load(data1[offset:])
-			b := hwy.Load(data2[offset:])
+			a := hwy.LoadSlice(data1[offset:])
+			b := hwy.LoadSlice(data2[offset:])
 			sum := hwy.Add(a, b)
-			hwy.Store(sum, result[offset:])
+			hwy.StoreSlice(sum, result[offset:])
 		},
 		func(offset, count int) {
 			mask := hwy.TailMask[float32](count)
@@ -56,11 +56,11 @@ func main() {
 	c := []float32{1, 2, 3, 4}
 	fmaResult := make([]float32, len(a))
 
-	v_a := hwy.Load(a)
-	v_b := hwy.Load(b)
-	v_c := hwy.Load(c)
+	v_a := hwy.LoadSlice(a)
+	v_b := hwy.LoadSlice(b)
+	v_c := hwy.LoadSlice(c)
 	v_result := hwy.FMA(v_a, v_b, v_c)
-	hwy.Store(v_result, fmaResult)
+	hwy.StoreSlice(v_result, fmaResult)
 
 	fmt.Printf("  %v * %v + %v = %v\n\n", a, b, c, fmaResult)
 
@@ -70,10 +70,10 @@ func main() {
 	data4 := []float32{10, 20, 15, 30}
 	maxResult := make([]float32, len(data3))
 
-	v1 := hwy.Load(data3)
-	v2 := hwy.Load(data4)
+	v1 := hwy.LoadSlice(data3)
+	v2 := hwy.LoadSlice(data4)
 	vMax := hwy.Max(v1, v2)
-	hwy.Store(vMax, maxResult)
+	hwy.StoreSlice(vMax, maxResult)
 
 	fmt.Printf("  max(%v, %v) = %v\n\n", data3, data4, maxResult)
 
@@ -85,14 +85,14 @@ func main() {
 	largeValues := []float32{100, 100, 100, 100}
 	condResult := make([]float32, len(values))
 
-	v := hwy.Load(values)
+	v := hwy.LoadSlice(values)
 	thresh := hwy.Set[float32](threshold)
 	mask := hwy.GreaterThan(v, thresh)
 
-	v_large := hwy.Load(largeValues)
-	v_small := hwy.Load(smallValues)
+	v_large := hwy.LoadSlice(largeValues)
+	v_small := hwy.LoadSlice(smallValues)
 	v_cond := hwy.IfThenElse(mask, v_large, v_small)
-	hwy.Store(v_cond, condResult)
+	hwy.StoreSlice(v_cond, condResult)
 
 	fmt.Printf("  values: %v\n", values)
 	fmt.Printf("  threshold: %.0f\n", threshold)
@@ -105,7 +105,7 @@ func main() {
 
 	hwy.ProcessWithTail[float32](len(numbers),
 		func(offset int) {
-			v := hwy.Load(numbers[offset:])
+			v := hwy.LoadSlice(numbers[offset:])
 			totalSum += hwy.ReduceSum(v)
 		},
 		func(offset, count int) {
@@ -123,10 +123,10 @@ func main() {
 	intData2 := []int32{5, 15, 25, 35}
 	intResult := make([]int32, len(intData1))
 
-	vi1 := hwy.Load(intData1)
-	vi2 := hwy.Load(intData2)
+	vi1 := hwy.LoadSlice(intData1)
+	vi2 := hwy.LoadSlice(intData2)
 	viSum := hwy.Add(vi1, vi2)
-	hwy.Store(viSum, intResult)
+	hwy.StoreSlice(viSum, intResult)
 
 	fmt.Printf("  %v + %v = %v\n\n", intData1, intData2, intResult)
 
