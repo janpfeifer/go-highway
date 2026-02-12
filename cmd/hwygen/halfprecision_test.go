@@ -103,10 +103,16 @@ func BaseOnePlus[T hwy.Floats](x T) T {
 `,
 			expected: []string{
 				"y := x.Float32() + 1",
-				"z := hwy.Float32ToFloat16(y)",
-				"z := hwy.Float32ToBFloat16(y)",
+				// T(y) becomes float32(y) in wrapHalfPrecisionExpr because
+				// scalar computation stays in float32. The return statement
+				// handles conversion back to half-precision.
+				"z := float32(y)",
+				"return hwy.Float32ToFloat16(z)",
+				"return hwy.Float32ToBFloat16(z)",
 			},
 			mistakes: []string{
+				// z should NOT be treated as a half-precision scalar
+				// (it's a float32 intermediate from a type conversion).
 				"return hwy.Float32ToFloat16(z.Float32())",
 				"return hwy.Float32ToBFloat16(z.Float32())",
 			},
@@ -125,8 +131,9 @@ func BasePrintPlusOne[T hwy.Floats](x T) {
 `,
 			expected: []string{
 				`fmt.Printf("%g\n", float64(v.Float32()))`,
-				`Print(hwy.Float32ToFloat16(x.Float32() + 1))`,
-				`Print(hwy.Float32ToBFloat16(x.Float32() + 1))`,
+				// T(x+1) becomes float32(x.Float32() + 1) because
+				// wrapHalfPrecisionExpr promotes to float32 for scalar ops.
+				`Print(float32(x.Float32() + 1))`,
 			},
 			mistakes: []string{
 				// Without an expression or explicit cast, it shouldn't try to promote the half-precision.

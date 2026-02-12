@@ -241,16 +241,29 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 		fromFloat32Func = "hwy.Float32ToBFloat16"
 	}
 
-	// Track variables assigned from ReduceSum so we know they're float32
+	// Track variables assigned from ReduceSum so we know they're float32.
+	// These are float32 by virtue of ReduceSum wrapping, not from type conversions.
 	reduceSumVars := make(map[string]bool)
 
-	// Track variables computed as float32 that need conversion back to Float16/BFloat16
-	// when passed to hwy.Set. This is separate from halfPrecisionScalarVars which
-	// tracks original Float16/BFloat16 values (from slice reads or parameters).
+	// Track variables whose values are computed as float32 intermediates from
+	// type conversions like T(1.0) or binary expressions involving such conversions.
+	// These variables are already float32 and should NOT be wrapped with .Float32().
+	// They need conversion back to Float16/BFloat16 only at storage boundaries
+	// (e.g., hwy.Set calls, return statements).
+	//
+	// IMPORTANT: Do not confuse with halfPrecisionScalarVars below. Variables from
+	// type conversions like `x := T(1.0)` must go here, not halfPrecisionScalarVars.
+	// Putting them in halfPrecisionScalarVars would cause wrapHalfPrecisionExpr to
+	// emit x.Float32() (treating x as a uint16-backed half-precision value), and
+	// would cause the type conversion itself to become hwy.Float32ToFloat16(1.0)
+	// instead of float32(1.0).
 	float32ComputedVars := make(map[string]bool)
 
-	// First pass: collect variables assigned from half-precision slice reads
-	// and track local slice variables of half-precision type.
+	// Track variables that hold actual half-precision scalar values (uint16-backed
+	// hwy.Float16 or hwy.BFloat16). These come from slice reads like `maxVal := input[0]`
+	// or scalar function parameters. When used in arithmetic, wrapHalfPrecisionExpr
+	// appends .Float32() to promote them for float32 computation.
+	//
 	// Note: ctx.halfPrecisionScalarVars is already initialized with scalar function
 	// parameters; this pass adds local variables assigned from slice reads.
 	halfPrecisionScalarVars := ctx.halfPrecisionScalarVars
@@ -291,7 +304,7 @@ func transformHalfPrecisionFallback(body *ast.BlockStmt, ctx *transformContext) 
 							len(ident.Name) == 1
 						if isHalfPrecisionConv {
 							if varName != "" && assign.Tok == token.DEFINE {
-								halfPrecisionScalarVars[varName] = true
+								float32ComputedVars[varName] = true
 							}
 						}
 					}
@@ -844,14 +857,11 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 				if pkgIdent.Name == "hwy" {
 					// Check for type conversion
 					if funcName == "Float16" || funcName == "BFloat16" {
-						// Transform: hwy.Float16(x) to hwy.Float32ToFloat16(float_x)
-						var convertFunc string
-						if funcName == "Float16" {
-							convertFunc = "hwy.Float32ToFloat16"
-						} else {
-							convertFunc = "hwy.Float32ToBFloat16"
-						}
-						e.Fun = parseTypeExpr(convertFunc)
+						// Transform: hwy.Float16(x) to float32(x)
+						// wrapHalfPrecisionExpr promotes everything to float32 for
+						// scalar computation. Conversion back to half-precision is
+						// handled at the assignment level by transformHalfPrecisionAssignment.
+						e.Fun = ast.NewIdent("float32")
 
 						// Recurse into arguments to wrap any half-precision scalars
 						for i, arg := range e.Args {
@@ -875,17 +885,13 @@ func wrapHalfPrecisionExpr(expr ast.Expr, ctx *transformContext, toFloat32Method
 				}
 			}
 		}
-		// Also check for simple type conversions like hwy.Float16(x)
+		// Also check for simple type conversions like Float16(x) (without package qualifier)
 		if ident, ok := e.Fun.(*ast.Ident); ok {
-			var convertFunc string
-			if isFloat16Type(ident.Name) || (ident.Name == ctx.elemType && isFloat16Type(ctx.elemType)) {
-				convertFunc = "hwy.Float32ToFloat16"
-			} else if isBFloat16Type(ident.Name) || (ident.Name == ctx.elemType && isBFloat16Type(ctx.elemType)) {
-				convertFunc = "hwy.Float32ToBFloat16"
-			}
-
-			if convertFunc != "" {
-				e.Fun = parseTypeExpr(convertFunc)
+			if ident.Name == ctx.elemType || ident.Name == "hwy.Float16" || ident.Name == "hwy.BFloat16" {
+				// Same as the selector case above: promote to float32 for
+				// scalar computation. Assignment-level wrapping handles
+				// conversion back to half-precision.
+				e.Fun = ast.NewIdent("float32")
 				// Recurse into arguments to wrap any half-precision scalars
 				for i, arg := range e.Args {
 					e.Args[i] = wrapHalfPrecisionExpr(arg, ctx, toFloat32Method)
